@@ -229,6 +229,30 @@ InventoryConfig.Items = {
         IconName = "lightbulb",
         AccentColor = Color3.fromRGB(255, 235, 110),
     },
+    ["dry_hardwood"] = {
+        Id = "dry_hardwood",
+        Name = "DRY HARDWOOD",
+        Category = "Fuel",
+        Rarity = "UNCOMMON",
+        Description = "Kiln-cured mountain hardwood timber. Burns 2.5x longer in the campfire than standard wood.",
+        MaxStack = 5,
+        IsEquippable = true,
+        IsUsable = true,
+        IconName = "flame",
+        AccentColor = Color3.fromRGB(240, 160, 50),
+    },
+    ["emergency_flare"] = {
+        Id = "emergency_flare",
+        Name = "EMERGENCY FLARE",
+        Category = "Tool",
+        Rarity = "RARE",
+        Description = "High-output magnesium emergency flare. Instantly lights dark paths and wards off roaming beasts.",
+        MaxStack = 3,
+        IsEquippable = true,
+        IsUsable = true,
+        IconName = "sparkles",
+        AccentColor = Color3.fromRGB(255, 75, 75),
+    },
 } :: { [string]: ItemDefinition }
 
 -- Starting loadout: completely empty for every player as requested:

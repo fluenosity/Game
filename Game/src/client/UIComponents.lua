@@ -2007,7 +2007,6 @@ export type SystemMenuInstance = {
     Close: () -> (),
     Destroy: () -> (),
 }
-
 function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCallbacks): SystemMenuInstance
     local container = Instance.new("Frame")
     container.Name = "AAASystemMenu"
@@ -2020,7 +2019,7 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     container.ZIndex = 90
     container.Parent = parent
 
-    -- Glassmorphic Dark Radial Vignette
+    -- Atmospheric Dark Vignette Overlay
     local vignette = Instance.new("Frame")
     vignette.Name = "Vignette"
     vignette.Size = UDim2.fromScale(1, 1)
@@ -2032,50 +2031,40 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
 
     local vigGrad = Instance.new("UIGradient")
     vigGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.4),
-        NumberSequenceKeypoint.new(0.65, 0.75),
-        NumberSequenceKeypoint.new(1, 0.95),
+        NumberSequenceKeypoint.new(0, 0.35),
+        NumberSequenceKeypoint.new(0.65, 0.70),
+        NumberSequenceKeypoint.new(1, 0.92),
     })
     vigGrad.Parent = vignette
 
     ----------------------------------------------------------------------------
-    -- TOP NAVIGATION BAR (Header across top screen)
+    -- TOP HEADER BAR (Positioned safely away from Roblox Core buttons)
     ----------------------------------------------------------------------------
-    local topBar = Instance.new("Frame")
-    topBar.Name = "TopBar"
-    topBar.Size = UDim2.new(1, 0, 0, 60)
-    topBar.BackgroundColor3 = Color3.fromRGB(12, 10, 14)
-    topBar.BackgroundTransparency = 0.25
-    topBar.BorderSizePixel = 0
-    topBar.ZIndex = 92
-    topBar.Parent = container
+    local headerBar = Instance.new("Frame")
+    headerBar.Name = "HeaderBar"
+    headerBar.Size = UDim2.new(1, -120, 0, 48)
+    headerBar.Position = UDim2.new(0, 60, 0, 48)
+    headerBar.BackgroundTransparency = 1
+    headerBar.ZIndex = 92
+    headerBar.Parent = container
 
-    local topDivider = Instance.new("Frame")
-    topDivider.Name = "Divider"
-    topDivider.Size = UDim2.new(1, 0, 0, 1)
-    topDivider.Position = UDim2.new(0, 0, 1, -1)
-    topDivider.BackgroundColor3 = UITheme.Colors.BorderHairline
-    topDivider.BorderSizePixel = 0
-    topDivider.ZIndex = 93
-    topDivider.Parent = topBar
+    -- Left: Game Emblem & Title (Safe from Roblox core buttons)
+    local titleFrame = Instance.new("Frame")
+    titleFrame.Name = "TitleFrame"
+    titleFrame.Size = UDim2.new(0, 380, 1, 0)
+    titleFrame.BackgroundTransparency = 1
+    titleFrame.ZIndex = 93
+    titleFrame.Parent = headerBar
 
-    local topPadding = Instance.new("UIPadding")
-    topPadding.PaddingLeft = UDim.new(0, 28)
-    topPadding.PaddingRight = UDim.new(0, 28)
-    topPadding.Parent = topBar
-
-    -- Left Title / Logo
-    local titleBlock = Instance.new("Frame")
-    titleBlock.Name = "TitleBlock"
-    titleBlock.Size = UDim2.new(0, 260, 1, 0)
-    titleBlock.BackgroundTransparency = 1
-    titleBlock.ZIndex = 93
-    titleBlock.Parent = topBar
+    local flameIcon = IconPack.CreateIcon("flame", 20, UITheme.Colors.EmberPrimary, 0)
+    flameIcon.Position = UDim2.fromOffset(0, 4)
+    flameIcon.ZIndex = 94
+    flameIcon.Parent = titleFrame
 
     local logoText = Instance.new("TextLabel")
     logoText.Name = "LogoText"
-    logoText.Size = UDim2.new(1, 0, 0, 22)
-    logoText.Position = UDim2.fromOffset(0, 12)
+    logoText.Size = UDim2.new(1, -30, 0, 22)
+    logoText.Position = UDim2.fromOffset(30, 2)
     logoText.BackgroundTransparency = 1
     logoText.Font = UITheme.Fonts.Heading
     logoText.Text = "DON'T LET THE FIRE DIE"
@@ -2083,334 +2072,326 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     logoText.TextSize = 16
     logoText.TextXAlignment = Enum.TextXAlignment.Left
     logoText.ZIndex = 94
-    logoText.Parent = titleBlock
+    logoText.Parent = titleFrame
 
-    local sectorTag = Instance.new("TextLabel")
-    sectorTag.Name = "SectorTag"
-    sectorTag.Size = UDim2.new(1, 0, 0, 14)
-    sectorTag.Position = UDim2.fromOffset(0, 34)
-    sectorTag.BackgroundTransparency = 1
-    sectorTag.Font = UITheme.Fonts.Tag
-    sectorTag.Text = "[ SURVIVAL SECTOR // PROLOGUE ]"
-    sectorTag.TextColor3 = UITheme.Colors.EmberHot
-    sectorTag.TextSize = 9
-    sectorTag.TextXAlignment = Enum.TextXAlignment.Left
-    sectorTag.ZIndex = 94
-    sectorTag.Parent = titleBlock
+    local statusDot = Instance.new("TextLabel")
+    statusDot.Name = "StatusTag"
+    statusDot.Size = UDim2.new(1, -30, 0, 16)
+    statusDot.Position = UDim2.fromOffset(30, 24)
+    statusDot.BackgroundTransparency = 1
+    statusDot.Font = UITheme.Fonts.Tag
+    statusDot.Text = "●  PAUSED // SURVIVAL SANCTUARY"
+    statusDot.TextColor3 = UITheme.Colors.EmberHot
+    statusDot.TextSize = 10
+    statusDot.TextXAlignment = Enum.TextXAlignment.Left
+    statusDot.ZIndex = 94
+    statusDot.Parent = titleFrame
 
-    -- Center Tabs Container
-    local tabsContainer = Instance.new("Frame")
-    tabsContainer.Name = "TabsContainer"
-    tabsContainer.Size = UDim2.new(0, 480, 1, 0)
-    tabsContainer.Position = UDim2.fromScale(0.5, 0)
-    tabsContainer.AnchorPoint = Vector2.new(0.5, 0)
-    tabsContainer.BackgroundTransparency = 1
-    tabsContainer.ZIndex = 93
-    tabsContainer.Parent = topBar
-
-    local tabsLayout = Instance.new("UIListLayout")
-    tabsLayout.FillDirection = Enum.FillDirection.Horizontal
-    tabsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    tabsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-    tabsLayout.Padding = UDim.new(0, 24)
-    tabsLayout.Parent = tabsContainer
-
-    -- Right Resume Button
+    -- Right: Minimal Clean [ ESC ] RESUME Button
     local btnResume = Instance.new("TextButton")
     btnResume.Name = "BtnResume"
-    btnResume.Size = UDim2.fromOffset(130, 36)
+    btnResume.Size = UDim2.fromOffset(140, 38)
     btnResume.Position = UDim2.new(1, 0, 0.5, 0)
     btnResume.AnchorPoint = Vector2.new(1, 0.5)
-    btnResume.BackgroundColor3 = UITheme.Colors.EmberPrimary
+    btnResume.BackgroundColor3 = Color3.fromRGB(24, 20, 22)
+    btnResume.BackgroundTransparency = 0.2
     btnResume.AutoButtonColor = false
     btnResume.Font = UITheme.Fonts.Heading
     btnResume.Text = "[ ESC ] RESUME"
     btnResume.TextColor3 = UITheme.Colors.PureWhite
     btnResume.TextSize = 12
     btnResume.ZIndex = 94
-    btnResume.Parent = topBar
+    btnResume.Parent = headerBar
 
     local resumeCorner = Instance.new("UICorner")
-    resumeCorner.CornerRadius = UDim.new(0, 6)
+    resumeCorner.CornerRadius = UDim.new(0, 8)
     resumeCorner.Parent = btnResume
 
-    -- Content Area below TopBar
-    local contentArea = Instance.new("Frame")
-    contentArea.Name = "ContentArea"
-    contentArea.Size = UDim2.new(1, 0, 1, -60)
-    contentArea.Position = UDim2.fromOffset(0, 60)
-    contentArea.BackgroundTransparency = 1
-    contentArea.ZIndex = 92
-    contentArea.Parent = container
+    local resumeStroke = Instance.new("UIStroke")
+    resumeStroke.Color = UITheme.Colors.EmberPrimary
+    resumeStroke.Thickness = 1
+    resumeStroke.Transparency = 0.35
+    resumeStroke.Parent = btnResume
 
-    local contentPadding = Instance.new("UIPadding")
-    contentPadding.PaddingLeft = UDim.new(0, 36)
-    contentPadding.PaddingRight = UDim.new(0, 36)
-    contentPadding.PaddingTop = UDim.new(0, 26)
-    contentPadding.PaddingBottom = UDim.new(0, 26)
-    contentPadding.Parent = contentArea
-
-    -- Left Action Column (Image 3 Style)
-    local leftColumn = Instance.new("Frame")
-    leftColumn.Name = "LeftColumn"
-    leftColumn.Size = UDim2.new(0, 320, 1, 0)
-    leftColumn.BackgroundTransparency = 1
-    leftColumn.ZIndex = 93
-    leftColumn.Parent = contentArea
-
-    local leftLayout = Instance.new("UIListLayout")
-    leftLayout.FillDirection = Enum.FillDirection.Vertical
-    leftLayout.Padding = UDim.new(0, 14)
-    leftLayout.Parent = leftColumn
-
-    -- Right Dynamic Panel
-    local rightPanel = Instance.new("Frame")
-    rightPanel.Name = "RightPanel"
-    rightPanel.Size = UDim2.new(1, -350, 1, 0)
-    rightPanel.Position = UDim2.fromOffset(350, 0)
-    rightPanel.BackgroundColor3 = UITheme.Colors.Surface
-    rightPanel.BackgroundTransparency = 0.2
-    rightPanel.BorderSizePixel = 0
-    rightPanel.ZIndex = 93
-    rightPanel.Parent = contentArea
-
-    local panelCorner = Instance.new("UICorner")
-    panelCorner.CornerRadius = UDim.new(0, 12)
-    panelCorner.Parent = rightPanel
-
-    local panelStroke = Instance.new("UIStroke")
-    panelStroke.Color = UITheme.Colors.BorderHairline
-    panelStroke.Thickness = 1.2
-    panelStroke.Parent = rightPanel
-
-    local panelPadding = Instance.new("UIPadding")
-    panelPadding.PaddingTop = UDim.new(0, 22)
-    panelPadding.PaddingBottom = UDim.new(0, 22)
-    panelPadding.PaddingLeft = UDim.new(0, 26)
-    panelPadding.PaddingRight = UDim.new(0, 26)
-    panelPadding.Parent = rightPanel
+    btnResume.MouseEnter:Connect(function()
+        AudioManager.Play("Hover")
+        TweenService:Create(btnResume, UITheme.Tweens.Fast, {
+            BackgroundColor3 = UITheme.Colors.EmberPrimary,
+            BackgroundTransparency = 0,
+        }):Play()
+        TweenService:Create(resumeStroke, UITheme.Tweens.Fast, {
+            Transparency = 0,
+            Color = UITheme.Colors.EmberHot,
+        }):Play()
+    end)
+    btnResume.MouseLeave:Connect(function()
+        TweenService:Create(btnResume, UITheme.Tweens.Fast, {
+            BackgroundColor3 = Color3.fromRGB(24, 20, 22),
+            BackgroundTransparency = 0.2,
+        }):Play()
+        TweenService:Create(resumeStroke, UITheme.Tweens.Fast, {
+            Transparency = 0.35,
+            Color = UITheme.Colors.EmberPrimary,
+        }):Play()
+    end)
 
     ----------------------------------------------------------------------------
-    -- TAB MANAGEMENT
+    -- MAIN CONTENT WORKSPACE (Clean 2-Column: Left Nav + Right Canvas)
+    ----------------------------------------------------------------------------
+    local workspaceFrame = Instance.new("Frame")
+    workspaceFrame.Name = "WorkspaceFrame"
+    workspaceFrame.Size = UDim2.new(1, -120, 1, -150)
+    workspaceFrame.Position = UDim2.new(0, 60, 0, 110)
+    workspaceFrame.BackgroundTransparency = 1
+    workspaceFrame.ZIndex = 92
+    workspaceFrame.Parent = container
+
+    -- LEFT NAVIGATION PANE (Clean typographic list, NO chunky boxes!)
+    local leftNav = Instance.new("Frame")
+    leftNav.Name = "LeftNav"
+    leftNav.Size = UDim2.new(0, 240, 1, 0)
+    leftNav.BackgroundTransparency = 1
+    leftNav.ZIndex = 93
+    leftNav.Parent = workspaceFrame
+
+    local navLayout = Instance.new("UIListLayout")
+    navLayout.FillDirection = Enum.FillDirection.Vertical
+    navLayout.Padding = UDim.new(0, 6)
+    navLayout.Parent = leftNav
+
+    -- RIGHT CONTENT CANVAS (Single elegant frosted container, NO nested box panels!)
+    local rightCanvas = Instance.new("Frame")
+    rightCanvas.Name = "RightCanvas"
+    rightCanvas.Size = UDim2.new(1, -264, 1, 0)
+    rightCanvas.Position = UDim2.fromOffset(264, 0)
+    rightCanvas.BackgroundColor3 = Color3.fromRGB(14, 12, 16)
+    rightCanvas.BackgroundTransparency = 0.50
+    rightCanvas.BorderSizePixel = 0
+    rightCanvas.ZIndex = 93
+    rightCanvas.Parent = workspaceFrame
+
+    local canvasCorner = Instance.new("UICorner")
+    canvasCorner.CornerRadius = UDim.new(0, 12)
+    canvasCorner.Parent = rightCanvas
+
+    local canvasStroke = Instance.new("UIStroke")
+    canvasStroke.Color = Color3.fromRGB(56, 48, 52)
+    canvasStroke.Thickness = 1
+    canvasStroke.Transparency = 0.55
+    canvasStroke.Parent = rightCanvas
+
+    local canvasPadding = Instance.new("UIPadding")
+    canvasPadding.PaddingTop = UDim.new(0, 26)
+    canvasPadding.PaddingBottom = UDim.new(0, 26)
+    canvasPadding.PaddingLeft = UDim.new(0, 32)
+    canvasPadding.PaddingRight = UDim.new(0, 32)
+    canvasPadding.Parent = rightCanvas
+
+    ----------------------------------------------------------------------------
+    -- NAVIGATION SYSTEM & TAB VIEWS
     ----------------------------------------------------------------------------
     local currentTab = "SURVIVAL"
-    local tabButtons: { [string]: { Button: TextButton, Underline: Frame } } = {}
+    local navButtons: { [string]: {
+        Row: TextButton,
+        AccentBar: Frame,
+        TitleLabel: TextLabel,
+        Icon: Instance,
+    } } = {}
     local tabViews: { [string]: Frame } = {}
 
-    local TAB_NAMES = { "SURVIVAL", "CONTROLS", "SETTINGS", "INTEL" }
-
-    for _, tName in ipairs(TAB_NAMES) do
-        local tabBtn = Instance.new("TextButton")
-        tabBtn.Name = "Tab_" .. tName
-        tabBtn.Size = UDim2.fromOffset(80, 40)
-        tabBtn.BackgroundTransparency = 1
-        tabBtn.AutoButtonColor = false
-        tabBtn.Font = UITheme.Fonts.Heading
-        tabBtn.Text = tName
-        tabBtn.TextColor3 = (tName == currentTab) and UITheme.Colors.TextPrimary or UITheme.Colors.TextMuted
-        tabBtn.TextSize = 13
-        tabBtn.ZIndex = 94
-        tabBtn.Parent = tabsContainer
-
-        local underline = Instance.new("Frame")
-        underline.Name = "Underline"
-        underline.Size = UDim2.new(1, 0, 0, 3)
-        underline.Position = UDim2.fromScale(0, 1)
-        underline.BackgroundColor3 = UITheme.Colors.EmberHot
-        underline.BorderSizePixel = 0
-        underline.Visible = (tName == currentTab)
-        underline.ZIndex = 95
-        underline.Parent = tabBtn
-
-        tabButtons[tName] = { Button = tabBtn, Underline = underline }
-
-        local viewFrame = Instance.new("Frame")
-        viewFrame.Name = "View_" .. tName
-        viewFrame.Size = UDim2.fromScale(1, 1)
-        viewFrame.BackgroundTransparency = 1
-        viewFrame.Visible = (tName == currentTab)
-        viewFrame.ZIndex = 94
-        viewFrame.Parent = rightPanel
-        tabViews[tName] = viewFrame
-    end
+    local TAB_DEFS = {
+        { Id = "SURVIVAL", Name = "SURVIVAL", Sub = "Objectives & Campfire", Icon = "compass" },
+        { Id = "SETTINGS", Name = "SETTINGS", Sub = "Audio & Immersion", Icon = "settings" },
+        { Id = "CONTROLS", Name = "CONTROLS", Sub = "Keyboard & Shortcuts", Icon = "gamepad-2" },
+        { Id = "INTEL",    Name = "INTEL",    Sub = "Survival Guide & Lore", Icon = "book-open" },
+    }
 
     local function switchTab(targetTab: string)
         currentTab = targetTab
-        for tName, data in pairs(tabButtons) do
-            local isSel = (tName == currentTab)
-            data.Button.TextColor3 = isSel and UITheme.Colors.TextPrimary or UITheme.Colors.TextMuted
-            data.Underline.Visible = isSel
+        for tId, data in pairs(navButtons) do
+            local isSel = (tId == currentTab)
+            data.AccentBar.Visible = isSel
+            data.TitleLabel.TextColor3 = isSel and UITheme.Colors.PureWhite or UITheme.Colors.TextSecondary
+            data.Row.BackgroundColor3 = isSel and UITheme.Colors.SurfaceElevated or Color3.fromRGB(0, 0, 0)
+            data.Row.BackgroundTransparency = isSel and 0.65 or 1
         end
-        for tName, view in pairs(tabViews) do
-            view.Visible = (tName == currentTab)
+        for tId, view in pairs(tabViews) do
+            view.Visible = (tId == currentTab)
         end
     end
 
-    for tName, data in pairs(tabButtons) do
-        data.Button.Activated:Connect(function()
-            switchTab(tName)
+    for _, def in ipairs(TAB_DEFS) do
+        -- Create Tab View Frame inside RightCanvas
+        local viewFrame = Instance.new("Frame")
+        viewFrame.Name = "View_" .. def.Id
+        viewFrame.Size = UDim2.fromScale(1, 1)
+        viewFrame.BackgroundTransparency = 1
+        viewFrame.Visible = (def.Id == currentTab)
+        viewFrame.ZIndex = 94
+        viewFrame.Parent = rightCanvas
+        tabViews[def.Id] = viewFrame
+
+        -- Create Clean Nav Button in LeftNav
+        local rowBtn = Instance.new("TextButton")
+        rowBtn.Name = "Nav_" .. def.Id
+        rowBtn.Size = UDim2.new(1, 0, 0, 48)
+        rowBtn.BackgroundColor3 = (def.Id == currentTab) and UITheme.Colors.SurfaceElevated or Color3.fromRGB(0, 0, 0)
+        rowBtn.BackgroundTransparency = (def.Id == currentTab) and 0.65 or 1
+        rowBtn.AutoButtonColor = false
+        rowBtn.Text = ""
+        rowBtn.ZIndex = 94
+        rowBtn.Parent = leftNav
+
+        local rowCorner = Instance.new("UICorner")
+        rowCorner.CornerRadius = UDim.new(0, 8)
+        rowCorner.Parent = rowBtn
+
+        -- Left Active Indicator Accent Bar
+        local accentBar = Instance.new("Frame")
+        accentBar.Name = "AccentBar"
+        accentBar.Size = UDim2.new(0, 3, 0, 22)
+        accentBar.Position = UDim2.new(0, 2, 0.5, 0)
+        accentBar.AnchorPoint = Vector2.new(0, 0.5)
+        accentBar.BackgroundColor3 = UITheme.Colors.EmberPrimary
+        accentBar.BorderSizePixel = 0
+        accentBar.Visible = (def.Id == currentTab)
+        accentBar.ZIndex = 95
+        accentBar.Parent = rowBtn
+
+        local barCorner = Instance.new("UICorner")
+        barCorner.CornerRadius = UDim.new(1, 0)
+        barCorner.Parent = accentBar
+
+        -- Icon
+        local icon = IconPack.CreateIcon(def.Icon, 16, UITheme.Colors.EmberHot, 0)
+        icon.Position = UDim2.new(0, 14, 0.5, 0)
+        icon.AnchorPoint = Vector2.new(0, 0.5)
+        icon.ZIndex = 95
+        icon.Parent = rowBtn
+
+        -- Title
+        local tLabel = Instance.new("TextLabel")
+        tLabel.Name = "Title"
+        tLabel.Size = UDim2.new(1, -44, 0, 18)
+        tLabel.Position = UDim2.fromOffset(40, 8)
+        tLabel.BackgroundTransparency = 1
+        tLabel.Font = UITheme.Fonts.Heading
+        tLabel.Text = def.Name
+        tLabel.TextColor3 = (def.Id == currentTab) and UITheme.Colors.PureWhite or UITheme.Colors.TextSecondary
+        tLabel.TextSize = 13
+        tLabel.TextXAlignment = Enum.TextXAlignment.Left
+        tLabel.ZIndex = 95
+        tLabel.Parent = rowBtn
+
+        -- Sub
+        local sLabel = Instance.new("TextLabel")
+        sLabel.Name = "Sub"
+        sLabel.Size = UDim2.new(1, -44, 0, 14)
+        sLabel.Position = UDim2.fromOffset(40, 26)
+        sLabel.BackgroundTransparency = 1
+        sLabel.Font = UITheme.Fonts.Body
+        sLabel.Text = def.Sub
+        sLabel.TextColor3 = UITheme.Colors.TextMuted
+        sLabel.TextSize = 10
+        sLabel.TextXAlignment = Enum.TextXAlignment.Left
+        sLabel.ZIndex = 95
+        sLabel.Parent = rowBtn
+
+        navButtons[def.Id] = {
+            Row = rowBtn,
+            AccentBar = accentBar,
+            TitleLabel = tLabel,
+            Icon = icon,
+        }
+
+        rowBtn.MouseEnter:Connect(function()
+            AudioManager.Play("Hover")
+            if currentTab ~= def.Id then
+                TweenService:Create(rowBtn, UITheme.Tweens.Fast, { BackgroundTransparency = 0.85, BackgroundColor3 = UITheme.Colors.SurfaceElevated }):Play()
+                tLabel.TextColor3 = UITheme.Colors.TextPrimary
+            end
+        end)
+        rowBtn.MouseLeave:Connect(function()
+            if currentTab ~= def.Id then
+                TweenService:Create(rowBtn, UITheme.Tweens.Fast, { BackgroundTransparency = 1 }):Play()
+                tLabel.TextColor3 = UITheme.Colors.TextSecondary
+            end
+        end)
+        rowBtn.Activated:Connect(function()
+            AudioManager.Play("Click")
+            switchTab(def.Id)
         end)
     end
 
-    ----------------------------------------------------------------------------
-    -- LEFT COLUMN ACTION CARDS (Image 3 Style)
-    ----------------------------------------------------------------------------
-    local function createActionCard(title: string, sub: string, isAccent: boolean, onClick: () -> ())
-        local card = Instance.new("TextButton")
-        card.Name = "Card_" .. title:gsub("%s+", "")
-        card.Size = UDim2.new(1, 0, 0, 68)
-        card.BackgroundColor3 = isAccent and UITheme.Colors.SurfaceElevated or UITheme.Colors.Surface
-        card.BackgroundTransparency = 0.25
-        card.AutoButtonColor = false
-        card.Text = ""
-        card.ZIndex = 94
-        card.Parent = leftColumn
+    -- Divider before Quit button
+    local navDivider = UIComponents.CreateDivider(leftNav)
+    navDivider.Size = UDim2.new(1, 0, 0, 1)
 
-        local cardCorner = Instance.new("UICorner")
-        cardCorner.CornerRadius = UDim.new(0, 8)
-        cardCorner.Parent = card
-
-        local cardStroke = Instance.new("UIStroke")
-        cardStroke.Color = isAccent and UITheme.Colors.EmberHot or UITheme.Colors.BorderHairline
-        cardStroke.Thickness = isAccent and 1.6 or 1
-        cardStroke.Parent = card
-
-        local cardPadding = Instance.new("UIPadding")
-        cardPadding.PaddingLeft = UDim.new(0, 16)
-        cardPadding.PaddingRight = UDim.new(0, 16)
-        cardPadding.PaddingTop = UDim.new(0, 12)
-        cardPadding.PaddingBottom = UDim.new(0, 12)
-        cardPadding.Parent = card
-
-        local tLbl = Instance.new("TextLabel")
-        tLbl.Name = "Title"
-        tLbl.Size = UDim2.new(1, 0, 0, 20)
-        tLbl.BackgroundTransparency = 1
-        tLbl.Font = UITheme.Fonts.Heading
-        tLbl.Text = title
-        tLbl.TextColor3 = isAccent and UITheme.Colors.EmberGold or UITheme.Colors.TextPrimary
-        tLbl.TextSize = 14
-        tLbl.TextXAlignment = Enum.TextXAlignment.Left
-        tLbl.ZIndex = 95
-        tLbl.Parent = card
-
-        local sLbl = Instance.new("TextLabel")
-        sLbl.Name = "Sub"
-        sLbl.Size = UDim2.new(1, 0, 0, 18)
-        sLbl.Position = UDim2.fromOffset(0, 22)
-        sLbl.BackgroundTransparency = 1
-        sLbl.Font = UITheme.Fonts.Body
-        sLbl.Text = sub
-        sLbl.TextColor3 = UITheme.Colors.TextMuted
-        sLbl.TextSize = 11
-        sLbl.TextXAlignment = Enum.TextXAlignment.Left
-        sLbl.ZIndex = 95
-        sLbl.Parent = card
-
-        card.MouseEnter:Connect(function()
-            TweenService:Create(cardStroke, UITheme.Tweens.Fast, { Color = UITheme.Colors.EmberHot }):Play()
-            TweenService:Create(card, UITheme.Tweens.Fast, { BackgroundColor3 = UITheme.Colors.SurfaceHighlight }):Play()
-        end)
-        card.MouseLeave:Connect(function()
-            TweenService:Create(cardStroke, UITheme.Tweens.Fast, { Color = isAccent and UITheme.Colors.EmberHot or UITheme.Colors.BorderHairline }):Play()
-            TweenService:Create(card, UITheme.Tweens.Fast, { BackgroundColor3 = isAccent and UITheme.Colors.SurfaceElevated or UITheme.Colors.Surface }):Play()
-        end)
-
-        card.Activated:Connect(onClick)
-    end
-
-    createActionCard("RESUME SECTOR", "Continue your survival journey", true, function()
-        container.Visible = false
-        callbacks.OnResume()
-    end)
-
-    createActionCard("CAMPFIRE STATUS", "Inspect flame health & fuel reserves", false, function()
-        switchTab("SURVIVAL")
-    end)
-
-    createActionCard("KEYBINDINGS & CONTROLS", "View full keyboard & touch controls", false, function()
-        switchTab("CONTROLS")
-    end)
-
-    UIComponents.CreateDivider(leftColumn)
-
-    local btnSettingsLink = Instance.new("TextButton")
-    btnSettingsLink.Name = "BtnSettings"
-    btnSettingsLink.Size = UDim2.new(1, 0, 0, 36)
-    btnSettingsLink.BackgroundTransparency = 1
-    btnSettingsLink.Text = ""
-    btnSettingsLink.ZIndex = 94
-    btnSettingsLink.Parent = leftColumn
-
-    local settingsIcon = IconPack.CreateIcon("settings", 15, UITheme.Colors.TextSecondary, 0)
-    settingsIcon.Position = UDim2.fromOffset(0, 10)
-    settingsIcon.ZIndex = 95
-    settingsIcon.Parent = btnSettingsLink
-
-    local settingsLabel = Instance.new("TextLabel")
-    settingsLabel.Name = "Label"
-    settingsLabel.Size = UDim2.new(1, -26, 1, 0)
-    settingsLabel.Position = UDim2.fromOffset(26, 0)
-    settingsLabel.BackgroundTransparency = 1
-    settingsLabel.Font = UITheme.Fonts.Heading
-    settingsLabel.Text = "SETTINGS & AUDIO"
-    settingsLabel.TextColor3 = UITheme.Colors.TextSecondary
-    settingsLabel.TextSize = 13
-    settingsLabel.TextXAlignment = Enum.TextXAlignment.Left
-    settingsLabel.ZIndex = 95
-    settingsLabel.Parent = btnSettingsLink
-
-    btnSettingsLink.Activated:Connect(function()
-        switchTab("SETTINGS")
-    end)
-
+    -- QUIT TO MAIN MENU BUTTON (Clean text button with power icon)
     local btnQuit = Instance.new("TextButton")
     btnQuit.Name = "BtnQuit"
-    btnQuit.Size = UDim2.new(1, 0, 0, 36)
+    btnQuit.Size = UDim2.new(1, 0, 0, 44)
     btnQuit.BackgroundTransparency = 1
+    btnQuit.AutoButtonColor = false
     btnQuit.Text = ""
     btnQuit.ZIndex = 94
-    btnQuit.Parent = leftColumn
+    btnQuit.Parent = leftNav
 
-    local quitIcon = IconPack.CreateIcon("power", 15, UITheme.Colors.EmberCrimson, 0)
-    quitIcon.Position = UDim2.fromOffset(0, 10)
+    local quitCorner = Instance.new("UICorner")
+    quitCorner.CornerRadius = UDim.new(0, 8)
+    quitCorner.Parent = btnQuit
+
+    local quitIcon = IconPack.CreateIcon("power", 16, UITheme.Colors.EmberCrimson, 0)
+    quitIcon.Position = UDim2.new(0, 14, 0.5, 0)
+    quitIcon.AnchorPoint = Vector2.new(0, 0.5)
     quitIcon.ZIndex = 95
     quitIcon.Parent = btnQuit
 
     local quitLabel = Instance.new("TextLabel")
     quitLabel.Name = "Label"
-    quitLabel.Size = UDim2.new(1, -26, 1, 0)
-    quitLabel.Position = UDim2.fromOffset(26, 0)
+    quitLabel.Size = UDim2.new(1, -44, 1, 0)
+    quitLabel.Position = UDim2.fromOffset(40, 0)
     quitLabel.BackgroundTransparency = 1
     quitLabel.Font = UITheme.Fonts.Heading
     quitLabel.Text = "QUIT TO MAIN MENU"
     quitLabel.TextColor3 = UITheme.Colors.EmberCrimson
-    quitLabel.TextSize = 13
+    quitLabel.TextSize = 12
     quitLabel.TextXAlignment = Enum.TextXAlignment.Left
     quitLabel.ZIndex = 95
     quitLabel.Parent = btnQuit
 
+    btnQuit.MouseEnter:Connect(function()
+        AudioManager.Play("Hover")
+        TweenService:Create(btnQuit, UITheme.Tweens.Fast, {
+            BackgroundColor3 = UITheme.Colors.SurfaceElevated,
+            BackgroundTransparency = 0.75,
+        }):Play()
+    end)
+    btnQuit.MouseLeave:Connect(function()
+        TweenService:Create(btnQuit, UITheme.Tweens.Fast, { BackgroundTransparency = 1 }):Play()
+    end)
     btnQuit.Activated:Connect(function()
+        AudioManager.Play("Click")
         container.Visible = false
         callbacks.OnQuit()
     end)
 
     ----------------------------------------------------------------------------
-    -- VIEW 1: SURVIVAL TAB
+    -- VIEW 1: SURVIVAL TAB (Objectives & Camp Status)
     ----------------------------------------------------------------------------
     local survView = tabViews["SURVIVAL"]
     local survLayout = Instance.new("UIListLayout")
     survLayout.FillDirection = Enum.FillDirection.Vertical
-    survLayout.Padding = UDim.new(0, 14)
+    survLayout.Padding = UDim.new(0, 16)
     survLayout.Parent = survView
 
     local survHeader = Instance.new("TextLabel")
-    survHeader.Size = UDim2.new(1, 0, 0, 24)
+    survHeader.Size = UDim2.new(1, 0, 0, 22)
     survHeader.BackgroundTransparency = 1
     survHeader.Font = UITheme.Fonts.Heading
-    survHeader.Text = "SECTOR 01: THE LONG NIGHT"
+    survHeader.Text = "CURRENT SURVIVAL OBJECTIVES"
     survHeader.TextColor3 = UITheme.Colors.TextPrimary
-    survHeader.TextSize = 18
+    survHeader.TextSize = 17
     survHeader.TextXAlignment = Enum.TextXAlignment.Left
     survHeader.Parent = survView
 
@@ -2418,7 +2399,7 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     survBadge.Size = UDim2.new(1, 0, 0, 16)
     survBadge.BackgroundTransparency = 1
     survBadge.Font = UITheme.Fonts.Tag
-    survBadge.Text = "[ OBJECTIVE: CHOP 2 TREES AND RETURN TO SHELTER BEFORE NIGHTFALL ]"
+    survBadge.Text = "SECTOR 01: THE LONG NIGHT // PROLOGUE"
     survBadge.TextColor3 = UITheme.Colors.EmberHot
     survBadge.TextSize = 11
     survBadge.TextXAlignment = Enum.TextXAlignment.Left
@@ -2426,137 +2407,96 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
 
     UIComponents.CreateDivider(survView)
 
-    local function addCheckItem(text: string, isDone: boolean)
+    local function addCheckItem(title: string, sub: string, isDone: boolean)
         local row = Instance.new("Frame")
-        row.Size = UDim2.new(1, 0, 0, 28)
+        row.Size = UDim2.new(1, 0, 0, 42)
         row.BackgroundTransparency = 1
         row.Parent = survView
 
         local checkIcon = IconPack.CreateIcon(isDone and "check" or "circle", 16, isDone and UITheme.Colors.EmberHot or UITheme.Colors.TextMuted, 0)
-        checkIcon.Position = UDim2.fromOffset(4, 6)
+        checkIcon.Position = UDim2.fromOffset(4, 4)
         checkIcon.ZIndex = 95
         checkIcon.Parent = row
 
-        local desc = Instance.new("TextLabel")
-        desc.Size = UDim2.new(1, -30, 1, 0)
-        desc.Position = UDim2.fromOffset(30, 0)
-        desc.BackgroundTransparency = 1
-        desc.Font = UITheme.Fonts.Body
-        desc.Text = text
-        desc.TextColor3 = isDone and UITheme.Colors.TextPrimary or UITheme.Colors.TextSecondary
-        desc.TextSize = 12
-        desc.TextXAlignment = Enum.TextXAlignment.Left
-        desc.Parent = row
+        local t = Instance.new("TextLabel")
+        t.Size = UDim2.new(1, -30, 0, 18)
+        t.Position = UDim2.fromOffset(30, 2)
+        t.BackgroundTransparency = 1
+        t.Font = UITheme.Fonts.Subheading
+        t.Text = title
+        t.TextColor3 = isDone and UITheme.Colors.TextPrimary or UITheme.Colors.TextSecondary
+        t.TextSize = 13
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.Parent = row
+
+        local s = Instance.new("TextLabel")
+        s.Size = UDim2.new(1, -30, 0, 14)
+        s.Position = UDim2.fromOffset(30, 20)
+        s.BackgroundTransparency = 1
+        s.Font = UITheme.Fonts.Body
+        s.Text = sub
+        s.TextColor3 = UITheme.Colors.TextMuted
+        s.TextSize = 11
+        s.TextXAlignment = Enum.TextXAlignment.Left
+        s.Parent = row
     end
 
-    addCheckItem("Explore shelter perimeter & locate campfire stone pit", true)
-    addCheckItem("Use Stone Hatchet [Slot 1] to chop trees for fuel", false)
-    addCheckItem("Deposit wood logs into campfire before 19:00 nightfall", false)
+    addCheckItem("Locate Campsite Hearth", "Central stone sanctuary pit where fire protects from the dark", true)
+    addCheckItem("Gather Wood Logs (Max 5)", "Collect firewood from the camp timber stack or forest piles", false)
+    addCheckItem("Stoke Campfire Before 19:00", "Maintain flame health before nightfall arrives and the entity awakens", false)
+
+    UIComponents.CreateDivider(survView)
+
+    local statusStrip = Instance.new("Frame")
+    statusStrip.Size = UDim2.new(1, 0, 0, 36)
+    statusStrip.BackgroundTransparency = 1
+    statusStrip.Parent = survView
+
+    local sFlame = IconPack.CreateIcon("flame", 16, UITheme.Colors.EmberPrimary, 0)
+    sFlame.Position = UDim2.fromOffset(4, 10)
+    sFlame.Parent = statusStrip
+
+    local sText = Instance.new("TextLabel")
+    sText.Size = UDim2.new(1, -30, 1, 0)
+    sText.Position = UDim2.fromOffset(30, 0)
+    sText.BackgroundTransparency = 1
+    sText.Font = UITheme.Fonts.Tag
+    sText.Text = "CAMPFIRE SANCTUARY: BURNING  •  NIGHTFALL: 19:00 APPROACHING"
+    sText.TextColor3 = UITheme.Colors.EmberHot
+    sText.TextSize = 11
+    sText.TextXAlignment = Enum.TextXAlignment.Left
+    sText.Parent = statusStrip
 
     ----------------------------------------------------------------------------
-    -- VIEW 2: CONTROLS TAB (Full Keybindings Guide)
-    ----------------------------------------------------------------------------
-    local ctrlView = tabViews["CONTROLS"]
-    local ctrlScroll = Instance.new("ScrollingFrame")
-    ctrlScroll.Size = UDim2.fromScale(1, 1)
-    ctrlScroll.BackgroundTransparency = 1
-    ctrlScroll.BorderSizePixel = 0
-    ctrlScroll.ScrollBarThickness = 3
-    ctrlScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    ctrlScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    ctrlScroll.Parent = ctrlView
-
-    local ctrlLayout = Instance.new("UIListLayout")
-    ctrlLayout.FillDirection = Enum.FillDirection.Vertical
-    ctrlLayout.Padding = UDim.new(0, 10)
-    ctrlLayout.Parent = ctrlScroll
-
-    local ctrlTitle = Instance.new("TextLabel")
-    ctrlTitle.Size = UDim2.new(1, 0, 0, 22)
-    ctrlTitle.BackgroundTransparency = 1
-    ctrlTitle.Font = UITheme.Fonts.Heading
-    ctrlTitle.Text = "SURVIVAL CONTROLS & KEYBINDINGS"
-    ctrlTitle.TextColor3 = UITheme.Colors.TextPrimary
-    ctrlTitle.TextSize = 16
-    ctrlTitle.TextXAlignment = Enum.TextXAlignment.Left
-    ctrlTitle.Parent = ctrlScroll
-
-    local function addKeyRow(actionName: string, pcKey: string, mobileTouch: string)
-        local row = Instance.new("Frame")
-        row.Size = UDim2.new(1, 0, 0, 36)
-        row.BackgroundColor3 = UITheme.Colors.SurfaceElevated
-        row.BorderSizePixel = 0
-        row.Parent = ctrlScroll
-
-        local rowCorner = Instance.new("UICorner")
-        rowCorner.CornerRadius = UDim.new(0, 6)
-        rowCorner.Parent = row
-
-        local actLbl = Instance.new("TextLabel")
-        actLbl.Size = UDim2.new(0.45, 0, 1, 0)
-        actLbl.Position = UDim2.fromOffset(14, 0)
-        actLbl.BackgroundTransparency = 1
-        actLbl.Font = UITheme.Fonts.Subheading
-        actLbl.Text = actionName
-        actLbl.TextColor3 = UITheme.Colors.TextPrimary
-        actLbl.TextSize = 12
-        actLbl.TextXAlignment = Enum.TextXAlignment.Left
-        actLbl.Parent = row
-
-        local keyPill = Instance.new("TextLabel")
-        keyPill.Size = UDim2.new(0.28, 0, 0, 24)
-        keyPill.Position = UDim2.new(0.48, 0, 0.5, 0)
-        keyPill.AnchorPoint = Vector2.new(0, 0.5)
-        keyPill.BackgroundColor3 = UITheme.Colors.Void
-        keyPill.Font = UITheme.Fonts.Tag
-        keyPill.Text = pcKey
-        keyPill.TextColor3 = UITheme.Colors.EmberHot
-        keyPill.TextSize = 11
-        keyPill.Parent = row
-
-        local pillCorner = Instance.new("UICorner")
-        pillCorner.CornerRadius = UDim.new(0, 4)
-        pillCorner.Parent = keyPill
-
-        local mobLbl = Instance.new("TextLabel")
-        mobLbl.Size = UDim2.new(0.22, 0, 1, 0)
-        mobLbl.Position = UDim2.new(0.78, 0, 0, 0)
-        mobLbl.BackgroundTransparency = 1
-        mobLbl.Font = UITheme.Fonts.Body
-        mobLbl.Text = mobileTouch
-        mobLbl.TextColor3 = UITheme.Colors.TextMuted
-        mobLbl.TextSize = 10
-        mobLbl.TextXAlignment = Enum.TextXAlignment.Left
-        mobLbl.Parent = row
-    end
-
-    addKeyRow("Movement", "[ W ] [ A ] [ S ] [ D ]", "Virtual Thumbstick")
-    addKeyRow("Sprint (Uses Stamina)", "[ Left Shift ]", "Sprint Toggle Button")
-    addKeyRow("Jump", "[ Spacebar ]", "Jump Button")
-    addKeyRow("Select Hotbar Tool", "[ 1 ] [ 2 ] [ 3 ]", "Tap QuickSlot")
-    addKeyRow("Interact / Pick Up", "[ E ]", "Tap Object Prompt")
-    addKeyRow("Drop Carried Item", "[ Q ]", "Tap Drop Button")
-    addKeyRow("Open Backpack", "[ B ] or [ Tab ]", "Tap Backpack Icon")
-    addKeyRow("In-Game Menu", "[ Esc ] or [ M ]", "Tap Menu Icon")
-
-    ----------------------------------------------------------------------------
-    -- VIEW 3: SETTINGS TAB (Inline Embedded Sliders - No Dropdown Modals!)
+    -- VIEW 2: SETTINGS TAB (Audio & Immersion)
     ----------------------------------------------------------------------------
     local settView = tabViews["SETTINGS"]
     local settLayout = Instance.new("UIListLayout")
     settLayout.FillDirection = Enum.FillDirection.Vertical
-    settLayout.Padding = UDim.new(0, 14)
+    settLayout.Padding = UDim.new(0, 16)
     settLayout.Parent = settView
 
     local settTitle = Instance.new("TextLabel")
     settTitle.Size = UDim2.new(1, 0, 0, 22)
     settTitle.BackgroundTransparency = 1
     settTitle.Font = UITheme.Fonts.Heading
-    settTitle.Text = "AUDIO & IMMERSION CONFIGURATION"
+    settTitle.Text = "AUDIO & PREFERENCES"
     settTitle.TextColor3 = UITheme.Colors.TextPrimary
-    settTitle.TextSize = 16
+    settTitle.TextSize = 17
     settTitle.TextXAlignment = Enum.TextXAlignment.Left
     settTitle.Parent = settView
+
+    local settBadge = Instance.new("TextLabel")
+    settBadge.Size = UDim2.new(1, 0, 0, 16)
+    settBadge.BackgroundTransparency = 1
+    settBadge.Font = UITheme.Fonts.Tag
+    settBadge.Text = "MASTER SOUND LEVELS & VISUAL IMMERSION"
+    settBadge.TextColor3 = UITheme.Colors.EmberHot
+    settBadge.TextSize = 11
+    settBadge.TextXAlignment = Enum.TextXAlignment.Left
+    settBadge.Parent = settView
+
+    UIComponents.CreateDivider(settView)
 
     UIComponents.CreateSlider({
         Label = "MASTER AUDIO VOLUME",
@@ -2576,7 +2516,6 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
         InitialValue = false,
         Parent = settView,
         OnChanged = function(enabled: boolean)
-            -- Motion toggle callback
         end,
     })
 
@@ -2588,9 +2527,87 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
         InitialValue = true,
         Parent = settView,
         OnChanged = function(enabled: boolean)
-            -- Camera bob toggle callback
         end,
     })
+
+    ----------------------------------------------------------------------------
+    -- VIEW 3: CONTROLS TAB (Full Keybindings Cheat Sheet)
+    ----------------------------------------------------------------------------
+    local ctrlView = tabViews["CONTROLS"]
+    local ctrlLayout = Instance.new("UIListLayout")
+    ctrlLayout.FillDirection = Enum.FillDirection.Vertical
+    ctrlLayout.Padding = UDim.new(0, 10)
+    ctrlLayout.Parent = ctrlView
+
+    local ctrlTitle = Instance.new("TextLabel")
+    ctrlTitle.Size = UDim2.new(1, 0, 0, 22)
+    ctrlTitle.BackgroundTransparency = 1
+    ctrlTitle.Font = UITheme.Fonts.Heading
+    ctrlTitle.Text = "SURVIVAL CONTROLS"
+    ctrlTitle.TextColor3 = UITheme.Colors.TextPrimary
+    ctrlTitle.TextSize = 17
+    ctrlTitle.TextXAlignment = Enum.TextXAlignment.Left
+    ctrlTitle.Parent = ctrlView
+
+    local ctrlBadge = Instance.new("TextLabel")
+    ctrlBadge.Size = UDim2.new(1, 0, 0, 16)
+    ctrlBadge.BackgroundTransparency = 1
+    ctrlBadge.Font = UITheme.Fonts.Tag
+    ctrlBadge.Text = "KEYBOARD SHORTCUTS & INPUT ACTIONS"
+    ctrlBadge.TextColor3 = UITheme.Colors.EmberHot
+    ctrlBadge.TextSize = 11
+    ctrlBadge.TextXAlignment = Enum.TextXAlignment.Left
+    ctrlBadge.Parent = ctrlView
+
+    UIComponents.CreateDivider(ctrlView)
+
+    local function addKeyRow(actionName: string, pcKey: string)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 30)
+        row.BackgroundTransparency = 1
+        row.Parent = ctrlView
+
+        local actLbl = Instance.new("TextLabel")
+        actLbl.Size = UDim2.new(0.6, 0, 1, 0)
+        actLbl.Position = UDim2.fromOffset(4, 0)
+        actLbl.BackgroundTransparency = 1
+        actLbl.Font = UITheme.Fonts.Body
+        actLbl.Text = actionName
+        actLbl.TextColor3 = UITheme.Colors.TextPrimary
+        actLbl.TextSize = 12
+        actLbl.TextXAlignment = Enum.TextXAlignment.Left
+        actLbl.Parent = row
+
+        local keyPill = Instance.new("TextLabel")
+        keyPill.Size = UDim2.new(0.35, 0, 0, 24)
+        keyPill.Position = UDim2.new(1, 0, 0.5, 0)
+        keyPill.AnchorPoint = Vector2.new(1, 0.5)
+        keyPill.BackgroundColor3 = Color3.fromRGB(10, 9, 12)
+        keyPill.BackgroundTransparency = 0.4
+        keyPill.Font = UITheme.Fonts.Tag
+        keyPill.Text = pcKey
+        keyPill.TextColor3 = UITheme.Colors.EmberHot
+        keyPill.TextSize = 11
+        keyPill.Parent = row
+
+        local pillCorner = Instance.new("UICorner")
+        pillCorner.CornerRadius = UDim.new(0, 4)
+        pillCorner.Parent = keyPill
+
+        local pillStroke = Instance.new("UIStroke")
+        pillStroke.Color = Color3.fromRGB(50, 44, 46)
+        pillStroke.Thickness = 1
+        pillStroke.Parent = keyPill
+    end
+
+    addKeyRow("Movement", "[ W ] [ A ] [ S ] [ D ]")
+    addKeyRow("Sprint (Consumes Stamina)", "[ Left Shift ]")
+    addKeyRow("Jump", "[ Spacebar ]")
+    addKeyRow("Select Hotbar Tool", "[ 1 ] [ 2 ] [ 3 ]")
+    addKeyRow("Interact / Pick Up / Stoke", "[ E ]")
+    addKeyRow("Drop Carried Item", "[ Q ]")
+    addKeyRow("Open Backpack Inventory", "[ B ] or [ Tab ]")
+    addKeyRow("In-Game Menu / Resume", "[ Esc ] or [ M ]")
 
     ----------------------------------------------------------------------------
     -- VIEW 4: INTEL TAB (Survival Knowledge & Hollow Lore)
@@ -2598,7 +2615,7 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     local intelView = tabViews["INTEL"]
     local intelLayout = Instance.new("UIListLayout")
     intelLayout.FillDirection = Enum.FillDirection.Vertical
-    intelLayout.Padding = UDim.new(0, 12)
+    intelLayout.Padding = UDim.new(0, 14)
     intelLayout.Parent = intelView
 
     local intelTitle = Instance.new("TextLabel")
@@ -2607,46 +2624,46 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     intelTitle.Font = UITheme.Fonts.Heading
     intelTitle.Text = "SURVIVAL INTELLIGENCE"
     intelTitle.TextColor3 = UITheme.Colors.TextPrimary
-    intelTitle.TextSize = 16
+    intelTitle.TextSize = 17
     intelTitle.TextXAlignment = Enum.TextXAlignment.Left
     intelTitle.Parent = intelView
 
-    local function addIntelCard(title: string, body: string)
-        local box = Instance.new("Frame")
-        box.Size = UDim2.new(1, 0, 0, 76)
-        box.BackgroundColor3 = UITheme.Colors.SurfaceElevated
-        box.BorderSizePixel = 0
-        box.Parent = intelView
+    local intelBadge = Instance.new("TextLabel")
+    intelBadge.Size = UDim2.new(1, 0, 0, 16)
+    intelBadge.BackgroundTransparency = 1
+    intelBadge.Font = UITheme.Fonts.Tag
+    intelBadge.Text = "TACTICAL FIELD NOTES & ESSENTIAL MECHANICS"
+    intelBadge.TextColor3 = UITheme.Colors.EmberHot
+    intelBadge.TextSize = 11
+    intelBadge.TextXAlignment = Enum.TextXAlignment.Left
+    intelBadge.Parent = intelView
 
-        local bCorner = Instance.new("UICorner")
-        bCorner.CornerRadius = UDim.new(0, 8)
-        bCorner.Parent = box
+    UIComponents.CreateDivider(intelView)
 
-        local bStroke = Instance.new("UIStroke")
-        bStroke.Color = UITheme.Colors.BorderHairline
-        bStroke.Thickness = 1
-        bStroke.Parent = box
+    local function addIntelItem(title: string, body: string)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 52)
+        row.BackgroundTransparency = 1
+        row.Parent = intelView
 
-        local bPad = Instance.new("UIPadding")
-        bPad.PaddingLeft = UDim.new(0, 16)
-        bPad.PaddingRight = UDim.new(0, 16)
-        bPad.PaddingTop = UDim.new(0, 10)
-        bPad.PaddingBottom = UDim.new(0, 10)
-        bPad.Parent = box
+        local bullet = IconPack.CreateIcon("flame", 14, UITheme.Colors.EmberHot, 0)
+        bullet.Position = UDim2.fromOffset(4, 2)
+        bullet.Parent = row
 
         local t = Instance.new("TextLabel")
-        t.Size = UDim2.new(1, 0, 0, 16)
+        t.Size = UDim2.new(1, -26, 0, 16)
+        t.Position = UDim2.fromOffset(26, 0)
         t.BackgroundTransparency = 1
         t.Font = UITheme.Fonts.Heading
         t.Text = title
         t.TextColor3 = UITheme.Colors.EmberHot
         t.TextSize = 12
         t.TextXAlignment = Enum.TextXAlignment.Left
-        t.Parent = box
+        t.Parent = row
 
         local b = Instance.new("TextLabel")
-        b.Size = UDim2.new(1, 0, 0, 36)
-        b.Position = UDim2.fromOffset(0, 18)
+        b.Size = UDim2.new(1, -26, 0, 32)
+        b.Position = UDim2.fromOffset(26, 18)
         b.BackgroundTransparency = 1
         b.Font = UITheme.Fonts.Body
         b.Text = body
@@ -2654,15 +2671,15 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
         b.TextSize = 11
         b.TextWrapped = true
         b.TextXAlignment = Enum.TextXAlignment.Left
-        b.Parent = box
+        b.Parent = row
     end
 
-    addIntelCard("THE CAMPFIRE IS SANCTUARY", "Light from the campfire repels the entity. Never let it deplete completely.")
-    addIntelCard("THE HOLLOW STALKS IN DARKNESS", "At 19:00 nightfall, the entity roams outside the illuminated radius.")
-    addIntelCard("LIGHT RELAYS EXTEND PERIMETER", "Deploy solar lantern relays to create safe paths across the forest.")
+    addIntelItem("THE CAMPFIRE IS SANCTUARY", "Light from the campfire repels the hollow entity. Never let the embers extinguish completely.")
+    addIntelItem("THE HOLLOW STALKS IN DARKNESS", "At 19:00 nightfall, the entity roams outside the illuminated perimeter. Stay close to the fire.")
+    addIntelItem("WOOD RESOURCE MANAGEMENT", "You can carry a maximum of 5 wood logs. Gather from the campsite stack or fallen forest piles.")
 
     ----------------------------------------------------------------------------
-    -- VISIBILITY CONTROLS
+    -- VISIBILITY & TRANSITION CONTROLLERS
     ----------------------------------------------------------------------------
     local isTransitioning = false
 
@@ -2671,14 +2688,16 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
         isTransitioning = true
         container.Visible = true
         switchTab("SURVIVAL")
-        TweenService:Create(container, UITheme.Tweens.Fast, { BackgroundTransparency = 0.28 }):Play()
-        task.wait(0.2)
+        AudioManager.Play("Click")
+        TweenService:Create(container, UITheme.Tweens.Fast, { BackgroundTransparency = 0.35 }):Play()
+        task.wait(0.18)
         isTransitioning = false
     end
 
     local function closeMenu()
         if isTransitioning then return end
         isTransitioning = true
+        AudioManager.Play("Click")
         local fadeTween = TweenService:Create(container, UITheme.Tweens.Fast, { BackgroundTransparency = 1 })
         fadeTween.Completed:Connect(function()
             container.Visible = false

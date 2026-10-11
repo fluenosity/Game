@@ -35,6 +35,7 @@ local HUDTopRightWidget = require(hudFolder:WaitForChild("HUDTopRightWidget"))
 local HUDHotbar = require(hudFolder:WaitForChild("HUDHotbar"))
 local HUDVitals = require(hudFolder:WaitForChild("HUDVitals"))
 local HUDInventoryModal = require(hudFolder:WaitForChild("HUDInventoryModal"))
+local HUDBarterModal = require(hudFolder:WaitForChild("HUDBarterModal"))
 
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local InventoryConfig = require(sharedFolder:WaitForChild("InventoryConfig"))
@@ -118,6 +119,9 @@ end)
 -- Center Survival Backpack Modal (12 Slots Grid + Inspector)
 local inventoryModal = HUDInventoryModal.Create(hudGui)
 
+-- Silas Barter Trading Modal (Recipe Exchanges)
+local barterModal = HUDBarterModal.Create(hudGui)
+
 --------------------------------------------------------------------------------
 -- 2. FULLSCREEN AAA SYSTEM / ESC MENU
 --------------------------------------------------------------------------------
@@ -143,6 +147,9 @@ local function toggleSystemMenu()
         if inventoryModal.IsOpen() then
             inventoryModal.Close()
         end
+        if barterModal.IsOpen() then
+            barterModal.Close()
+        end
         systemMenuInstance.Open()
         isSystemMenuOpen = true
     end
@@ -153,6 +160,9 @@ topRightWidget.SetOnSettingsClick(function()
 end)
 
 topRightWidget.SetOnBackpackClick(function()
+    if barterModal.IsOpen() then
+        barterModal.Close()
+    end
     inventoryModal.Toggle()
 end)
 
@@ -293,6 +303,9 @@ local function refreshAllInventoryUI()
 
     -- Sync 12-slot backpack modal
     inventoryModal.UpdateInventory(currentInventory)
+
+    -- Sync Silas barter modal
+    barterModal.UpdateInventory(currentInventory)
 end
 
 refreshAllInventoryUI()
@@ -303,6 +316,17 @@ if syncInventoryEvent then
             currentInventory = serverInv
             refreshAllInventoryUI()
         end
+    end)
+end
+
+local openBarterMenuEvent = sharedFolder:WaitForChild("OpenBarterMenu", 5) :: RemoteEvent?
+if openBarterMenuEvent then
+    openBarterMenuEvent.OnClientEvent:Connect(function()
+        if inventoryModal.IsOpen() then
+            inventoryModal.Close()
+        end
+        barterModal.UpdateInventory(currentInventory)
+        barterModal.Open()
     end)
 end
 

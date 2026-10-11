@@ -17,7 +17,24 @@ local AtmosphereSetup = require(envModuleFolder:WaitForChild("AtmosphereSetup"))
 -- ---------------------------------------------------------------------------
 -- SERVER STARTUP INITIALIZATION
 -- ---------------------------------------------------------------------------
--- Apply lighting & atmosphere safely on startup
+-- 1. Automatically ensure all world structures, houses, props, and furniture are Anchored
+--    to prevent unanchored toolbox models (e.g. Trader House, cabins, sheds) from collapsing!
+local function anchorWorldStructures()
+    local Players = game:GetService("Players")
+    for _, desc in ipairs(Workspace:GetDescendants()) do
+        if desc:IsA("BasePart") and not desc:IsA("Terrain") then
+            local model = desc:FindFirstAncestorOfClass("Model")
+            local isCharacter = model and Players:GetPlayerFromCharacter(model)
+            if not isCharacter then
+                desc.Anchored = true
+            end
+        end
+    end
+end
+
+pcall(anchorWorldStructures)
+
+-- 2. Apply lighting & atmosphere safely on startup
 pcall(function()
     AtmosphereSetup.Apply()
 end)

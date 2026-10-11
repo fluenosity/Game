@@ -517,13 +517,15 @@ function CampfireSystem.BuildSittingTrunks(): Folder
         local seatSpread = (cfg.Length * 0.24)
         local seatOffsets = { -seatSpread, seatSpread }
         for sIdx, sOffset in ipairs(seatOffsets) do
-            local seatPos = (logPart.CFrame * CFrame.new(sOffset, (cfg.Diameter * 0.50) + 0.12, 0)).Position
+            -- Lowered seat position: sits flush on the exact timber bark surface without floating
+            local seatSurfaceY = (cfg.Diameter * 0.50) - 0.22
+            local seatPos = (logPart.CFrame * CFrame.new(sOffset, seatSurfaceY, 0)).Position
             local lookTarget = Vector3.new(0, seatPos.Y, 0)
             local seatCF = CFrame.lookAt(seatPos, lookTarget)
 
             local seat = Instance.new("Seat")
             seat.Name = "Seat_" .. sIdx
-            seat.Size = Vector3.new(1.9, 0.4, 1.9)
+            seat.Size = Vector3.new(1.4, 0.05, 1.4)
             seat.CFrame = seatCF
             seat.Transparency = 1
             seat.CanCollide = false
@@ -573,163 +575,6 @@ function CampfireSystem.BuildSittingTrunks(): Folder
     return seatsFolder
 end
 
--- ---------------------------------------------------------------------------
--- 3. BUILD CAMPSITE FIREWOOD LOG STACK (Reliable Camp Wood Supply)
--- ---------------------------------------------------------------------------
-function CampfireSystem.BuildFirewoodStack(): Model
-    -- Check if permanent CampFirewoodStack already exists in Workspace
-    local existing = Workspace:FindFirstChild("CampFirewoodStack")
-    if existing and existing:IsA("Model") then
-        return existing
-    end
-
-    local groundY = getGroundHeight(-8.5, 4.2)
-    local stackPos = Vector3.new(-8.5, groundY, 4.2)
-    local stackRotation = CFrame.Angles(0, math.rad(-25), 0)
-
-    local model = Instance.new("Model")
-    model.Name = "CampFirewoodStack"
-    CollectionService:AddTag(model, "WoodPile")
-
-    -- 1. Two Ground Timber Runner Skids (Foundation)
-    for _, sideOffset in ipairs({ -0.95, 0.95 }) do
-        local runner = Instance.new("Part")
-        runner.Name = "RunnerSkid"
-        runner.Size = Vector3.new(0.45, 0.45, 4.2)
-        runner.CFrame = CFrame.new(stackPos) * stackRotation * CFrame.new(sideOffset, 0.22, 0)
-        runner.Color = Color3.fromRGB(52, 40, 28)
-        runner.Material = Enum.Material.Wood
-        runner.Anchored = true
-        runner.CanCollide = true
-        runner.Parent = model
-    end
-
-    -- 2. Four Retaining End-Stakes
-    for _, sx in ipairs({ -1.25, 1.25 }) do
-        for _, sz in ipairs({ -1.9, 1.9 }) do
-            local stake = Instance.new("Part")
-            stake.Name = "RetainingStake"
-            stake.Size = Vector3.new(0.35, 1.9, 0.35)
-            stake.CFrame = CFrame.new(stackPos) * stackRotation * CFrame.new(sx, 0.95, sz)
-            stake.Color = Color3.fromRGB(48, 36, 24)
-            stake.Material = Enum.Material.Wood
-            stake.Anchored = true
-            stake.CanCollide = true
-            stake.Parent = model
-        end
-    end
-
-    -- 3. Neatly Stacked Firewood Logs (Pyramid Stack: 3 on bottom, 2 in middle, 2 on top = 7 logs)
-    local logTiers = {
-        -- Tier 1 (Bottom, 3 logs)
-        { X = -0.75, Y = 0.58, Rad = 0.38 },
-        { X = 0.0,   Y = 0.58, Rad = 0.38 },
-        { X = 0.75,  Y = 0.58, Rad = 0.38 },
-        -- Tier 2 (Middle, 2 logs)
-        { X = -0.38, Y = 1.25, Rad = 0.38 },
-        { X = 0.38,  Y = 1.25, Rad = 0.38 },
-        -- Tier 3 (Top, 2 logs)
-        { X = -0.19, Y = 1.88, Rad = 0.36 },
-        { X = 0.19,  Y = 1.88, Rad = 0.36 },
-    }
-
-    for i, cfg in ipairs(logTiers) do
-        local log = Instance.new("Part")
-        log.Name = "FirewoodLog_" .. i
-        log.Shape = Enum.PartType.Cylinder
-        log.Size = Vector3.new(3.8, cfg.Rad * 2, cfg.Rad * 2)
-        log.CFrame = CFrame.new(stackPos) * stackRotation
-            * CFrame.new(cfg.X, cfg.Y, 0)
-            * CFrame.Angles(0, math.rad(90), 0)
-        log.Color = (i % 2 == 0) and Color3.fromRGB(74, 54, 38) or Color3.fromRGB(66, 46, 32)
-        log.Material = Enum.Material.Wood
-        log.Anchored = true
-        log.CanCollide = true
-        log.Parent = model
-
-        for _, endSign in ipairs({ -1, 1 }) do
-            local cap = Instance.new("Part")
-            cap.Name = "LogEndCap"
-            cap.Shape = Enum.PartType.Cylinder
-            cap.Size = Vector3.new(0.05, cfg.Rad * 1.95, cfg.Rad * 1.95)
-            cap.CFrame = log.CFrame * CFrame.new((3.8 / 2) * endSign, 0, 0)
-            cap.Color = Color3.fromRGB(158, 124, 90)
-            cap.Material = Enum.Material.WoodPlanks
-            cap.Anchored = true
-            cap.CanCollide = true
-            cap.Parent = model
-        end
-    end
-
-    -- 4. Central Hitbox Anchor with ProximityPrompt
-    local hitbox = Instance.new("Part")
-    hitbox.Name = "PromptAnchor"
-    hitbox.Size = Vector3.new(2.8, 2.2, 4.0)
-    hitbox.CFrame = CFrame.new(stackPos) * stackRotation * CFrame.new(0, 1.1, 0)
-    hitbox.Transparency = 1
-    hitbox.CanCollide = false
-    hitbox.Anchored = true
-    hitbox.Parent = model
-    model.PrimaryPart = hitbox
-
-    local prompt = Instance.new("ProximityPrompt")
-    prompt.Name = "WoodGatherPrompt"
-    prompt.ActionText = "Take Wood Log"
-    prompt.ObjectText = "FIREWOOD STACK (Max 5)"
-    prompt.KeyboardKeyCode = Enum.KeyCode.E
-    prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
-    prompt.HoldDuration = 0.2
-    prompt.MaxActivationDistance = 7.5
-    prompt.RequiresLineOfSight = false
-    prompt.Parent = hitbox
-
-    if RunService:IsRunning() then
-        prompt.Triggered:Connect(function(player: Player)
-            local InventoryManager = getInventoryManager()
-            local curWood = 0
-            if InventoryManager then
-                curWood = InventoryManager.GetWoodCount(player)
-            end
-
-            if curWood >= 5 then
-                sendNotification(
-                    player,
-                    "Carrying capacity full! (Max 5 Wood Logs per user)",
-                    "alert-triangle",
-                    Color3.fromRGB(255, 175, 45)
-                )
-                return
-            end
-
-            local added = false
-            if InventoryManager then
-                added = InventoryManager.AddItem(player, "standard_wood", 1)
-            else
-                added = true
-            end
-
-            if added then
-                local newTotal = curWood + 1
-                sendNotification(
-                    player,
-                    string.format("Gathered Wood Log (%d/5)", newTotal),
-                    "tree-pine",
-                    Color3.fromRGB(170, 215, 120)
-                )
-            else
-                sendNotification(
-                    player,
-                    "Backpack full! Free up a slot.",
-                    "backpack",
-                    Color3.fromRGB(255, 85, 85)
-                )
-            end
-        end)
-    end
-
-    model.Parent = Workspace
-    return model
-end
 
 -- ---------------------------------------------------------------------------
 -- 4. INTERACTION CONTROLLER: TURN ON / TURN OFF
@@ -884,14 +729,18 @@ local function startFlickerLoop()
 end
 
 local wiredSeats: { [Seat]: boolean } = {}
-local woodStackWired = false
 local interactionsWired = false
 
 -- Wire up existing models (permanent editor campsite models)
 local function wireExistingModels(): boolean
+    -- Remove obsolete wood rack if present
+    local obsoleteWoodStack = Workspace:FindFirstChild("CampFirewoodStack")
+    if obsoleteWoodStack then
+        obsoleteWoodStack:Destroy()
+    end
+
     local existingCampfire = Workspace:FindFirstChild("Campfire") :: Model?
     local existingSeats = Workspace:FindFirstChild("CampfireSeats") :: Folder?
-    local existingWoodStack = Workspace:FindFirstChild("CampFirewoodStack") :: Model?
 
     if existingCampfire then
         campfireState.Model = existingCampfire
@@ -933,8 +782,22 @@ local function wireExistingModels(): boolean
 
     if existingSeats then
         for _, trunk in ipairs(existingSeats:GetChildren()) do
+            local logPart = trunk:FindFirstChild("Log") :: BasePart?
+            local logDiameter = (logPart and logPart.Size.Y) or 2.4
+
             for _, child in ipairs(trunk:GetChildren()) do
                 if child:IsA("Seat") then
+                    -- Lower seat position and minimize height so avatar sits cleanly on log surface
+                    child.Size = Vector3.new(1.4, 0.05, 1.4)
+                    if logPart then
+                        local sOffsetSign = (child.Name == "Seat_1") and -1 or 1
+                        local seatSpread = (logPart.Size.X * 0.24)
+                        local seatSurfaceY = (logDiameter * 0.50) - 0.22
+                        local seatPos = (logPart.CFrame * CFrame.new(sOffsetSign * seatSpread, seatSurfaceY, 0)).Position
+                        local lookTarget = Vector3.new(0, seatPos.Y, 0)
+                        child.CFrame = CFrame.lookAt(seatPos, lookTarget)
+                    end
+
                     child.Disabled = true
                     child.CanTouch = false
 
@@ -977,57 +840,6 @@ local function wireExistingModels(): boolean
         end
     end
 
-    if existingWoodStack and RunService:IsRunning() and not woodStackWired then
-        local hitbox = existingWoodStack:FindFirstChild("Hitbox")
-        local prompt = (hitbox and hitbox:FindFirstChildOfClass("ProximityPrompt"))
-            or existingWoodStack:FindFirstChildWhichIsA("ProximityPrompt", true)
-
-        if prompt then
-            woodStackWired = true
-            prompt.Triggered:Connect(function(player: Player)
-                local InventoryManager = getInventoryManager()
-                local curWood = 0
-                if InventoryManager then
-                    curWood = InventoryManager.GetWoodCount(player)
-                end
-
-                if curWood >= 5 then
-                    sendNotification(
-                        player,
-                        "Carrying capacity full! (Max 5 Wood Logs per user)",
-                        "alert-triangle",
-                        Color3.fromRGB(255, 175, 45)
-                    )
-                    return
-                end
-
-                local added = false
-                if InventoryManager then
-                    added = InventoryManager.AddItem(player, "standard_wood", 1)
-                else
-                    added = true
-                end
-
-                if added then
-                    local newTotal = curWood + 1
-                    sendNotification(
-                        player,
-                        string.format("Gathered Wood Log (%d/5)", newTotal),
-                        "tree-pine",
-                        Color3.fromRGB(170, 215, 120)
-                    )
-                else
-                    sendNotification(
-                        player,
-                        "Backpack full! Free up a slot.",
-                        "backpack",
-                        Color3.fromRGB(255, 85, 85)
-                    )
-                end
-            end)
-        end
-    end
-
     if RunService:IsRunning() then
         if not interactionsWired then
             interactionsWired = true
@@ -1042,17 +854,22 @@ end
 -- ---------------------------------------------------------------------------
 -- 6. MASTER INITIALIZATION
 -- ---------------------------------------------------------------------------
-function CampfireSystem.Initialize(): (Model, Folder, Model)
+function CampfireSystem.Initialize(): (Model, Folder)
     -- 1. Obtain or fallback-build permanent campsite models (never destroy existing)
     local campModel = CampfireSystem.BuildCampfire()
     local seatsFolder = CampfireSystem.BuildSittingTrunks()
-    local woodStack = CampfireSystem.BuildFirewoodStack()
 
-    -- 2. Wire up all runtime interaction listeners, prompts, flicker loops
+    -- 2. Clean up any obsolete wood stack model
+    local obsoleteWoodStack = Workspace:FindFirstChild("CampFirewoodStack")
+    if obsoleteWoodStack then
+        obsoleteWoodStack:Destroy()
+    end
+
+    -- 3. Wire up all runtime interaction listeners, prompts, flicker loops
     wireExistingModels()
 
-    print("[CampfireSystem] Initialized permanent campfire, seating, and firewood stack.")
-    return campModel, seatsFolder, woodStack
+    print("[CampfireSystem] Initialized permanent campfire and seating.")
+    return campModel, seatsFolder
 end
 
 return CampfireSystem

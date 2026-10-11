@@ -52,6 +52,8 @@ IconPack.ItemIcons = {
     ["matchbox"]        = { Icon = "flame",        Color = Color3.fromRGB(255, 190, 60)  },
     ["metal_scrap"]     = { Icon = "nut",          Color = Color3.fromRGB(190, 200, 215) },
     ["light_relay"]     = { Icon = "lightbulb",    Color = Color3.fromRGB(255, 235, 110) },
+    ["dry_hardwood"]    = { Icon = "flame",        Color = Color3.fromRGB(240, 160, 50)  },
+    ["emergency_flare"] = { Icon = "sparkles",     Color = Color3.fromRGB(255, 75, 75)   },
 }
 
 local function extractNumericSize(val: any, defaultSize: number): number

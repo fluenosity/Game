@@ -241,100 +241,108 @@ splitItemEvent.OnServerEvent:Connect(function(player: Player, slotIndex: number)
 end)
 
 --------------------------------------------------------------------------------
--- 1. MAP-WIDE WOOD PILE DETECTOR & 5-LOG CARRY LIMIT LOGIC
+-- 1. UNIVERSAL WOOD PILE INTERACTION SYSTEM (ALL WOOD PILES SUPPORTED)
 --------------------------------------------------------------------------------
-local processedWoodPiles: { [Instance]: boolean } = {}
+local registeredWoodPiles: { [Instance]: boolean } = {}
 
--- Clean up any stray WoodGatherPrompt from non-wood props
-local function purgeCampPrompts()
-    local campContainers = {
-        workspace:FindFirstChild("CampfireSeats"),
-        workspace:FindFirstChild("Campfire"),
-        workspace:FindFirstChild("CampMatchbox"),
-        workspace:FindFirstChild("MatchboxPedestalModel"),
-        workspace:FindFirstChild("MatchboxStumpModel"),
-    }
-    for _, container in ipairs(campContainers) do
-        if container then
-            for _, d in ipairs(container:GetDescendants()) do
-                if d:IsA("ProximityPrompt") and d.Name == "WoodGatherPrompt" then
-                    d:Destroy()
-                end
-            end
-        end
+-- Checks whether a ProximityPrompt is a wood gather prompt
+local function isWoodPromptInstance(prompt: ProximityPrompt): boolean
+    if prompt.Name == "WoodGatherPrompt" or prompt.Name == "WoodPilePrompt" then
+        return true
     end
+    if prompt.ActionText == "Take Wood Log" or prompt.ActionText == "Gather Wood" then
+        return true
+    end
+    local objText = prompt.ObjectText
+    if objText and (objText:find("Wood Pile") or objText:find("Wood Log")) then
+        return true
+    end
+    return false
 end
 
--- Determines if an instance represents a placed woodland log pile
-local function isWoodPileInstance(inst: Instance): boolean
-    if processedWoodPiles[inst] then return false end
-
-    -- Explicit ignore tag
-    if CollectionService:HasTag(inst, "IgnoreWoodScanner") then return false end
-
-    -- Exclude generated forest environment trees, rocks, ground cover
-    local forestEnv = workspace:FindFirstChild("ForestEnvironment")
-    if forestEnv and inst:IsDescendantOf(forestEnv) then return false end
-
-    -- Exclude player characters
-    if inst:IsA("Model") and Players:GetPlayerFromCharacter(inst) then return false end
-    for _, pl in ipairs(Players:GetPlayers()) do
-        if pl.Character and inst:IsDescendantOf(pl.Character) then return false end
-    end
-
-    -- Exclude dropped items folder
-    if inst:IsDescendantOf(droppedItemsFolder) then return false end
-
-    -- Explicitly exclude the Campfire, Seats, Matchbox, Pedestal (CampFirewoodStack is kept!)
-    for _, containerName in ipairs({ "CampfireSeats", "Campfire", "CampMatchbox", "MatchboxPedestalModel", "MatchboxStumpModel" }) do
-        local container = workspace:FindFirstChild(containerName)
-        if container and (inst == container or inst:IsDescendantOf(container)) then
-            return false
+-- Check if an instance is part of something that should NEVER be a wood gather pile
+local function isBlacklistedWoodObject(inst: Instance): boolean
+    local current: Instance? = inst
+    while current and current ~= workspace do
+        local l = current.Name:lower()
+        if l:find("barrel") or l:find("tent") or l:find("trader") or l:find("silas")
+            or l:find("merchant") or l:find("house") or l:find("cabin") or l:find("shop")
+            or l:find("camp") or l:find("bench") or l:find("chair") or l:find("seat")
+            or l:find("table") or l:find("counter") or l:find("shelf") or l:find("crate")
+            or l:find("chest") or l:find("matchbox") or l:find("torch") or l:find("lantern")
+            or l:find("dropped") then
+            return true
         end
+        if CollectionService:HasTag(current, "ChoppableTree") or CollectionService:HasTag(current, "TraderHouse") then
+            return true
+        end
+        if current:IsA("Model") and current:FindFirstChildOfClass("Humanoid") then
+            return true
+        end
+        current = current.Parent
     end
+    return false
+end
 
-    local lowerName = inst.Name:lower()
-
-    -- Exclude campsite furniture, seats, matchbox, fences, structures
-    if lowerName:find("seat") or lowerName:find("bench") or lowerName:find("hearth")
-       or lowerName:find("pedestal") or lowerName:find("match") or lowerName:find("stump")
-       or lowerName:find("bus") or lowerName:find("tower") or lowerName:find("fence")
-       or lowerName:find("ash") then
+-- Checks if a Model or BasePart is a legitimate wood log pile
+local function isCandidateWoodPile(inst: Instance): boolean
+    if isBlacklistedWoodObject(inst) then
         return false
     end
 
-    -- If tagged with CollectionService
-    if CollectionService:HasTag(inst, "WoodPile") or CollectionService:HasTag(inst, "WoodSource") then
+    if CollectionService:HasTag(inst, "WoodPile") then
         return true
     end
 
-    -- Match any Model or Folder named with wood / log / timber / firewood / lumber / pile
-    if inst:IsA("Model") or inst:IsA("Folder") then
-        if lowerName:find("wood") or lowerName:find("log") or lowerName:find("timber")
-           or lowerName:find("firewood") or lowerName:find("lumber") or lowerName:find("pile") then
-            return true
-        end
+    local name = inst.Name:lower()
+    local exactNames = {
+        ["woodlandlogpile"] = true,
+        ["woodpile"] = true,
+        ["wood pile"] = true,
+        ["wood_pile"] = true,
+        ["logpile"] = true,
+        ["log pile"] = true,
+        ["log_pile"] = true,
+        ["firewoodpile"] = true,
+        ["stackedlogs"] = true,
+        ["logstack"] = true,
+        ["woodstack"] = true,
+        ["logs"] = true,
+        ["woodlogs"] = true,
+        ["wood_logs"] = true,
+        ["cutlogs"] = true,
+        ["firewood"] = true,
+        ["timberpile"] = true,
+        ["timberlogs"] = true,
+    }
+    if exactNames[name] then
+        return true
+    end
 
-        -- Check if model contains wood cylinders/parts (e.g. from toolbox)
+    -- If it's a Model, inspect parts inside
+    if inst:IsA("Model") then
         local woodPartCount = 0
-        local totalDescendants = 0
+        local logNameCount = 0
         for _, child in ipairs(inst:GetDescendants()) do
             if child:IsA("BasePart") then
-                totalDescendants = totalDescendants + 1
-                if child.Material == Enum.Material.Wood or child.Material == Enum.Material.WoodPlanks or child.Name:lower():find("log") or child.Name:lower():find("cylinder") then
-                    woodPartCount = woodPartCount + 1
+                local cName = child.Name:lower()
+                if cName:find("log") or cName:find("timber") or cName:find("cord") or cName:find("firewood") or cName:find("wood") then
+                    logNameCount += 1
+                end
+                if child.Material == Enum.Material.Wood or child.Material == Enum.Material.WoodPlanks or child.Shape == Enum.PartType.Cylinder then
+                    woodPartCount += 1
                 end
             end
         end
 
-        if totalDescendants >= 2 and totalDescendants <= 100 and (woodPartCount / totalDescendants) >= 0.5 then
+        if logNameCount >= 2 or woodPartCount >= 4 then
             return true
         end
-    end
 
-    -- Match standalone BasePart in workspace
-    if inst:IsA("BasePart") and inst.Parent == workspace then
-        if lowerName:find("wood") or lowerName:find("log") or lowerName:find("firewood") or lowerName:find("timber") then
+        -- Check if near the woodland forest clearing at (188.3, 33.8, -39.7)
+        local pivot = inst:GetPivot()
+        local dist = (pivot.Position - Vector3.new(188.3, 33.8, -39.7)).Magnitude
+        if dist < 45.0 and woodPartCount >= 1 then
             return true
         end
     end
@@ -342,150 +350,280 @@ local function isWoodPileInstance(inst: Instance): boolean
     return false
 end
 
--- Attaches interaction prompt to a genuine woodland wood pile
-local function setupWoodPilePrompt(woodPile: Instance)
-    if processedWoodPiles[woodPile] then return end
-    processedWoodPiles[woodPile] = true
-
-    local targetPart: BasePart? = nil
-
-    if woodPile:IsA("Model") then
-        if woodPile.PrimaryPart then
-            targetPart = woodPile.PrimaryPart
-        else
-            local parts = {}
-            for _, d in ipairs(woodPile:GetDescendants()) do
-                if d:IsA("BasePart") then
-                    table.insert(parts, d)
-                end
-            end
-            if #parts > 0 then
-                targetPart = parts[math.ceil(#parts / 2)]
-                woodPile.PrimaryPart = targetPart
-            end
-        end
-    elseif woodPile:IsA("BasePart") then
-        targetPart = woodPile
-    elseif woodPile:IsA("Folder") then
-        for _, d in ipairs(woodPile:GetDescendants()) do
-            if d:IsA("BasePart") then
-                targetPart = d
-                break
+-- Purges prompts only from blacklisted objects (barrels, furniture, tents)
+local function purgeStrayWoodPrompts()
+    for _, prompt in ipairs(workspace:GetDescendants()) do
+        if prompt:IsA("ProximityPrompt") and isWoodPromptInstance(prompt) then
+            if isBlacklistedWoodObject(prompt) then
+                local parentName = prompt.Parent and prompt.Parent:GetFullName() or "Unknown"
+                prompt:Destroy()
+                print("[InventorySystem] 🧹 Purged stray wood prompt from non-wood object: " .. parentName)
             end
         end
     end
+end
 
-    if not targetPart then return end
+-- Attaches interaction prompt to any valid wood pile model or part
+local function setupWoodPilePrompt(woodPile: Instance)
+    if registeredWoodPiles[woodPile] then
+        return
+    end
 
-    local existingPrompt = targetPart:FindFirstChild("WoodGatherPrompt") or woodPile:FindFirstChild("WoodGatherPrompt", true)
-    if existingPrompt then return end
+    if isBlacklistedWoodObject(woodPile) then
+        return
+    end
 
-    local prompt = Instance.new("ProximityPrompt")
-    prompt.Name = "WoodGatherPrompt"
+    registeredWoodPiles[woodPile] = true
+    CollectionService:AddTag(woodPile, "WoodPile")
+
+    local interactionPart: BasePart? = nil
+
+    if woodPile:IsA("Model") then
+        local cf, size = woodPile:GetBoundingBox()
+        -- Ensure all base parts in the wood pile are anchored
+        for _, desc in ipairs(woodPile:GetDescendants()) do
+            if desc:IsA("BasePart") and desc.Name ~= "WoodInteractionPromptPart" then
+                desc.Anchored = true
+                -- Clean up any duplicate prompt on individual log cylinders
+                for _, childPrompt in ipairs(desc:GetChildren()) do
+                    if childPrompt:IsA("ProximityPrompt") and isWoodPromptInstance(childPrompt) then
+                        childPrompt:Destroy()
+                    end
+                end
+            end
+        end
+
+        interactionPart = woodPile:FindFirstChild("WoodInteractionPromptPart") :: BasePart?
+        local hitboxSize = Vector3.new(
+            math.clamp(size.X + 4, 8, 26),
+            math.clamp(size.Y + 3, 5, 14),
+            math.clamp(size.Z + 4, 8, 26)
+        )
+        if not interactionPart then
+            interactionPart = Instance.new("Part")
+            interactionPart.Name = "WoodInteractionPromptPart"
+            interactionPart.Size = hitboxSize
+            interactionPart.CFrame = cf + Vector3.new(0, 0.5, 0)
+            interactionPart.Transparency = 1
+            interactionPart.CanCollide = false
+            interactionPart.CanTouch = false
+            interactionPart.CanQuery = true
+            interactionPart.Anchored = true
+            interactionPart.Parent = woodPile
+        else
+            interactionPart.Size = hitboxSize
+            interactionPart.CFrame = cf + Vector3.new(0, 0.5, 0)
+            interactionPart.Transparency = 1
+            interactionPart.CanCollide = false
+            interactionPart.CanTouch = false
+            interactionPart.CanQuery = true
+            interactionPart.Anchored = true
+        end
+    elseif woodPile:IsA("BasePart") then
+        interactionPart = woodPile
+    end
+
+    if not interactionPart then
+        return
+    end
+
+    local prompt = interactionPart:FindFirstChild("WoodGatherPrompt") :: ProximityPrompt?
+    if not prompt then
+        prompt = Instance.new("ProximityPrompt")
+        prompt.Name = "WoodGatherPrompt"
+        prompt.Parent = interactionPart
+    end
+
     prompt.ActionText = "Take Wood Log"
     prompt.ObjectText = "Wood Pile (Max 5)"
     prompt.KeyboardKeyCode = Enum.KeyCode.E
     prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
-    prompt.HoldDuration = 0.25
-    prompt.MaxActivationDistance = 9.0
+    prompt.HoldDuration = 0.2
+    prompt.MaxActivationDistance = 20.0
     prompt.RequiresLineOfSight = false
-    prompt.Parent = targetPart
+    prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton
+    prompt.Enabled = true
 
-    prompt.Triggered:Connect(function(player: Player)
-        local curWood = getTotalWoodCount(player)
+    if not prompt:GetAttribute("TriggerConnected") then
+        prompt:SetAttribute("TriggerConnected", true)
+        prompt.Triggered:Connect(function(player: Player)
+            local curWood = getTotalWoodCount(player)
 
-        -- Strict 5-Wood limit
-        if curWood >= 5 then
-            sendNotification(
-                player,
-                "Carrying capacity full! (Max 5 Wood Logs per user)",
-                "alert-triangle",
-                Color3.fromRGB(255, 175, 45)
-            )
-            return
+            -- Strict 5-Wood limit
+            if curWood >= 5 then
+                sendNotification(
+                    player,
+                    "Carrying capacity full! (Max 5 Wood Logs per user)",
+                    "alert-triangle",
+                    Color3.fromRGB(255, 175, 45)
+                )
+                return
+            end
+
+            local added = addPlayerItem(player, "standard_wood", 1)
+            if added then
+                local newTotal = getTotalWoodCount(player)
+                sendNotification(
+                    player,
+                    string.format("Gathered Wood Log (%d/5)", newTotal),
+                    "tree-pine",
+                    Color3.fromRGB(170, 215, 120)
+                )
+            else
+                sendNotification(
+                    player,
+                    "Backpack full! Free up a slot.",
+                    "backpack",
+                    Color3.fromRGB(255, 85, 85)
+                )
+            end
+        end)
+    end
+
+    print(string.format("[InventorySystem] ✅ Wood Pile registered & prompt ready at: %s (Pos: %.1f, %.1f, %.1f)",
+        woodPile:GetFullName(),
+        interactionPart.Position.X,
+        interactionPart.Position.Y,
+        interactionPart.Position.Z
+    ))
+end
+
+-- Helper to locate and register the Trader House for upcoming objectives
+local function locateTraderHouse(): Model?
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") then
+            local lName = obj.Name:lower()
+            if lName:find("trader") or lName:find("merchant") or lName:find("shop") or lName:find("cabin") then
+                local pivot = obj:GetPivot()
+                print(string.format("[TraderHouseLocator] Found Trader House '%s' at Vector3.new(%.1f, %.1f, %.1f)", obj.Name, pivot.Position.X, pivot.Position.Y, pivot.Position.Z))
+                CollectionService:AddTag(obj, "TraderHouse")
+
+                -- Ensure all parts in the Trader House are anchored to prevent physics collapse
+                for _, part in ipairs(obj:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.Anchored = true
+                    end
+                end
+
+                return obj
+            end
+        end
+    end
+    print("[TraderHouseLocator] Trader House not found by name yet. (Tag with 'TraderHouse' or name 'TraderHouse')")
+    return nil
+end
+
+local function initProductionWoodSystem()
+    local function scanAndRegisterAll()
+        local count = 0
+        -- 1. Check all tagged WoodPile instances
+        for _, inst in ipairs(CollectionService:GetTagged("WoodPile")) do
+            if isCandidateWoodPile(inst) then
+                setupWoodPilePrompt(inst)
+                count += 1
+            end
         end
 
-        local added = addPlayerItem(player, "standard_wood", 1)
-        if added then
-            local newTotal = curWood + 1
-            sendNotification(
-                player,
-                string.format("Gathered Wood Log (%d/5)", newTotal),
-                "tree-pine",
-                Color3.fromRGB(170, 215, 120)
-            )
-        else
-            sendNotification(
-                player,
-                "Backpack full! Free up a slot.",
-                "backpack",
-                Color3.fromRGB(255, 85, 85)
-            )
+        -- 2. Scan workspace for candidate models/parts
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if (obj:IsA("Model") or obj:IsA("BasePart")) and not registeredWoodPiles[obj] then
+                if isCandidateWoodPile(obj) then
+                    setupWoodPilePrompt(obj)
+                    count += 1
+                end
+            end
+        end
+
+        -- 3. If no wood piles found anywhere on the map, generate fallback
+        if count == 0 and next(registeredWoodPiles) == nil then
+            local WoodPileBuilder = require(script.Parent.Environment:WaitForChild("WoodPileBuilder"))
+            local built = WoodPileBuilder.Build()
+            if built then
+                setupWoodPilePrompt(built)
+            end
+        end
+
+        -- 4. Clean stray prompts from barrels, tents, furniture
+        purgeStrayWoodPrompts()
+    end
+
+    task.spawn(function()
+        scanAndRegisterAll()
+        -- Repeat scan after short delays to catch late-streaming models
+        task.wait(1.0)
+        scanAndRegisterAll()
+        task.wait(2.5)
+        scanAndRegisterAll()
+    end)
+
+    -- Listen for newly tagged or added wood piles dynamically
+    CollectionService:GetInstanceAddedSignal("WoodPile"):Connect(function(inst)
+        if isCandidateWoodPile(inst) then
+            setupWoodPilePrompt(inst)
+        end
+    end)
+
+    workspace.DescendantAdded:Connect(function(desc)
+        if desc:IsA("Model") and isCandidateWoodPile(desc) then
+            task.wait(0.1)
+            setupWoodPilePrompt(desc)
         end
     end)
 end
 
--- Scan workspace for placed wood piles
-local function scanAndSetupWoodPiles()
-    purgeCampPrompts()
-    for _, obj in ipairs(workspace:GetChildren()) do
-        if isWoodPileInstance(obj) then
-            setupWoodPilePrompt(obj)
-        end
-    end
-
-    -- Also check any models tagged with WoodPile anywhere in workspace
-    for _, tagged in ipairs(CollectionService:GetTagged("WoodPile")) do
-        if isWoodPileInstance(tagged) then
-            setupWoodPilePrompt(tagged)
-        end
-    end
-end
-
--- Run initial scan and listen for dynamic additions
+-- Run initial setup
 task.defer(function()
-    task.wait(1.0)
-    scanAndSetupWoodPiles()
-
-    workspace.ChildAdded:Connect(function(child)
-        task.wait(0.4)
-        if isWoodPileInstance(child) then
-            setupWoodPilePrompt(child)
-        end
-    end)
+    task.wait(0.3)
+    initProductionWoodSystem()
+    locateTraderHouse()
 end)
 
 --------------------------------------------------------------------------------
 -- 2. CAMP VINTAGE MATCHBOX PROP & INTERACTION
 --------------------------------------------------------------------------------
 local function spawnCampMatchbox()
-    local existingBox = workspace:FindFirstChild("CampMatchbox")
-    if existingBox then
-        existingBox:Destroy()
+    local matchboxModel = workspace:FindFirstChild("CampMatchbox") :: Model?
+    local sleeve: BasePart?
+    local surfaceGui: SurfaceGui?
+    local glowLight: PointLight?
+    local prompt: ProximityPrompt?
+
+    if matchboxModel then
+        sleeve = (matchboxModel.PrimaryPart or matchboxModel:FindFirstChild("Sleeve")) :: BasePart?
+        if sleeve then
+            surfaceGui = sleeve:FindFirstChildOfClass("SurfaceGui")
+            glowLight = sleeve:FindFirstChildOfClass("PointLight")
+            prompt = sleeve:FindFirstChildOfClass("ProximityPrompt")
+        end
     end
 
-    local pedestalSlab = workspace:FindFirstChild("PedestalSlab", true)
-    local targetCFrame: CFrame
+    if not matchboxModel or not sleeve or not prompt then
+        if matchboxModel then
+            matchboxModel:Destroy()
+        end
 
-    if pedestalSlab and pedestalSlab:IsA("BasePart") then
-        local targetPos = pedestalSlab.Position + Vector3.new(0, (pedestalSlab.Size.Y / 2) + 0.20, 0)
-        targetCFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(38), 0)
-    else
-        local groundY = 0
-        local rayParams = RaycastParams.new()
-        rayParams.FilterType = Enum.RaycastFilterType.Include
-        local terrain = workspace:FindFirstChildOfClass("Terrain") or workspace.Terrain
-        if terrain then rayParams.FilterDescendantsInstances = { terrain } end
-        local hit = workspace:Raycast(Vector3.new(9.2, 150, -3.8), Vector3.new(0, -250, 0), rayParams)
-        if hit then groundY = hit.Position.Y end
+        local pedestalSlab = workspace:FindFirstChild("PedestalSlab", true)
+        local targetCFrame: CFrame
 
-        local targetPos = Vector3.new(9.2, groundY + 1.45, -3.8)
-        targetCFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(38), 0)
-    end
+        if pedestalSlab and pedestalSlab:IsA("BasePart") then
+            local targetPos = pedestalSlab.Position + Vector3.new(0, (pedestalSlab.Size.Y / 2) + 0.20, 0)
+            targetCFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(38), 0)
+        else
+            local groundY = 0
+            local rayParams = RaycastParams.new()
+            rayParams.FilterType = Enum.RaycastFilterType.Include
+            local terrain = workspace:FindFirstChildOfClass("Terrain") or workspace.Terrain
+            if terrain then rayParams.FilterDescendantsInstances = { terrain } end
+            local hit = workspace:Raycast(Vector3.new(9.2, 150, -3.8), Vector3.new(0, -250, 0), rayParams)
+            if hit then groundY = hit.Position.Y end
 
-    local matchboxModel = Instance.new("Model")
-    matchboxModel.Name = "CampMatchbox"
-    CollectionService:AddTag(matchboxModel, "IgnoreWoodScanner")
+            local targetPos = Vector3.new(9.2, groundY + 1.45, -3.8)
+            targetCFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(38), 0)
+        end
+
+        matchboxModel = Instance.new("Model")
+        matchboxModel.Name = "CampMatchbox"
+        CollectionService:AddTag(matchboxModel, "IgnoreWoodScanner")
 
     local sleeve = Instance.new("Part")
     sleeve.Name = "Sleeve"
@@ -623,27 +761,30 @@ local function spawnCampMatchbox()
         head.Parent = matchboxModel
     end
 
-    local glowLight = Instance.new("PointLight")
-    glowLight.Name = "MatchboxGlow"
-    glowLight.Color = Color3.fromRGB(255, 195, 75)
-    glowLight.Range = 5.5
-    glowLight.Brightness = 0.85
-    glowLight.Shadows = false
-    glowLight.Parent = sleeve
+        glowLight = Instance.new("PointLight")
+        glowLight.Name = "MatchboxGlow"
+        glowLight.Color = Color3.fromRGB(255, 195, 75)
+        glowLight.Range = 5.5
+        glowLight.Brightness = 0.85
+        glowLight.Shadows = false
+        glowLight.Parent = sleeve
 
-    local prompt = Instance.new("ProximityPrompt")
-    prompt.Name = "MatchboxPrompt"
-    prompt.ActionText = "Take Matchbox"
-    prompt.ObjectText = "SAFETY MATCHES"
-    prompt.KeyboardKeyCode = Enum.KeyCode.E
-    prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
-    prompt.HoldDuration = 0.15
-    prompt.MaxActivationDistance = 4.8
-    prompt.RequiresLineOfSight = true
-    prompt.Parent = sleeve
+        prompt = Instance.new("ProximityPrompt")
+        prompt.Name = "MatchboxPrompt"
+        prompt.ActionText = "Take Matchbox"
+        prompt.ObjectText = "SAFETY MATCHES"
+        prompt.KeyboardKeyCode = Enum.KeyCode.E
+        prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+        prompt.HoldDuration = 0.15
+        prompt.MaxActivationDistance = 4.8
+        prompt.RequiresLineOfSight = true
+        prompt.Parent = sleeve
 
-    matchboxModel.PrimaryPart = sleeve
-    matchboxModel.Parent = workspace
+        matchboxModel.PrimaryPart = sleeve
+        matchboxModel.Parent = workspace
+    end
+
+    if not prompt then return end
 
     prompt.Triggered:Connect(function(player: Player)
         if InventoryManager.HasItem(player, "matchbox") then
