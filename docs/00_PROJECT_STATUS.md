@@ -14,12 +14,14 @@
 |------|--------|----------|
 | Game concept document | ✅ Complete | `Game.md` |
 | Task specification | ✅ Complete | `task.md` |
-| Documentation repository | 🔄 In progress | `docs/` |
-| Roblox Studio project | ❌ Not started | — |
-| Game code (Luau) | ❌ Not started | — |
-| Assets (models, textures) | ❌ Not started | — |
-| Audio assets | ❌ Not started | — |
-| Playtesting | ❌ Not started | — |
+| Documentation repository | ✅ Complete (60+ docs) | `docs/` |
+| 10,000-Idea Research Bank | ✅ Complete (10,000 records) | `docs/research/IDEA_CATALOG.csv` |
+| Top 10 Recommendations | ✅ Complete | `docs/research/TOP_10_RECOMMENDATIONS.md` |
+| Roblox Studio project | 🔄 Ready for Phase 0 | `Game/Place1.rbxl` |
+| Game code (Luau) | 🔄 Ready for Phase 0 | `Game/src/` |
+| Assets (models, textures) | 🔄 In design | `docs/production/` |
+| Audio assets | 🔄 Specified | `docs/production/AUDIO_DESIGN.md` |
+| Playtesting | 🔄 Planned | `docs/production/PLAYTEST_PLAN.md` |
 
 ### What's Been Decided (EXISTING_CANON)
 
@@ -81,7 +83,6 @@ These are recommendations from analysis, not confirmed design:
 
 ## Next Steps
 
-1. Complete core documentation repository.
-2. Get project owner approval on proposed features (especially campaign length, monster design, end goal).
-3. Establish the idea research bank.
-4. Begin Phase 0 prototype after documentation review.
+1. **Project Owner Review & Approval:** Review and sign off on proposed items in [TOP_10_RECOMMENDATIONS.md](file:///i:/RobloxDev/docs/research/TOP_10_RECOMMENDATIONS.md) and [OPEN_QUESTIONS.md](file:///i:/RobloxDev/docs/decisions/OPEN_QUESTIONS.md) (notably official title, 5-day campaign length, and "The Hollow" monster identity).
+2. **Phase 0 Prototype Execution:** Implement the graybox survival proving ground in `Game/src/` (Campfire fuel depletion, tree chopping, Day/Night clock, and basic monster pathfinding avoidance) per [PHASE_00_PROTOTYPE.md](file:///i:/RobloxDev/docs/implementation/PHASE_00_PROTOTYPE.md).
+3. **Multiplayer Emulation & Smoke Test:** Validate 1-player and 5-player survival loops in Studio.
