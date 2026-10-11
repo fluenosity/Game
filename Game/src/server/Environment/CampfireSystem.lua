@@ -10,17 +10,24 @@
     - Central Campfire: Rounded slate river-stone hearth ring, charred ember ash bed,
       criss-crossed pine firewood logs, layered fire & spark particles, warm flickering light.
     - 4 Horizontal Log Trunks with 2 Seats each (8 seats total):
-      Fallen pine timber logs lying flat on the earth with dual invisible Seats and Roblox
-      ProximityPrompts showing "[ E ] Sit" facing inward toward the campfire.
-    - Zero Glitch / Single Unified Prompt:
-      * When OFF: "[ E ] Light Campfire" requires Matchbox & Wood in inventory. Consumes 1 Wood log.
-      * When ON: "[ E ] Extinguish Fire" douses the flame, emits smoke puff, and stops audio.
+      Fallen pine timber logs lying flat on the earth.
+      SEAT AUTO-SIT ELIMINATED: seat.Disabled = true & seat.CanTouch = false prevents
+      accidental auto-sitting. Players ONLY sit when intentionally pressing [ E ]!
+    - Clean Single-Prompt Toggle (Zero UI Glitch / Zero Overlap):
+      * When UNLIT: "[ E ] Light Campfire" (requires Matchbox & Wood in inventory, consumes 1 Wood).
+      * When LIT: "[ E ] Extinguish Fire" douses the flame, emits smoke puff, and stops audio.
+      * Strictly ONE ProximityPrompt on the campfire so prompts never collide or stack!
+    - Dedicated Camp Firewood Stack: (-8.5, 4.2)
+      Authentic timber rack with 7 cut firewood logs where players can gather wood logs (max 5).
+    - Dedicated Rustic Stone Pedestal: (9.2, -3.8)
+      Keeps the Vintage Matchbox clear of bench seating paths and campfire prompts.
 ]]
 
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
+local CollectionService = game:GetService("CollectionService")
 
 local CampfireSystem = {}
 
@@ -104,16 +111,17 @@ end
 -- 1. BUILD REALISTIC CAMPFIRE MODEL & HEARTH
 -- ---------------------------------------------------------------------------
 function CampfireSystem.BuildCampfire(): Model
-    -- Purge any previous campfire or duplicate models
-    for _, obj in ipairs(Workspace:GetChildren()) do
-        if obj.Name == "Campfire" or obj.Name == "CampfireStructure" or obj.Name == "GeneratedCampfire" then
-            obj:Destroy()
-        end
+    -- Check if permanent campfire already exists in Workspace
+    local existing = Workspace:FindFirstChild("Campfire")
+    if existing and existing:IsA("Model") then
+        campfireState.Model = existing
+        return existing
     end
 
     local groundY = getGroundHeight(0, 0)
     local model = Instance.new("Model")
     model.Name = "Campfire"
+    CollectionService:AddTag(model, "IgnoreWoodScanner")
 
     -- 1. Ash Bed Base (Dark charred circular disc flush in the earth)
     local ashBed = Instance.new("Part")
@@ -157,7 +165,6 @@ function CampfireSystem.BuildCampfire(): Model
         stone.Anchored = true
         stone.CanCollide = true
 
-        -- Organic rounded river stone shape
         local mesh = Instance.new("SpecialMesh")
         mesh.MeshType = Enum.MeshType.Sphere
         mesh.Scale = Vector3.new(1.0, 1.0, 1.0)
@@ -191,7 +198,6 @@ function CampfireSystem.BuildCampfire(): Model
         log.Shape = Enum.PartType.Cylinder
         log.Size = Vector3.new(3.4, 0.75, 0.75)
         
-        -- Angled inwards from ground to center apex
         local radialDist = 1.05
         local px = math.cos(aRad) * radialDist
         local pz = math.sin(aRad) * radialDist
@@ -330,20 +336,22 @@ function CampfireSystem.BuildCampfire(): Model
     douseSound.Parent = firePart
     campfireState.DouseAudio = douseSound
 
-    -- 6. Interactive ProximityPrompt (Single, Clean, Primary [ E ])
+    -- 6. SINGLE CLEAN INTERACTIVE PROXIMITY PROMPT
     local prompt = Instance.new("ProximityPrompt")
     prompt.Name = "CampfireTogglePrompt"
     prompt.ActionText = "Extinguish Fire"
     prompt.ObjectText = "CAMPFIRE"
     prompt.KeyboardKeyCode = Enum.KeyCode.E
     prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
-    prompt.HoldDuration = 0.4
-    prompt.MaxActivationDistance = 11.5
+    prompt.HoldDuration = 0.35
+    prompt.MaxActivationDistance = 8.5
     prompt.RequiresLineOfSight = false
     prompt.Parent = firePart
     campfireState.MainPrompt = prompt
 
     model:SetAttribute("IsLit", true)
+    model:SetAttribute("Fuel", 120)
+    model:SetAttribute("MaxFuel", 240)
     model.Parent = Workspace
     campfireState.Model = model
     campfireState.IsLit = true
@@ -352,57 +360,49 @@ function CampfireSystem.BuildCampfire(): Model
 end
 
 -- ---------------------------------------------------------------------------
--- 2. BUILD 4 ORGANIC FALLEN TIMBER BENCHES (8 SEATS) & MATCHBOX STUMP
+-- 2. BUILD 4 ORGANIC FALLEN TIMBER BENCHES (8 SEATS) & DEDICATED PEDESTAL
 -- ---------------------------------------------------------------------------
 function CampfireSystem.BuildSittingTrunks(): Folder
-    -- Clean up any existing CampfireSeats
+    -- Check if permanent CampfireSeats already exists in Workspace
     local existingFolder = Workspace:FindFirstChild("CampfireSeats")
-    if existingFolder then
-        existingFolder:Destroy()
+    if existingFolder and existingFolder:IsA("Folder") then
+        return existingFolder
     end
 
     local seatsFolder = Instance.new("Folder")
     seatsFolder.Name = "CampfireSeats"
+    CollectionService:AddTag(seatsFolder, "IgnoreWoodScanner")
 
-    local groundY = getGroundHeight(0, 0)
+    -- 1. Dedicated Rustic Matchbox Pedestal (Clear open clearing at 9.2, -3.8)
+    local pedestalGroundY = getGroundHeight(9.2, -3.8)
+    local pedestalCenter = Vector3.new(9.2, pedestalGroundY + 0.60, -3.8)
+    local pedestalModel = Instance.new("Model")
+    pedestalModel.Name = "MatchboxPedestalModel"
+    CollectionService:AddTag(pedestalModel, "IgnoreWoodScanner")
 
-    -- 1. Dedicated Rustic Matchbox Stump (Separated from fire & benches)
-    local stumpGroundY = getGroundHeight(6.6, -4.8)
-    local stumpCenter = Vector3.new(6.6, stumpGroundY + 0.65, -4.8)
-    local stumpModel = Instance.new("Model")
-    stumpModel.Name = "MatchboxStumpModel"
+    local basePillar = Instance.new("Part")
+    basePillar.Name = "PedestalBase"
+    basePillar.Size = Vector3.new(1.8, 1.2, 1.8)
+    basePillar.CFrame = CFrame.new(pedestalCenter)
+    basePillar.Color = Color3.fromRGB(62, 60, 58)
+    basePillar.Material = Enum.Material.Slate
+    basePillar.Anchored = true
+    basePillar.CanCollide = true
+    basePillar.Parent = pedestalModel
 
-    local stumpPart = Instance.new("Part")
-    stumpPart.Name = "MatchboxStump"
-    stumpPart.Shape = Enum.PartType.Cylinder
-    stumpPart.Size = Vector3.new(1.3, 1.85, 1.85) -- Cylinder axis along X, rotate to stand upright
-    stumpPart.CFrame = CFrame.new(stumpCenter) * CFrame.Angles(0, 0, math.rad(90))
-    stumpPart.Color = Color3.fromRGB(56, 42, 32)
-    stumpPart.Material = Enum.Material.Wood
-    stumpPart.TopSurface = Enum.SurfaceType.Smooth
-    stumpPart.BottomSurface = Enum.SurfaceType.Smooth
-    stumpPart.Anchored = true
-    stumpPart.CanCollide = true
-    stumpPart.Parent = stumpModel
+    local slab = Instance.new("Part")
+    slab.Name = "PedestalSlab"
+    slab.Size = Vector3.new(2.2, 0.22, 2.2)
+    slab.CFrame = CFrame.new(pedestalCenter.X, pedestalCenter.Y + 0.65, pedestalCenter.Z)
+    slab.Color = Color3.fromRGB(86, 82, 78)
+    slab.Material = Enum.Material.Granite
+    slab.Anchored = true
+    slab.CanCollide = true
+    slab.Parent = pedestalModel
 
-    -- Flat heartwood top cut slice for the stump
-    local stumpCap = Instance.new("Part")
-    stumpCap.Name = "StumpTopCap"
-    stumpCap.Shape = Enum.PartType.Cylinder
-    stumpCap.Size = Vector3.new(0.06, 1.80, 1.80)
-    stumpCap.CFrame = CFrame.new(stumpCenter.X, stumpCenter.Y + 0.65, stumpCenter.Z) * CFrame.Angles(0, 0, math.rad(90))
-    stumpCap.Color = Color3.fromRGB(158, 124, 92)
-    stumpCap.Material = Enum.Material.WoodPlanks
-    stumpCap.TopSurface = Enum.SurfaceType.Smooth
-    stumpCap.BottomSurface = Enum.SurfaceType.Smooth
-    stumpCap.Anchored = true
-    stumpCap.CanCollide = true
-    stumpCap.Parent = stumpModel
+    pedestalModel.Parent = seatsFolder
 
-    stumpModel.Parent = seatsFolder
-
-    -- 2. Four Organic, Asymmetric Fallen Timber Logs (Varied sizes, angles, and distances)
-    -- Natural campfire setting with authentic walking entryways!
+    -- 2. Four Organic Fallen Timber Logs (Varied sizes, angles, and distances)
     local trunkConfigs = {
         {
             Name = "NorthEastTrunk",
@@ -445,12 +445,12 @@ function CampfireSystem.BuildSittingTrunks(): Folder
     for _, cfg in ipairs(trunkConfigs) do
         local trunkModel = Instance.new("Model")
         trunkModel.Name = cfg.Name
+        CollectionService:AddTag(trunkModel, "IgnoreWoodScanner")
 
         local trunkGroundY = getGroundHeight(cfg.Center.X, cfg.Center.Z)
         local baseCenter = Vector3.new(cfg.Center.X, trunkGroundY + (cfg.Diameter * 0.44), cfg.Center.Z)
         local baseRotation = CFrame.Angles(0, math.rad(cfg.AngleDeg), 0)
 
-        -- 1. Main Beefy Timber Log (Horizontal Cylinder lying flat)
         local logPart = Instance.new("Part")
         logPart.Name = "Log"
         logPart.Shape = Enum.PartType.Cylinder
@@ -464,14 +464,13 @@ function CampfireSystem.BuildSittingTrunks(): Folder
         logPart.CanCollide = true
         logPart.Parent = trunkModel
 
-        -- 2. Heartwood Cut Growth Rings (At both ends of the log)
         for _, endSign in ipairs({ -1, 1 }) do
             local endCap = Instance.new("Part")
             endCap.Name = "HeartwoodEndCap"
             endCap.Shape = Enum.PartType.Cylinder
             endCap.Size = Vector3.new(0.06, cfg.Diameter * 0.95, cfg.Diameter * 0.95)
             endCap.CFrame = logPart.CFrame * CFrame.new((cfg.Length / 2) * endSign, 0, 0)
-            endCap.Color = Color3.fromRGB(152, 118, 86) -- Seasoned growth rings
+            endCap.Color = Color3.fromRGB(152, 118, 86)
             endCap.Material = Enum.Material.WoodPlanks
             endCap.TopSurface = Enum.SurfaceType.Smooth
             endCap.BottomSurface = Enum.SurfaceType.Smooth
@@ -480,7 +479,6 @@ function CampfireSystem.BuildSittingTrunks(): Folder
             endCap.Parent = trunkModel
         end
 
-        -- 3. Weathered Broken Branch Knot (Natural organic detail)
         if cfg.HasKnot then
             local knot = Instance.new("Part")
             knot.Name = "BranchKnot"
@@ -494,7 +492,6 @@ function CampfireSystem.BuildSittingTrunks(): Folder
             knot.Parent = trunkModel
         end
 
-        -- 4. Stabilizing River Slate Chocks
         local chockOffset = (cfg.Length * 0.33)
         for _, offsetSign in ipairs({ -chockOffset, chockOffset }) do
             local chock = Instance.new("Part")
@@ -515,14 +512,12 @@ function CampfireSystem.BuildSittingTrunks(): Folder
             chock.Parent = trunkModel
         end
 
-        -- 5. Two Seats per Trunk (Offset left & right along log length)
+        -- 2 Seats per Trunk (8 seats total)
+        -- seat.Disabled = true and seat.CanTouch = false prevents auto-sitting!
         local seatSpread = (cfg.Length * 0.24)
         local seatOffsets = { -seatSpread, seatSpread }
         for sIdx, sOffset in ipairs(seatOffsets) do
-            -- Position seat comfortably on top of the thicker log
             local seatPos = (logPart.CFrame * CFrame.new(sOffset, (cfg.Diameter * 0.50) + 0.12, 0)).Position
-
-            -- Orient seat so character sits facing directly inward toward the fire center (0, y, 0)
             local lookTarget = Vector3.new(0, seatPos.Y, 0)
             local seatCF = CFrame.lookAt(seatPos, lookTarget)
 
@@ -533,32 +528,38 @@ function CampfireSystem.BuildSittingTrunks(): Folder
             seat.Transparency = 1
             seat.CanCollide = false
             seat.Anchored = true
-            seat.Disabled = false -- Native touch-to-sit active
+            seat.Disabled = true       -- Suppress native Roblox touch-to-sit!
+            seat.CanTouch = false       -- Suppress touch event triggers!
 
-            -- ProximityPrompt for [ E ] Sit
             local sitPrompt = Instance.new("ProximityPrompt")
             sitPrompt.Name = "SitPrompt"
             sitPrompt.ActionText = "Sit"
             sitPrompt.ObjectText = "Log Bench"
             sitPrompt.KeyboardKeyCode = Enum.KeyCode.E
             sitPrompt.GamepadKeyCode = Enum.KeyCode.ButtonX
-            sitPrompt.HoldDuration = 0 -- Instant responsive sit
-            sitPrompt.MaxActivationDistance = 7.0
+            sitPrompt.HoldDuration = 0
+            sitPrompt.MaxActivationDistance = 5.5
             sitPrompt.RequiresLineOfSight = false
             sitPrompt.Parent = seat
 
-            -- Wire interactions only if running
             if RunService:IsRunning() then
                 sitPrompt.Triggered:Connect(function(player: Player)
                     local char = player.Character
                     local hum = char and char:FindFirstChildOfClass("Humanoid")
-                    if hum and seat.Occupant == nil then
+                    if hum and hum.Health > 0 and seat.Occupant == nil then
+                        seat.Disabled = false
                         seat:Sit(hum)
+                        sitPrompt.Enabled = false
                     end
                 end)
 
                 seat:GetPropertyChangedSignal("Occupant"):Connect(function()
-                    sitPrompt.Enabled = (seat.Occupant == nil)
+                    if seat.Occupant == nil then
+                        seat.Disabled = true
+                        sitPrompt.Enabled = true
+                    else
+                        sitPrompt.Enabled = false
+                    end
                 end)
             end
 
@@ -573,7 +574,165 @@ function CampfireSystem.BuildSittingTrunks(): Folder
 end
 
 -- ---------------------------------------------------------------------------
--- 3. INTERACTION CONTROLLER: TURN ON / TURN OFF
+-- 3. BUILD CAMPSITE FIREWOOD LOG STACK (Reliable Camp Wood Supply)
+-- ---------------------------------------------------------------------------
+function CampfireSystem.BuildFirewoodStack(): Model
+    -- Check if permanent CampFirewoodStack already exists in Workspace
+    local existing = Workspace:FindFirstChild("CampFirewoodStack")
+    if existing and existing:IsA("Model") then
+        return existing
+    end
+
+    local groundY = getGroundHeight(-8.5, 4.2)
+    local stackPos = Vector3.new(-8.5, groundY, 4.2)
+    local stackRotation = CFrame.Angles(0, math.rad(-25), 0)
+
+    local model = Instance.new("Model")
+    model.Name = "CampFirewoodStack"
+    CollectionService:AddTag(model, "WoodPile")
+
+    -- 1. Two Ground Timber Runner Skids (Foundation)
+    for _, sideOffset in ipairs({ -0.95, 0.95 }) do
+        local runner = Instance.new("Part")
+        runner.Name = "RunnerSkid"
+        runner.Size = Vector3.new(0.45, 0.45, 4.2)
+        runner.CFrame = CFrame.new(stackPos) * stackRotation * CFrame.new(sideOffset, 0.22, 0)
+        runner.Color = Color3.fromRGB(52, 40, 28)
+        runner.Material = Enum.Material.Wood
+        runner.Anchored = true
+        runner.CanCollide = true
+        runner.Parent = model
+    end
+
+    -- 2. Four Retaining End-Stakes
+    for _, sx in ipairs({ -1.25, 1.25 }) do
+        for _, sz in ipairs({ -1.9, 1.9 }) do
+            local stake = Instance.new("Part")
+            stake.Name = "RetainingStake"
+            stake.Size = Vector3.new(0.35, 1.9, 0.35)
+            stake.CFrame = CFrame.new(stackPos) * stackRotation * CFrame.new(sx, 0.95, sz)
+            stake.Color = Color3.fromRGB(48, 36, 24)
+            stake.Material = Enum.Material.Wood
+            stake.Anchored = true
+            stake.CanCollide = true
+            stake.Parent = model
+        end
+    end
+
+    -- 3. Neatly Stacked Firewood Logs (Pyramid Stack: 3 on bottom, 2 in middle, 2 on top = 7 logs)
+    local logTiers = {
+        -- Tier 1 (Bottom, 3 logs)
+        { X = -0.75, Y = 0.58, Rad = 0.38 },
+        { X = 0.0,   Y = 0.58, Rad = 0.38 },
+        { X = 0.75,  Y = 0.58, Rad = 0.38 },
+        -- Tier 2 (Middle, 2 logs)
+        { X = -0.38, Y = 1.25, Rad = 0.38 },
+        { X = 0.38,  Y = 1.25, Rad = 0.38 },
+        -- Tier 3 (Top, 2 logs)
+        { X = -0.19, Y = 1.88, Rad = 0.36 },
+        { X = 0.19,  Y = 1.88, Rad = 0.36 },
+    }
+
+    for i, cfg in ipairs(logTiers) do
+        local log = Instance.new("Part")
+        log.Name = "FirewoodLog_" .. i
+        log.Shape = Enum.PartType.Cylinder
+        log.Size = Vector3.new(3.8, cfg.Rad * 2, cfg.Rad * 2)
+        log.CFrame = CFrame.new(stackPos) * stackRotation
+            * CFrame.new(cfg.X, cfg.Y, 0)
+            * CFrame.Angles(0, math.rad(90), 0)
+        log.Color = (i % 2 == 0) and Color3.fromRGB(74, 54, 38) or Color3.fromRGB(66, 46, 32)
+        log.Material = Enum.Material.Wood
+        log.Anchored = true
+        log.CanCollide = true
+        log.Parent = model
+
+        for _, endSign in ipairs({ -1, 1 }) do
+            local cap = Instance.new("Part")
+            cap.Name = "LogEndCap"
+            cap.Shape = Enum.PartType.Cylinder
+            cap.Size = Vector3.new(0.05, cfg.Rad * 1.95, cfg.Rad * 1.95)
+            cap.CFrame = log.CFrame * CFrame.new((3.8 / 2) * endSign, 0, 0)
+            cap.Color = Color3.fromRGB(158, 124, 90)
+            cap.Material = Enum.Material.WoodPlanks
+            cap.Anchored = true
+            cap.CanCollide = true
+            cap.Parent = model
+        end
+    end
+
+    -- 4. Central Hitbox Anchor with ProximityPrompt
+    local hitbox = Instance.new("Part")
+    hitbox.Name = "PromptAnchor"
+    hitbox.Size = Vector3.new(2.8, 2.2, 4.0)
+    hitbox.CFrame = CFrame.new(stackPos) * stackRotation * CFrame.new(0, 1.1, 0)
+    hitbox.Transparency = 1
+    hitbox.CanCollide = false
+    hitbox.Anchored = true
+    hitbox.Parent = model
+    model.PrimaryPart = hitbox
+
+    local prompt = Instance.new("ProximityPrompt")
+    prompt.Name = "WoodGatherPrompt"
+    prompt.ActionText = "Take Wood Log"
+    prompt.ObjectText = "FIREWOOD STACK (Max 5)"
+    prompt.KeyboardKeyCode = Enum.KeyCode.E
+    prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+    prompt.HoldDuration = 0.2
+    prompt.MaxActivationDistance = 7.5
+    prompt.RequiresLineOfSight = false
+    prompt.Parent = hitbox
+
+    if RunService:IsRunning() then
+        prompt.Triggered:Connect(function(player: Player)
+            local InventoryManager = getInventoryManager()
+            local curWood = 0
+            if InventoryManager then
+                curWood = InventoryManager.GetWoodCount(player)
+            end
+
+            if curWood >= 5 then
+                sendNotification(
+                    player,
+                    "Carrying capacity full! (Max 5 Wood Logs per user)",
+                    "alert-triangle",
+                    Color3.fromRGB(255, 175, 45)
+                )
+                return
+            end
+
+            local added = false
+            if InventoryManager then
+                added = InventoryManager.AddItem(player, "standard_wood", 1)
+            else
+                added = true
+            end
+
+            if added then
+                local newTotal = curWood + 1
+                sendNotification(
+                    player,
+                    string.format("Gathered Wood Log (%d/5)", newTotal),
+                    "tree-pine",
+                    Color3.fromRGB(170, 215, 120)
+                )
+            else
+                sendNotification(
+                    player,
+                    "Backpack full! Free up a slot.",
+                    "backpack",
+                    Color3.fromRGB(255, 85, 85)
+                )
+            end
+        end)
+    end
+
+    model.Parent = Workspace
+    return model
+end
+
+-- ---------------------------------------------------------------------------
+-- 4. INTERACTION CONTROLLER: TURN ON / TURN OFF
 -- ---------------------------------------------------------------------------
 function CampfireSystem.SetLit(lit: boolean, playerTriggering: Player?)
     campfireState.IsLit = lit
@@ -609,7 +768,7 @@ function CampfireSystem.SetLit(lit: boolean, playerTriggering: Player?)
         if playerTriggering then
             sendNotification(
                 playerTriggering,
-                "Ignited campfire with Matchbox & Wood Log!",
+                "Ignited campfire with Matchbox & Wood Log! The sanctuary is safe.",
                 "flame",
                 Color3.fromRGB(255, 160, 40)
             )
@@ -619,7 +778,7 @@ function CampfireSystem.SetLit(lit: boolean, playerTriggering: Player?)
         if campfireState.Fire then campfireState.Fire.Enabled = false end
         if campfireState.EmberParticles then campfireState.EmberParticles.Enabled = false end
         if campfireState.SmokeParticles then
-            campfireState.SmokeParticles:Emit(22) -- Puff of dying smoke
+            campfireState.SmokeParticles:Emit(25)
         end
         if campfireState.EmbersCoals then
             campfireState.EmbersCoals.Material = Enum.Material.Slate
@@ -658,19 +817,18 @@ function CampfireSystem.SetupInteractions()
     if not prompt then return end
 
     prompt.Triggered:Connect(function(player: Player)
+        local InventoryManager = getInventoryManager()
+
         if campfireState.IsLit then
-            -- 1. When ON -> Press [ E ] to turn OFF
             CampfireSystem.SetLit(false, player)
         else
-            -- 2. When OFF -> Check for Matchbox AND Wood
-            local InventoryManager = getInventoryManager()
             local hasMatches = false
             local hasWood = false
             local woodCount = 0
 
             if InventoryManager then
-                hasMatches = InventoryManager.HasItem(player, { "matchbox", "matches", "flint_stones" })
-                hasWood, woodCount = InventoryManager.HasItem(player, { "standard_wood", "pine_wood", "wood" })
+                hasMatches = InventoryManager.HasItem(player, "matchbox")
+                hasWood, woodCount = InventoryManager.HasItem(player, "standard_wood")
             else
                 hasMatches = true
                 hasWood = true
@@ -679,27 +837,28 @@ function CampfireSystem.SetupInteractions()
 
             if hasMatches and hasWood and woodCount >= 1 then
                 if InventoryManager then
-                    InventoryManager.ConsumeItem(player, { "standard_wood", "pine_wood", "wood" }, 1)
+                    InventoryManager.ConsumeItem(player, "standard_wood", 1)
                 end
                 CampfireSystem.SetLit(true, player)
+                if campfireState.Model then
+                    campfireState.Model:SetAttribute("Fuel", 120)
+                end
             else
-                -- Missing items feedback
                 local failMsg = "Requires Matchbox and Wood Logs to ignite!"
                 if not hasMatches and not hasWood then
-                    failMsg = "You need both a Matchbox and Wood Logs to ignite the fire!"
+                    failMsg = "You need both a Matchbox and 1 Wood Log to light the campfire!"
                 elseif not hasMatches then
-                    failMsg = "You need a Matchbox to strike a flame!"
+                    failMsg = "You need a Matchbox to strike a flame! Grab one from the stone pedestal."
                 elseif not hasWood then
-                    failMsg = "You need Wood Logs to fuel the campfire!"
+                    failMsg = "You need at least 1 Wood Log to light the campfire!"
                 end
 
                 sendNotification(player, failMsg, "flame", Color3.fromRGB(255, 95, 75))
 
-                -- Flash requirement on prompt
                 prompt.ActionText = "Needs Matchbox & Wood!"
                 task.delay(2.5, function()
-                    if not campfireState.IsLit then
-                        prompt.ActionText = "Light Campfire"
+                    if not campfireState.IsLit and campfireState.MainPrompt then
+                        campfireState.MainPrompt.ActionText = "Light Campfire"
                     end
                 end)
             end
@@ -708,7 +867,7 @@ function CampfireSystem.SetupInteractions()
 end
 
 -- ---------------------------------------------------------------------------
--- 4. AMBIENT NATURAL LIGHT FLICKER LOOP
+-- 5. AMBIENT NATURAL LIGHT FLICKER LOOP
 -- ---------------------------------------------------------------------------
 local flickerConnection: RBXScriptConnection? = nil
 local function startFlickerLoop()
@@ -724,12 +883,17 @@ local function startFlickerLoop()
     end)
 end
 
--- Wire up existing models if already created in Studio Editor Mode
+local wiredSeats: { [Seat]: boolean } = {}
+local woodStackWired = false
+local interactionsWired = false
+
+-- Wire up existing models (permanent editor campsite models)
 local function wireExistingModels(): boolean
     local existingCampfire = Workspace:FindFirstChild("Campfire") :: Model?
     local existingSeats = Workspace:FindFirstChild("CampfireSeats") :: Folder?
+    local existingWoodStack = Workspace:FindFirstChild("CampFirewoodStack") :: Model?
 
-    if existingCampfire and existingSeats then
+    if existingCampfire then
         campfireState.Model = existingCampfire
         campfireState.FirePart = existingCampfire.PrimaryPart or existingCampfire:FindFirstChild("FirePart") :: BasePart?
 
@@ -741,61 +905,154 @@ local function wireExistingModels(): boolean
             campfireState.CrackleAudio = campfireState.FirePart:FindFirstChild("CrackleLoop") :: Sound?
             campfireState.IgniteAudio = campfireState.FirePart:FindFirstChild("IgniteSound") :: Sound?
             campfireState.DouseAudio = campfireState.FirePart:FindFirstChild("DouseSound") :: Sound?
-            campfireState.MainPrompt = campfireState.FirePart:FindFirstChild("CampfireTogglePrompt") :: ProximityPrompt?
+
+            for _, child in ipairs(campfireState.FirePart:GetChildren()) do
+                if child:IsA("ProximityPrompt") and child.Name ~= "CampfireTogglePrompt" then
+                    child:Destroy()
+                end
+            end
+
+            local existingPrompt = campfireState.FirePart:FindFirstChild("CampfireTogglePrompt") :: ProximityPrompt?
+            if not existingPrompt then
+                existingPrompt = Instance.new("ProximityPrompt")
+                existingPrompt.Name = "CampfireTogglePrompt"
+                existingPrompt.ActionText = existingCampfire:GetAttribute("IsLit") == false and "Light Campfire" or "Extinguish Fire"
+                existingPrompt.ObjectText = "CAMPFIRE"
+                existingPrompt.KeyboardKeyCode = Enum.KeyCode.E
+                existingPrompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+                existingPrompt.HoldDuration = 0.35
+                existingPrompt.MaxActivationDistance = 8.5
+                existingPrompt.RequiresLineOfSight = false
+                existingPrompt.Parent = campfireState.FirePart
+            end
+            campfireState.MainPrompt = existingPrompt
         end
 
         campfireState.EmbersCoals = existingCampfire:FindFirstChild("EmbersBed") :: BasePart?
+    end
 
-        -- Re-bind sitting prompts
+    if existingSeats then
         for _, trunk in ipairs(existingSeats:GetChildren()) do
             for _, child in ipairs(trunk:GetChildren()) do
                 if child:IsA("Seat") then
+                    child.Disabled = true
+                    child.CanTouch = false
+
                     local prompt = child:FindFirstChild("SitPrompt") :: ProximityPrompt?
-                    if prompt then
+                    if not prompt then
+                        prompt = Instance.new("ProximityPrompt")
+                        prompt.Name = "SitPrompt"
+                        prompt.ActionText = "Sit"
+                        prompt.ObjectText = "Log Bench"
+                        prompt.KeyboardKeyCode = Enum.KeyCode.E
+                        prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+                        prompt.HoldDuration = 0
+                        prompt.MaxActivationDistance = 5.5
+                        prompt.RequiresLineOfSight = false
+                        prompt.Parent = child
+                    end
+
+                    if RunService:IsRunning() and not wiredSeats[child] then
+                        wiredSeats[child] = true
                         prompt.Triggered:Connect(function(player: Player)
                             local char = player.Character
                             local hum = char and char:FindFirstChildOfClass("Humanoid")
-                            if hum and child.Occupant == nil then
+                            if hum and hum.Health > 0 and child.Occupant == nil then
+                                child.Disabled = false
                                 child:Sit(hum)
+                                prompt.Enabled = false
                             end
                         end)
                         child:GetPropertyChangedSignal("Occupant"):Connect(function()
-                            prompt.Enabled = (child.Occupant == nil)
+                            if child.Occupant == nil then
+                                child.Disabled = true
+                                prompt.Enabled = true
+                            else
+                                prompt.Enabled = false
+                            end
                         end)
                     end
                 end
             end
         end
-
-        CampfireSystem.SetupInteractions()
-        startFlickerLoop()
-        return true
     end
 
-    return false
+    if existingWoodStack and RunService:IsRunning() and not woodStackWired then
+        local hitbox = existingWoodStack:FindFirstChild("Hitbox")
+        local prompt = (hitbox and hitbox:FindFirstChildOfClass("ProximityPrompt"))
+            or existingWoodStack:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+        if prompt then
+            woodStackWired = true
+            prompt.Triggered:Connect(function(player: Player)
+                local InventoryManager = getInventoryManager()
+                local curWood = 0
+                if InventoryManager then
+                    curWood = InventoryManager.GetWoodCount(player)
+                end
+
+                if curWood >= 5 then
+                    sendNotification(
+                        player,
+                        "Carrying capacity full! (Max 5 Wood Logs per user)",
+                        "alert-triangle",
+                        Color3.fromRGB(255, 175, 45)
+                    )
+                    return
+                end
+
+                local added = false
+                if InventoryManager then
+                    added = InventoryManager.AddItem(player, "standard_wood", 1)
+                else
+                    added = true
+                end
+
+                if added then
+                    local newTotal = curWood + 1
+                    sendNotification(
+                        player,
+                        string.format("Gathered Wood Log (%d/5)", newTotal),
+                        "tree-pine",
+                        Color3.fromRGB(170, 215, 120)
+                    )
+                else
+                    sendNotification(
+                        player,
+                        "Backpack full! Free up a slot.",
+                        "backpack",
+                        Color3.fromRGB(255, 85, 85)
+                    )
+                end
+            end)
+        end
+    end
+
+    if RunService:IsRunning() then
+        if not interactionsWired then
+            interactionsWired = true
+            CampfireSystem.SetupInteractions()
+        end
+        startFlickerLoop()
+    end
+
+    return (existingCampfire ~= nil and existingSeats ~= nil)
 end
 
 -- ---------------------------------------------------------------------------
--- 5. MASTER INITIALIZATION
+-- 6. MASTER INITIALIZATION
 -- ---------------------------------------------------------------------------
-function CampfireSystem.Initialize(): (Model, Folder)
-    -- 1. Try to wire existing models (e.g. if generated in Editor Mode)
-    if RunService:IsRunning() and wireExistingModels() then
-        print("[CampfireSystem] Connected to pre-generated editor campfire & seating instantly.")
-        return campfireState.Model, Workspace:FindFirstChild("CampfireSeats") :: Folder
-    end
-
-    -- 2. Build cleanly and immediately
+function CampfireSystem.Initialize(): (Model, Folder, Model)
+    -- 1. Obtain or fallback-build permanent campsite models (never destroy existing)
     local campModel = CampfireSystem.BuildCampfire()
     local seatsFolder = CampfireSystem.BuildSittingTrunks()
+    local woodStack = CampfireSystem.BuildFirewoodStack()
 
-    if RunService:IsRunning() then
-        CampfireSystem.SetupInteractions()
-        startFlickerLoop()
-    end
+    -- 2. Wire up all runtime interaction listeners, prompts, flicker loops
+    wireExistingModels()
 
-    print("[CampfireSystem] Built photorealistic campfire & 4 sitting trunks (8 seats) at camp center.")
-    return campModel, seatsFolder
+    print("[CampfireSystem] Initialized permanent campfire, seating, and firewood stack.")
+    return campModel, seatsFolder, woodStack
 end
 
 return CampfireSystem

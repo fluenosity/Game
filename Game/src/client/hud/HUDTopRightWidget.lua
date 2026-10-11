@@ -19,6 +19,7 @@ local Players = game:GetService("Players")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local IconPack = require(sharedFolder:WaitForChild("IconPack"))
+local AudioManager = require(script.Parent.Parent:WaitForChild("AudioManager"))
 
 export type HUDTopRightInstance = {
     Container: Frame,
@@ -255,6 +256,7 @@ function HUDTopRightWidget.Create(parent: Instance): HUDTopRightInstance
 
     -- Button Hover Micro-interactions
     btnBackpack.MouseEnter:Connect(function()
+        AudioManager.Play("Hover")
         TweenService:Create(btnBackpack, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = 0.15,
         }):Play()
@@ -275,6 +277,7 @@ function HUDTopRightWidget.Create(parent: Instance): HUDTopRightInstance
     end)
 
     btnSettings.MouseEnter:Connect(function()
+        AudioManager.Play("Hover")
         TweenService:Create(btnSettings, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = 0.15,
         }):Play()
@@ -305,10 +308,12 @@ function HUDTopRightWidget.Create(parent: Instance): HUDTopRightInstance
     local onSettingsCallback: (() -> ())? = nil
 
     btnBackpack.Activated:Connect(function()
+        AudioManager.Play("Click")
         if onBackpackCallback then onBackpackCallback() end
     end)
 
     btnSettings.Activated:Connect(function()
+        AudioManager.Play("Click")
         if onSettingsCallback then onSettingsCallback() end
     end)
 

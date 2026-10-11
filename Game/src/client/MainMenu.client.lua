@@ -30,6 +30,9 @@ local UIComponents = require(script.Parent:WaitForChild("UIComponents"))
 local EmberParticles = require(script.Parent:WaitForChild("EmberParticles"))
 local CampfireEmblem = require(script.Parent:WaitForChild("CampfireEmblem"))
 
+local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
+local GameConfig = require(sharedFolder:WaitForChild("GameConfig"))
+
 -- Initialize game-wide audio routing to MasterSoundGroup
 UITheme.InitAudioRouting()
 
@@ -69,10 +72,45 @@ local function setCharacterControlsEnabled(enabled: boolean)
     end
 end
 
+-- =============================================================================
+-- DEV CONFIG CHECK: SKIP MAIN MENU
+-- =============================================================================
+if GameConfig.ShouldSkipMainMenu() then
+    -- Fast Direct Play: Ensure controls and camera are active on character
+    setCharacterControlsEnabled(true)
+    if camera then
+        camera.CameraType = Enum.CameraType.Custom
+    end
+
+    -- If server did not direct-spawn, request spawn immediately
+    local spawnEvent = sharedFolder:FindFirstChild("RequestSpawnCharacter") :: RemoteEvent?
+    if spawnEvent then
+        spawnEvent:FireServer()
+    end
+
+    local function onCharSpawned(char: Model)
+        local hum = char:WaitForChild("Humanoid", 10) :: Humanoid?
+        if camera and hum then
+            camera.CameraType = Enum.CameraType.Custom
+            camera.CameraSubject = hum
+        end
+        setCharacterControlsEnabled(true)
+    end
+
+    if player.Character then
+        onCharSpawned(player.Character)
+    end
+    player.CharacterAdded:Connect(onCharSpawned)
+
+    print("[MainMenu] DevMode: SKIP_MAIN_MENU is active. Bypassed menu and entered game directly.")
+    return
+end
+
 if camera then
     camera.CameraType = Enum.CameraType.Scriptable
 end
 setCharacterControlsEnabled(false)
+
 
 --------------------------------------------------------------------------------
 -- ROOT SCREEN GUI CREATION
@@ -640,60 +678,60 @@ local function runCinematicIntro()
     isBusy = true
 
     ----------------------------------------------------------------------------
-    -- PHASE 1: Pure White Studio Splash Screen (~2.0s)
+    -- PHASE 1: Pure White Studio Splash Screen (~2.0s) [Configurable via GameConfig]
     ----------------------------------------------------------------------------
-    local splashScreen = Instance.new("Frame")
-    splashScreen.Name = "StudioSplash"
-    splashScreen.Size = UDim2.fromScale(1, 1)
-    splashScreen.BackgroundColor3 = UITheme.Colors.PureWhite
-    splashScreen.BorderSizePixel = 0
-    splashScreen.ZIndex = 60
-    splashScreen.Parent = screenGui
+    if not GameConfig.ShouldSkipSplashScreen() then
+        local splashScreen = Instance.new("Frame")
+        splashScreen.Name = "StudioSplash"
+        splashScreen.Size = UDim2.fromScale(1, 1)
+        splashScreen.BackgroundColor3 = UITheme.Colors.PureWhite
+        splashScreen.BorderSizePixel = 0
+        splashScreen.ZIndex = 60
+        splashScreen.Parent = screenGui
 
-    local studioTitle = Instance.new("TextLabel")
-    studioTitle.Name = "StudioTitle"
-    studioTitle.Size = UDim2.new(0.9, 0, 0, 36)
-    studioTitle.Position = UDim2.fromScale(0.5, 0.5)
-    studioTitle.AnchorPoint = Vector2.new(0.5, 0.5)
-    studioTitle.BackgroundTransparency = 1
-    studioTitle.Font = UITheme.Fonts.Studio
-    studioTitle.Text = "A  F L U E N O S I T Y   S T U D I O   P R O D U C T I O N"
-    studioTitle.TextColor3 = UITheme.Colors.TextStudioSplash
-    studioTitle.TextScaled = true
-    studioTitle.TextWrapped = true
-    studioTitle.TextSize = 18
-    studioTitle.TextTransparency = 1
-    studioTitle.ZIndex = 61
-    studioTitle.Parent = splashScreen
+        local studioTitle = Instance.new("TextLabel")
+        studioTitle.Name = "StudioTitle"
+        studioTitle.Size = UDim2.new(0.9, 0, 0, 36)
+        studioTitle.Position = UDim2.fromScale(0.5, 0.5)
+        studioTitle.AnchorPoint = Vector2.new(0.5, 0.5)
+        studioTitle.BackgroundTransparency = 1
+        studioTitle.Font = UITheme.Fonts.Studio
+        studioTitle.Text = "A  F L U E N O S I T Y   S T U D I O   P R O D U C T I O N"
+        studioTitle.TextColor3 = UITheme.Colors.TextStudioSplash
+        studioTitle.TextScaled = true
+        studioTitle.TextWrapped = true
+        studioTitle.TextSize = 18
+        studioTitle.TextTransparency = 1
+        studioTitle.ZIndex = 61
+        studioTitle.Parent = splashScreen
 
-    local studioConstraint = Instance.new("UITextSizeConstraint")
-    studioConstraint.MaxTextSize = 20
-    studioConstraint.MinTextSize = 12
-    studioConstraint.Parent = studioTitle
+        local studioConstraint = Instance.new("UITextSizeConstraint")
+        studioConstraint.MaxTextSize = 20
+        studioConstraint.MinTextSize = 12
+        studioConstraint.Parent = studioTitle
 
-    local fadeInText = TweenService:Create(studioTitle, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        TextTransparency = 0,
-    })
-    fadeInText:Play()
-    fadeInText.Completed:Wait()
+        local fadeInText = TweenService:Create(studioTitle, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            TextTransparency = 0,
+        })
+        fadeInText:Play()
+        fadeInText.Completed:Wait()
 
-    task.wait(1.0)
+        task.wait(1.0)
 
-    local fadeOutText = TweenService:Create(studioTitle, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-        TextTransparency = 1,
-    })
-    fadeOutText:Play()
-    fadeOutText.Completed:Wait()
+        local fadeOutText = TweenService:Create(studioTitle, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            TextTransparency = 1,
+        })
+        fadeOutText:Play()
+        fadeOutText.Completed:Wait()
 
-    ----------------------------------------------------------------------------
-    -- PHASE 2: Transition into Darkness & Spark Ignition
-    ----------------------------------------------------------------------------
-    local darkTransition = TweenService:Create(splashScreen, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
-        BackgroundTransparency = 1,
-    })
-    darkTransition:Play()
-    darkTransition.Completed:Wait()
-    splashScreen:Destroy()
+        local darkTransition = TweenService:Create(splashScreen, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+            BackgroundTransparency = 1,
+        })
+        darkTransition:Play()
+        darkTransition.Completed:Wait()
+        splashScreen:Destroy()
+    end
+
 
     local sparkIgnition = Instance.new("Frame")
     sparkIgnition.Name = "SparkIgnition"

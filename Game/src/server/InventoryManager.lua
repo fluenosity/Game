@@ -86,19 +86,42 @@ function InventoryManager.Sync(player: Player)
     end
 end
 
+-- Synonym map for robust cross-system querying (matches <-> matchbox, wood <-> standard_wood)
+local ITEM_SYNONYMS: { [string]: { string } } = {
+    ["matches"] = { "matches", "matchbox" },
+    ["matchbox"] = { "matches", "matchbox" },
+    ["wood"] = { "standard_wood", "wood", "pine_wood" },
+    ["standard_wood"] = { "standard_wood", "wood", "pine_wood" },
+}
+
+local function expandItemIds(itemIdOrList: string | { string }): { [string]: boolean }
+    local targetIds: { [string]: boolean } = {}
+    if typeof(itemIdOrList) == "string" then
+        local syns = ITEM_SYNONYMS[itemIdOrList]
+        if syns then
+            for _, s in ipairs(syns) do targetIds[s] = true end
+        else
+            targetIds[itemIdOrList] = true
+        end
+    elseif typeof(itemIdOrList) == "table" then
+        for _, id in ipairs(itemIdOrList) do
+            local syns = ITEM_SYNONYMS[id]
+            if syns then
+                for _, s in ipairs(syns) do targetIds[s] = true end
+            else
+                targetIds[id] = true
+            end
+        end
+    end
+    return targetIds
+end
+
 -- Checks whether a player has an item (accepts string or list of alternative IDs)
 function InventoryManager.HasItem(player: Player, itemIdOrList: string | { string }): (boolean, number, number?)
     local inv = InventoryManager.GetInventory(player)
     if not inv then return false, 0, nil end
     
-    local targetIds: { [string]: boolean } = {}
-    if typeof(itemIdOrList) == "string" then
-        targetIds[itemIdOrList] = true
-    elseif typeof(itemIdOrList) == "table" then
-        for _, id in ipairs(itemIdOrList) do
-            targetIds[id] = true
-        end
-    end
+    local targetIds = expandItemIds(itemIdOrList)
     
     local totalCount = 0
     local firstSlot: number? = nil
@@ -116,20 +139,19 @@ function InventoryManager.HasItem(player: Player, itemIdOrList: string | { strin
     return totalCount > 0, totalCount, firstSlot
 end
 
+-- Returns the total count of any wood logs carried by the player
+function InventoryManager.GetWoodCount(player: Player): number
+    local _, count = InventoryManager.HasItem(player, "standard_wood")
+    return count
+end
+
 -- Consumes amount of an item from the player's inventory
 function InventoryManager.ConsumeItem(player: Player, itemIdOrList: string | { string }, amountToConsume: number?): boolean
     local amountNeeded = amountToConsume or 1
     local inv = InventoryManager.GetInventory(player)
     if not inv then return false end
     
-    local targetIds: { [string]: boolean } = {}
-    if typeof(itemIdOrList) == "string" then
-        targetIds[itemIdOrList] = true
-    elseif typeof(itemIdOrList) == "table" then
-        for _, id in ipairs(itemIdOrList) do
-            targetIds[id] = true
-        end
-    end
+    local targetIds = expandItemIds(itemIdOrList)
     
     local hasEnough, totalAvailable = InventoryManager.HasItem(player, itemIdOrList)
     if not hasEnough or totalAvailable < amountNeeded then
@@ -170,14 +192,8 @@ function InventoryManager.AddItem(player: Player, itemId: string, count: number)
     local unlockedSlots = (InventoryConfig and InventoryConfig.UNLOCKED_SLOTS) or 9
 
     -- Enforce strict 5 Wood Logs carry limit across the entire inventory
-    if itemId == "standard_wood" then
-        local currentWood = 0
-        for s = 1, totalSlots do
-            local slotData = inv[s]
-            if slotData and slotData.Id == "standard_wood" then
-                currentWood += (slotData.Count or 0)
-            end
-        end
+    if itemId == "standard_wood" or itemId == "wood" or itemId == "pine_wood" then
+        local currentWood = InventoryManager.GetWoodCount(player)
         if (currentWood + count) > 5 then
             return false
         end

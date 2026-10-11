@@ -17,6 +17,7 @@ Players.CharacterAutoLoads = false
 
 -- Ensure the shared communication folder and spawn RemoteEvent exist
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
+local GameConfig = require(sharedFolder:WaitForChild("GameConfig"))
 local spawnEvent = sharedFolder:FindFirstChild("RequestSpawnCharacter")
 if not spawnEvent then
     local newEvent = Instance.new("RemoteEvent")
@@ -56,6 +57,15 @@ local function onPlayerAdded(player: Player)
             end)
         end
     end)
+
+    -- Direct spawn if enabled in GameConfig (skips manual Play button click)
+    if GameConfig.ShouldDirectSpawn() then
+        task.defer(function()
+            if player.Parent and not playersInSession[player] then
+                spawnCharacterForPlayer(player)
+            end
+        end)
+    end
 end
 
 local function onPlayerRemoving(player: Player)
@@ -69,3 +79,4 @@ Players.PlayerRemoving:Connect(onPlayerRemoving)
 for _, existingPlayer in ipairs(Players:GetPlayers()) do
     onPlayerAdded(existingPlayer)
 end
+

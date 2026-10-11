@@ -23,6 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UITheme = require(script.Parent:WaitForChild("UITheme"))
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local IconPack = require(sharedFolder:WaitForChild("IconPack"))
+local AudioManager = require(script.Parent:WaitForChild("AudioManager"))
 
 local UIComponents = {}
 
@@ -117,6 +118,7 @@ function UIComponents.CreateNavAction(config: NavActionConfig): TextButton
 
     -- Interactive Hover & Press Animations
     button.MouseEnter:Connect(function()
+        AudioManager.Play("Hover")
         TweenService:Create(textLabel, UITheme.Tweens.Fast, {
             TextColor3 = UITheme.Colors.EmberHot,
             Position = UDim2.new(0, 8, 0, 0),
@@ -171,6 +173,7 @@ function UIComponents.CreateNavAction(config: NavActionConfig): TextButton
     end)
 
     button.Activated:Connect(function()
+        AudioManager.Play("Click")
         config.OnClick()
     end)
 
@@ -613,6 +616,7 @@ function UIComponents.CreateModal(config: ModalConfig): ModalInstance
     closeCorner.Parent = btnClose
 
     btnClose.MouseEnter:Connect(function()
+        AudioManager.Play("Hover")
         TweenService:Create(btnClose, UITheme.Tweens.Fast, {
             TextColor3 = UITheme.Colors.EmberHot,
             BackgroundColor3 = UITheme.Colors.SurfaceHighlight,
@@ -668,6 +672,10 @@ function UIComponents.CreateModal(config: ModalConfig): ModalInstance
     btnBack.ZIndex = 45
     btnBack.Parent = footer
 
+    btnBack.MouseEnter:Connect(function()
+        AudioManager.Play("Hover")
+    end)
+
     local backCorner = Instance.new("UICorner")
     backCorner.CornerRadius = UDim.new(0, 6)
     backCorner.Parent = btnBack
@@ -682,6 +690,7 @@ function UIComponents.CreateModal(config: ModalConfig): ModalInstance
     local function closeModal()
         if isBusy then return end
         isBusy = true
+        AudioManager.Play("Click")
         local tweenCard = TweenService:Create(card, UITheme.Tweens.Fast, {
             Position = UDim2.fromScale(0.5, 0.52),
         })
@@ -703,6 +712,7 @@ function UIComponents.CreateModal(config: ModalConfig): ModalInstance
     local function openModal()
         if isBusy then return end
         isBusy = true
+        AudioManager.Play("Click")
         backdrop.Visible = true
         card.Visible = true
         card.Position = UDim2.fromScale(0.5, 0.53)

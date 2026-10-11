@@ -14,6 +14,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local InventoryConfig = require(sharedFolder:WaitForChild("InventoryConfig"))
 local IconPack = require(sharedFolder:WaitForChild("IconPack"))
+local AudioManager = require(script.Parent.Parent:WaitForChild("AudioManager"))
 
 export type HotbarSlotData = {
     Id: string,
@@ -212,7 +213,12 @@ function HUDHotbar.Create(parent: Instance): HUDHotbarInstance
             Underline = underline,
         }
 
+        slotBtn.MouseEnter:Connect(function()
+            AudioManager.Play("Hover")
+        end)
+
         slotBtn.Activated:Connect(function()
+            AudioManager.Play("ItemEquip")
             selectedSlot = i
             for s = 1, InventoryConfig.MAX_HOTBAR_SLOTS do
                 updateSlotVisuals(s)
@@ -249,6 +255,7 @@ function HUDHotbar.Create(parent: Instance): HUDHotbarInstance
 
     local function selectSlot(slotIdx: number)
         if slotIdx < 1 or slotIdx > InventoryConfig.MAX_HOTBAR_SLOTS then return end
+        AudioManager.Play("ItemEquip")
         selectedSlot = slotIdx
         for s = 1, InventoryConfig.MAX_HOTBAR_SLOTS do
             updateSlotVisuals(s)

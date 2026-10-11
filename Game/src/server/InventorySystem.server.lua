@@ -7,10 +7,10 @@
 
     Features:
     - Empty starting inventory for all players (StartingLoadout = {})
-    - Map-wide wood pile scanner: auto-attaches ProximityPrompt to user-placed wooden log piles
+    - Map-wide wood pile scanner: auto-attaches ProximityPrompt to genuine woodland log piles
     - Strict 5 Wood Logs carry limit enforced across the player's entire inventory
-    - In-camp Matchbox pickup (vintage matchbox with soft glow and auto-respawn)
-    - Campfire fuel interaction (allows feeding collected wood into the campfire)
+    - In-camp Vintage Matchbox pickup on dedicated stone pedestal (auto-respawn for co-op)
+    - Full exclusion of campsite props (benches, hearth, fire, pedestal) from wood pile scanner
     - Toast notification event dispatching to clients
 ]]
 
@@ -67,142 +67,23 @@ end
 
 -- Count total wood across ALL inventory slots for a given player
 local function getTotalWoodCount(player: Player): number
-    local inv = playerInventories[player]
-    if not inv then return 0 end
-
-    local total = 0
-    for s = 1, InventoryConfig.TOTAL_PERSONAL_SLOTS do
-        local slot = inv[s]
-        if slot and slot.Id == "standard_wood" then
-            total = total + (slot.Count or 0)
-        end
-    end
-    return total
+    return InventoryManager.GetWoodCount(player)
 end
 
 -- Check if player has at least one of a specific item
 local function hasItem(player: Player, itemId: string): boolean
-    local inv = playerInventories[player]
-    if not inv then return false end
-
-    for s = 1, InventoryConfig.TOTAL_PERSONAL_SLOTS do
-        local slot = inv[s]
-        if slot and slot.Id == itemId and (slot.Count or 0) > 0 then
-            return true
-        end
-    end
-    return false
+    local has = InventoryManager.HasItem(player, itemId)
+    return has
 end
 
 -- Add item to player inventory respecting stack sizes and unlocked slots
 local function addPlayerItem(player: Player, itemId: string, amount: number): boolean
-    local inv = playerInventories[player]
-    if not inv then return false end
-
-    local def = InventoryConfig.Items[itemId]
-    if not def then return false end
-
-    local maxStack = def.MaxStack or 1
-    local unlockedSlots = InventoryConfig.UNLOCKED_SLOTS or 9
-
-    -- 1. Try stacking into existing slot that has space
-    local targetSlot: number? = nil
-    for s = 1, unlockedSlots do
-        local slot = inv[s]
-        if slot and slot.Id == itemId and (slot.Count + amount) <= maxStack then
-            targetSlot = s
-            break
-        end
-    end
-
-    -- 2. Otherwise find first empty unlocked slot
-    if not targetSlot then
-        for s = 1, unlockedSlots do
-            if not inv[s] then
-                targetSlot = s
-                break
-            end
-        end
-    end
-
-    if not targetSlot then
-        return false -- Inventory full
-    end
-
-    if inv[targetSlot] then
-        inv[targetSlot].Count = inv[targetSlot].Count + amount
-    else
-        inv[targetSlot] = {
-            Id = itemId,
-            Count = amount,
-        }
-    end
-
-    syncInventoryEvent:FireClient(player, inv)
-    return true
+    return InventoryManager.AddItem(player, itemId, amount)
 end
 
 -- Remove item count from player inventory
 local function removePlayerItem(player: Player, itemId: string, amount: number): boolean
-    local inv = playerInventories[player]
-    if not inv then return false end
-
-    local remainingToRemove = amount
-
-    for s = 1, InventoryConfig.TOTAL_PERSONAL_SLOTS do
-        local slot = inv[s]
-        if slot and slot.Id == itemId then
-            if slot.Count <= remainingToRemove then
-                remainingToRemove = remainingToRemove - slot.Count
-                inv[s] = nil
-            else
-                slot.Count = slot.Count - remainingToRemove
-                remainingToRemove = 0
-            end
-
-            if remainingToRemove <= 0 then
-                break
-            end
-        end
-    end
-
-    if remainingToRemove == 0 then
-        syncInventoryEvent:FireClient(player, inv)
-        return true
-    end
-
-    -- If not enough items found, re-sync anyway to stay consistent
-    syncInventoryEvent:FireClient(player, inv)
-    return false
-end
-
-local function initializePlayerInventory(player: Player)
-    local inv = {}
-    for slotIdx = 1, InventoryConfig.TOTAL_PERSONAL_SLOTS do
-        local starting = InventoryConfig.StartingLoadout[slotIdx]
-        if starting then
-            inv[slotIdx] = {
-                Id = starting.Id,
-                Count = starting.Count,
-            }
-        else
-            inv[slotIdx] = nil
-        end
-    end
-    playerInventories[player] = inv
-    syncInventoryEvent:FireClient(player, inv)
-end
-
-Players.PlayerAdded:Connect(function(player)
-    initializePlayerInventory(player)
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-    playerInventories[player] = nil
-end)
-
-for _, p in ipairs(Players:GetPlayers()) do
-    initializePlayerInventory(p)
+    return InventoryManager.ConsumeItem(player, itemId, amount)
 end
 
 -- Creates physical dropped item in workspace with ProximityPrompt
@@ -212,6 +93,7 @@ local function spawnDroppedItem(itemId: string, count: number, spawnCFrame: CFra
 
     local model = Instance.new("Model")
     model.Name = "Dropped_" .. def.Name:gsub("%s+", "")
+    CollectionService:AddTag(model, "IgnoreWoodScanner")
 
     local part = Instance.new("Part")
     part.Name = "Handle"
@@ -251,7 +133,7 @@ local function spawnDroppedItem(itemId: string, count: number, spawnCFrame: CFra
 
     prompt.Triggered:Connect(function(playerTriggering: Player)
         -- Enforce strict 5 Wood limit when picking up dropped wood
-        if itemId == "standard_wood" then
+        if itemId == "standard_wood" or itemId == "wood" then
             local currentWood = getTotalWoodCount(playerTriggering)
             if (currentWood + count) > 5 then
                 sendNotification(
@@ -283,7 +165,6 @@ local function spawnDroppedItem(itemId: string, count: number, spawnCFrame: CFra
         end
     end)
 
-    -- Auto-clean low tier items if dropped items exceed 200
     if droppedItemsFolder and #droppedItemsFolder:GetChildren() > 200 then
         local oldest = droppedItemsFolder:GetChildren()[1]
         if oldest then
@@ -338,7 +219,6 @@ splitItemEvent.OnServerEvent:Connect(function(player: Player, slotIndex: number)
     local slot = inv[slotIndex]
     if not slot or slot.Count <= 1 then return end
 
-    -- Find first empty unlocked slot
     local emptySlot: number? = nil
     for s = 1, (InventoryConfig.UNLOCKED_SLOTS or 9) do
         if not inv[s] then
@@ -365,45 +245,77 @@ end)
 --------------------------------------------------------------------------------
 local processedWoodPiles: { [Instance]: boolean } = {}
 
--- Determines if an instance represents a placed wood log pile
+-- Clean up any stray WoodGatherPrompt from non-wood props
+local function purgeCampPrompts()
+    local campContainers = {
+        workspace:FindFirstChild("CampfireSeats"),
+        workspace:FindFirstChild("Campfire"),
+        workspace:FindFirstChild("CampMatchbox"),
+        workspace:FindFirstChild("MatchboxPedestalModel"),
+        workspace:FindFirstChild("MatchboxStumpModel"),
+    }
+    for _, container in ipairs(campContainers) do
+        if container then
+            for _, d in ipairs(container:GetDescendants()) do
+                if d:IsA("ProximityPrompt") and d.Name == "WoodGatherPrompt" then
+                    d:Destroy()
+                end
+            end
+        end
+    end
+end
+
+-- Determines if an instance represents a placed woodland log pile
 local function isWoodPileInstance(inst: Instance): boolean
     if processedWoodPiles[inst] then return false end
 
+    -- Explicit ignore tag
+    if CollectionService:HasTag(inst, "IgnoreWoodScanner") then return false end
+
     -- Exclude generated forest environment trees, rocks, ground cover
     local forestEnv = workspace:FindFirstChild("ForestEnvironment")
-    if forestEnv and inst:IsDescendantOf(forestEnv) then
-        return false
-    end
+    if forestEnv and inst:IsDescendantOf(forestEnv) then return false end
 
     -- Exclude player characters
-    if inst:IsA("Model") and Players:GetPlayerFromCharacter(inst) then
-        return false
-    end
+    if inst:IsA("Model") and Players:GetPlayerFromCharacter(inst) then return false end
     for _, pl in ipairs(Players:GetPlayers()) do
-        if pl.Character and inst:IsDescendantOf(pl.Character) then
+        if pl.Character and inst:IsDescendantOf(pl.Character) then return false end
+    end
+
+    -- Exclude dropped items folder
+    if inst:IsDescendantOf(droppedItemsFolder) then return false end
+
+    -- Explicitly exclude the Campfire, Seats, Matchbox, Pedestal (CampFirewoodStack is kept!)
+    for _, containerName in ipairs({ "CampfireSeats", "Campfire", "CampMatchbox", "MatchboxPedestalModel", "MatchboxStumpModel" }) do
+        local container = workspace:FindFirstChild(containerName)
+        if container and (inst == container or inst:IsDescendantOf(container)) then
             return false
         end
     end
 
-    -- Exclude dropped items folder and camp structures
-    if inst:IsDescendantOf(droppedItemsFolder) then return false end
     local lowerName = inst.Name:lower()
-    if lowerName:find("fence") or lowerName:find("bus") or lowerName:find("tower") then
+
+    -- Exclude campsite furniture, seats, matchbox, fences, structures
+    if lowerName:find("seat") or lowerName:find("bench") or lowerName:find("hearth")
+       or lowerName:find("pedestal") or lowerName:find("match") or lowerName:find("stump")
+       or lowerName:find("bus") or lowerName:find("tower") or lowerName:find("fence")
+       or lowerName:find("ash") then
         return false
     end
 
-    -- Check CollectionService tag
+    -- If tagged with CollectionService
     if CollectionService:HasTag(inst, "WoodPile") or CollectionService:HasTag(inst, "WoodSource") then
         return true
     end
 
-    -- Check Model or Folder naming
+    -- Match any Model or Folder named with wood / log / timber / firewood / lumber / pile
     if inst:IsA("Model") or inst:IsA("Folder") then
-        if lowerName:find("log") or lowerName:find("wood") or lowerName:find("timber") or lowerName:find("firewood") or lowerName:find("lumber") then
+        if lowerName:find("wood") or lowerName:find("log") or lowerName:find("timber")
+           or lowerName:find("firewood") or lowerName:find("lumber") or lowerName:find("pile") then
             return true
         end
 
-        -- Check if model contains wood cylinders/parts (e.g. named Model from toolbox)
+        -- Check if model contains wood cylinders/parts (e.g. from toolbox)
         local woodPartCount = 0
         local totalDescendants = 0
         for _, child in ipairs(inst:GetDescendants()) do
@@ -420,9 +332,9 @@ local function isWoodPileInstance(inst: Instance): boolean
         end
     end
 
-    -- Check standalone BasePart
+    -- Match standalone BasePart in workspace
     if inst:IsA("BasePart") and inst.Parent == workspace then
-        if lowerName:find("log") or lowerName:find("woodpile") or lowerName:find("firewood") then
+        if lowerName:find("wood") or lowerName:find("log") or lowerName:find("firewood") or lowerName:find("timber") then
             return true
         end
     end
@@ -430,7 +342,7 @@ local function isWoodPileInstance(inst: Instance): boolean
     return false
 end
 
--- Attaches interaction prompt to a wood pile model or part
+-- Attaches interaction prompt to a genuine woodland wood pile
 local function setupWoodPilePrompt(woodPile: Instance)
     if processedWoodPiles[woodPile] then return end
     processedWoodPiles[woodPile] = true
@@ -441,7 +353,6 @@ local function setupWoodPilePrompt(woodPile: Instance)
         if woodPile.PrimaryPart then
             targetPart = woodPile.PrimaryPart
         else
-            -- Find the largest BasePart near the center
             local parts = {}
             for _, d in ipairs(woodPile:GetDescendants()) do
                 if d:IsA("BasePart") then
@@ -449,7 +360,6 @@ local function setupWoodPilePrompt(woodPile: Instance)
                 end
             end
             if #parts > 0 then
-                -- Sort by size or pick middle one
                 targetPart = parts[math.ceil(#parts / 2)]
                 woodPile.PrimaryPart = targetPart
             end
@@ -467,7 +377,6 @@ local function setupWoodPilePrompt(woodPile: Instance)
 
     if not targetPart then return end
 
-    -- Check if prompt already exists
     local existingPrompt = targetPart:FindFirstChild("WoodGatherPrompt") or woodPile:FindFirstChild("WoodGatherPrompt", true)
     if existingPrompt then return end
 
@@ -477,8 +386,8 @@ local function setupWoodPilePrompt(woodPile: Instance)
     prompt.ObjectText = "Wood Pile (Max 5)"
     prompt.KeyboardKeyCode = Enum.KeyCode.E
     prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
-    prompt.HoldDuration = 0.35
-    prompt.MaxActivationDistance = 12
+    prompt.HoldDuration = 0.25
+    prompt.MaxActivationDistance = 9.0
     prompt.RequiresLineOfSight = false
     prompt.Parent = targetPart
 
@@ -518,20 +427,28 @@ end
 
 -- Scan workspace for placed wood piles
 local function scanAndSetupWoodPiles()
+    purgeCampPrompts()
     for _, obj in ipairs(workspace:GetChildren()) do
         if isWoodPileInstance(obj) then
             setupWoodPilePrompt(obj)
+        end
+    end
+
+    -- Also check any models tagged with WoodPile anywhere in workspace
+    for _, tagged in ipairs(CollectionService:GetTagged("WoodPile")) do
+        if isWoodPileInstance(tagged) then
+            setupWoodPilePrompt(tagged)
         end
     end
 end
 
 -- Run initial scan and listen for dynamic additions
 task.defer(function()
-    task.wait(1.5)
+    task.wait(1.0)
     scanAndSetupWoodPiles()
 
     workspace.ChildAdded:Connect(function(child)
-        task.wait(0.5)
+        task.wait(0.4)
         if isWoodPileInstance(child) then
             setupWoodPilePrompt(child)
         end
@@ -539,72 +456,42 @@ task.defer(function()
 end)
 
 --------------------------------------------------------------------------------
--- 2. CAMP MATCHBOX PICKUP
+-- 2. CAMP VINTAGE MATCHBOX PROP & INTERACTION
 --------------------------------------------------------------------------------
-local function findCampsiteCenter(): (Vector3, BasePart?)
-    -- 1. Look for part containing Fire instance (Campfire)
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Fire") and obj.Parent and obj.Parent:IsA("BasePart") then
-            return obj.Parent.Position, obj.Parent :: BasePart
-        end
-    end
-
-    -- 2. Look for part named campfire or firepit
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and (obj.Name:lower() == "campfire" or obj.Name:lower() == "firepit") then
-            return obj.Position, obj
-        end
-    end
-
-    -- 3. Look for table or bus in campsite
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and (obj.Name:lower():find("table") or obj.Name:lower():find("bench")) then
-            return obj.Position, obj
-        end
-    end
-
-    return Vector3.new(0, 10, 0), nil
-end
-
 local function spawnCampMatchbox()
-    -- Look specifically for the dedicated rustic MatchboxStump placed near the camp perimeter
-    local matchboxStump = workspace:FindFirstChild("MatchboxStump", true)
-    local targetPos: Vector3
-    local targetCFrame: CFrame
-
-    if matchboxStump and matchboxStump:IsA("BasePart") then
-        targetPos = matchboxStump.Position + Vector3.new(0, (matchboxStump.Size.Y / 2) + 0.22, 0)
-        targetCFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(28), 0)
-    else
-        -- Fallback: Raycast to ground outside the campfire ring (6.6, -4.8)
-        local groundY = 0
-        local rayParams = RaycastParams.new()
-        rayParams.FilterType = Enum.RaycastFilterType.Include
-        local terrain = workspace:FindFirstChildOfClass("Terrain") or workspace.Terrain
-        if terrain then rayParams.FilterDescendantsInstances = { terrain } end
-        local hit = workspace:Raycast(Vector3.new(6.6, 150, -4.8), Vector3.new(0, -250, 0), rayParams)
-        if hit then groundY = hit.Position.Y end
-
-        targetPos = Vector3.new(6.6, groundY + 0.35, -4.8)
-        targetCFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(28), 0)
-    end
-
-    -- Clean up any existing CampMatchbox
     local existingBox = workspace:FindFirstChild("CampMatchbox")
     if existingBox then
         existingBox:Destroy()
     end
 
-    -- Construct vintage AAA matchbox model
+    local pedestalSlab = workspace:FindFirstChild("PedestalSlab", true)
+    local targetCFrame: CFrame
+
+    if pedestalSlab and pedestalSlab:IsA("BasePart") then
+        local targetPos = pedestalSlab.Position + Vector3.new(0, (pedestalSlab.Size.Y / 2) + 0.20, 0)
+        targetCFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(38), 0)
+    else
+        local groundY = 0
+        local rayParams = RaycastParams.new()
+        rayParams.FilterType = Enum.RaycastFilterType.Include
+        local terrain = workspace:FindFirstChildOfClass("Terrain") or workspace.Terrain
+        if terrain then rayParams.FilterDescendantsInstances = { terrain } end
+        local hit = workspace:Raycast(Vector3.new(9.2, 150, -3.8), Vector3.new(0, -250, 0), rayParams)
+        if hit then groundY = hit.Position.Y end
+
+        local targetPos = Vector3.new(9.2, groundY + 1.45, -3.8)
+        targetCFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(38), 0)
+    end
+
     local matchboxModel = Instance.new("Model")
     matchboxModel.Name = "CampMatchbox"
+    CollectionService:AddTag(matchboxModel, "IgnoreWoodScanner")
 
-    -- Main Cardboard Sleeve (Deep Crimson Red)
     local sleeve = Instance.new("Part")
     sleeve.Name = "Sleeve"
-    sleeve.Size = Vector3.new(0.85, 0.38, 1.35)
+    sleeve.Size = Vector3.new(1.10, 0.40, 1.65)
     sleeve.CFrame = targetCFrame
-    sleeve.Color = Color3.fromRGB(182, 44, 38) -- Vintage crimson red
+    sleeve.Color = Color3.fromRGB(182, 42, 36)
     sleeve.Material = Enum.Material.SmoothPlastic
     sleeve.Anchored = true
     sleeve.CanCollide = true
@@ -612,59 +499,146 @@ local function spawnCampMatchbox()
     sleeve.BottomSurface = Enum.SurfaceType.Smooth
     sleeve.Parent = matchboxModel
 
-    -- Friction Strike Strip on lateral edge
-    local striker = Instance.new("Part")
-    striker.Name = "Striker"
-    striker.Size = Vector3.new(0.06, 0.32, 1.30)
-    striker.CFrame = sleeve.CFrame * CFrame.new(0.43, 0, 0)
-    striker.Color = Color3.fromRGB(46, 38, 34) -- Charcoal friction sandpaper
-    striker.Material = Enum.Material.Slate
-    striker.Anchored = true
-    striker.CanCollide = false
-    striker.Parent = matchboxModel
+    local surfaceGui = Instance.new("SurfaceGui")
+    surfaceGui.Name = "VintageLabel"
+    surfaceGui.Face = Enum.NormalId.Top
+    surfaceGui.CanvasSize = Vector2.new(400, 600)
+    surfaceGui.LightInfluence = 0.35
+    surfaceGui.SizingMode = Enum.SurfaceGuiSizingMode.FixedSize
+    surfaceGui.Parent = sleeve
 
-    -- Inner Sliding Drawer (Cardboard cream)
+    local cardFrame = Instance.new("Frame")
+    cardFrame.Name = "CardFrame"
+    cardFrame.Size = UDim2.fromScale(1, 1)
+    cardFrame.BackgroundColor3 = Color3.fromRGB(246, 240, 224)
+    cardFrame.BorderSizePixel = 0
+    cardFrame.Parent = surfaceGui
+
+    local innerBorder = Instance.new("UIStroke")
+    innerBorder.Color = Color3.fromRGB(48, 38, 30)
+    innerBorder.Thickness = 6
+    innerBorder.Parent = cardFrame
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0.04, 0)
+    corner.Parent = cardFrame
+
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Name = "Title"
+    titleLabel.Size = UDim2.new(1, -24, 0, 70)
+    titleLabel.Position = UDim2.new(0, 12, 0, 28)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "★ SAFETY MATCHES ★"
+    titleLabel.TextColor3 = Color3.fromRGB(175, 35, 28)
+    titleLabel.Font = Enum.Font.Fondamento
+    titleLabel.TextSize = 26
+    titleLabel.TextScaled = true
+    titleLabel.Parent = cardFrame
+
+    local emblem = Instance.new("TextLabel")
+    emblem.Name = "Emblem"
+    emblem.Size = UDim2.new(0, 100, 0, 100)
+    emblem.Position = UDim2.new(0.5, -50, 0.30, 0)
+    emblem.BackgroundTransparency = 1
+    emblem.Text = "🔥"
+    emblem.TextSize = 72
+    emblem.Parent = cardFrame
+
+    local subLabel = Instance.new("TextLabel")
+    subLabel.Name = "Subtitle"
+    subLabel.Size = UDim2.new(1, -24, 0, 50)
+    subLabel.Position = UDim2.new(0, 12, 0.54, 0)
+    subLabel.BackgroundTransparency = 1
+    subLabel.Text = "THE SANCTUARY FLAME"
+    subLabel.TextColor3 = Color3.fromRGB(52, 42, 34)
+    subLabel.Font = Enum.Font.GothamBold
+    subLabel.TextSize = 20
+    subLabel.Parent = cardFrame
+
+    local descLabel = Instance.new("TextLabel")
+    descLabel.Name = "QualityMark"
+    descLabel.Size = UDim2.new(1, -24, 0, 40)
+    descLabel.Position = UDim2.new(0, 12, 0.68, 0)
+    descLabel.BackgroundTransparency = 1
+    descLabel.Text = "DAMP PROOF • SULPHUR TIP"
+    descLabel.TextColor3 = Color3.fromRGB(110, 95, 80)
+    descLabel.Font = Enum.Font.GothamMedium
+    descLabel.TextSize = 15
+    descLabel.Parent = cardFrame
+
+    local footerLabel = Instance.new("TextLabel")
+    footerLabel.Name = "Footer"
+    footerLabel.Size = UDim2.new(1, -24, 0, 40)
+    footerLabel.Position = UDim2.new(0, 12, 0.84, 0)
+    footerLabel.BackgroundTransparency = 1
+    footerLabel.Text = "STRIKE ON BOX • FLUENOSITY"
+    footerLabel.TextColor3 = Color3.fromRGB(48, 38, 30)
+    footerLabel.Font = Enum.Font.GothamBold
+    footerLabel.TextSize = 16
+    footerLabel.Parent = cardFrame
+
+    for _, sideX in ipairs({ -0.56, 0.56 }) do
+        local striker = Instance.new("Part")
+        striker.Name = "StrikerStrip"
+        striker.Size = Vector3.new(0.05, 0.34, 1.60)
+        striker.CFrame = sleeve.CFrame * CFrame.new(sideX, 0, 0)
+        striker.Color = Color3.fromRGB(46, 38, 34)
+        striker.Material = Enum.Material.Slate
+        striker.Anchored = true
+        striker.CanCollide = false
+        striker.Parent = matchboxModel
+    end
+
     local drawer = Instance.new("Part")
     drawer.Name = "Drawer"
-    drawer.Size = Vector3.new(0.74, 0.30, 0.40)
-    drawer.CFrame = sleeve.CFrame * CFrame.new(0, 0, 0.65)
-    drawer.Color = Color3.fromRGB(228, 215, 186) -- Warm aged cardboard
+    drawer.Size = Vector3.new(0.96, 0.32, 0.65)
+    drawer.CFrame = sleeve.CFrame * CFrame.new(0, 0, 0.72)
+    drawer.Color = Color3.fromRGB(224, 210, 182)
     drawer.Material = Enum.Material.SmoothPlastic
     drawer.Anchored = true
     drawer.CanCollide = false
     drawer.Parent = matchboxModel
 
-    -- Tiny Matchstick tips peeking out
-    for i = -1, 1 do
+    local stickOffsets = { -0.32, -0.11, 0.11, 0.32 }
+    for i, offX in ipairs(stickOffsets) do
         local stick = Instance.new("Part")
-        stick.Name = "Matchstick_" .. i
-        stick.Size = Vector3.new(0.08, 0.08, 0.35)
-        stick.CFrame = drawer.CFrame * CFrame.new(i * 0.16, 0.04, 0.12)
-        stick.Color = Color3.fromRGB(215, 35, 35) -- Red sulfur phosphorus tip
-        stick.Material = Enum.Material.SmoothPlastic
+        stick.Name = "MatchstickStem_" .. i
+        stick.Size = Vector3.new(0.07, 0.07, 0.48)
+        stick.CFrame = drawer.CFrame * CFrame.new(offX, 0.05, 0.04)
+        stick.Color = Color3.fromRGB(226, 204, 165)
+        stick.Material = Enum.Material.Wood
         stick.Anchored = true
         stick.CanCollide = false
         stick.Parent = matchboxModel
+
+        local head = Instance.new("Part")
+        head.Name = "MatchHead_" .. i
+        head.Shape = Enum.PartType.Ball
+        head.Size = Vector3.new(0.13, 0.13, 0.13)
+        head.CFrame = stick.CFrame * CFrame.new(0, 0, 0.25)
+        head.Color = Color3.fromRGB(215, 34, 26)
+        head.Material = Enum.Material.SmoothPlastic
+        head.Anchored = true
+        head.CanCollide = false
+        head.Parent = matchboxModel
     end
 
-    -- Inviting warm golden amber glow
     local glowLight = Instance.new("PointLight")
     glowLight.Name = "MatchboxGlow"
     glowLight.Color = Color3.fromRGB(255, 195, 75)
-    glowLight.Range = 7.0
-    glowLight.Brightness = 0.95
+    glowLight.Range = 5.5
+    glowLight.Brightness = 0.85
     glowLight.Shadows = false
     glowLight.Parent = sleeve
 
-    -- Proximity Prompt (Tightened activation zone so it never overlaps with campfire or seats)
     local prompt = Instance.new("ProximityPrompt")
     prompt.Name = "MatchboxPrompt"
     prompt.ActionText = "Take Matchbox"
-    prompt.ObjectText = "MATCHBOX"
+    prompt.ObjectText = "SAFETY MATCHES"
     prompt.KeyboardKeyCode = Enum.KeyCode.E
     prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
-    prompt.HoldDuration = 0.2
-    prompt.MaxActivationDistance = 5.2
+    prompt.HoldDuration = 0.15
+    prompt.MaxActivationDistance = 4.8
     prompt.RequiresLineOfSight = true
     prompt.Parent = sleeve
 
@@ -672,32 +646,32 @@ local function spawnCampMatchbox()
     matchboxModel.Parent = workspace
 
     prompt.Triggered:Connect(function(player: Player)
-        if hasItem(player, "matches") then
+        if InventoryManager.HasItem(player, "matchbox") then
             sendNotification(
                 player,
-                "You already have a Matchbox!",
+                "You already carry a Safety Matchbox!",
                 "flame",
                 Color3.fromRGB(255, 190, 60)
             )
             return
         end
 
-        local added = addPlayerItem(player, "matches", 1)
+        local added = InventoryManager.AddItem(player, "matchbox", 1)
         if added then
             sendNotification(
                 player,
-                "Acquired Matchbox! Keep it safe to ignite the campfire.",
+                "Acquired Safety Matchbox! Use with wood logs to light the campfire.",
                 "flame",
                 Color3.fromRGB(255, 190, 60)
             )
 
-            -- Smooth pickup feedback with 20s respawn timer
             prompt.Enabled = false
             for _, part in ipairs(matchboxModel:GetDescendants()) do
                 if part:IsA("BasePart") then
                     part.Transparency = 1
                 end
             end
+            surfaceGui.Enabled = false
             glowLight.Enabled = false
 
             task.delay(20, function()
@@ -707,6 +681,7 @@ local function spawnCampMatchbox()
                             part.Transparency = 0
                         end
                     end
+                    surfaceGui.Enabled = true
                     glowLight.Enabled = true
                     prompt.Enabled = true
                 end
@@ -722,7 +697,6 @@ local function spawnCampMatchbox()
     end)
 end
 
--- Initialize Camp items immediately without artificial delays
 task.defer(function()
     spawnCampMatchbox()
 end)

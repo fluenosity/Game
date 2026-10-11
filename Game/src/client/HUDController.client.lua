@@ -39,6 +39,7 @@ local HUDInventoryModal = require(hudFolder:WaitForChild("HUDInventoryModal"))
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local InventoryConfig = require(sharedFolder:WaitForChild("InventoryConfig"))
 local IconPack = require(sharedFolder:WaitForChild("IconPack"))
+local AudioManager = require(script.Parent:WaitForChild("AudioManager"))
 
 --------------------------------------------------------------------------------
 -- STATE
@@ -268,6 +269,19 @@ end
 if notificationEvent then
     notificationEvent.OnClientEvent:Connect(function(message: string, iconName: string?, accentColor: Color3?)
         showToast(message, iconName, accentColor)
+
+        local lowerMsg = message:lower()
+        if lowerMsg:find("wood") then
+            AudioManager.Play("WoodGather")
+        elseif lowerMsg:find("matchbox") then
+            AudioManager.Play("Matchbox")
+        elseif lowerMsg:find("flame") or lowerMsg:find("fire") or lowerMsg:find("stoked") or lowerMsg:find("fed") then
+            AudioManager.Play("CampfireFuel")
+        elseif lowerMsg:find("full") or lowerMsg:find("limit") or lowerMsg:find("cannot") or lowerMsg:find("capacity") then
+            AudioManager.Play("Warning")
+        else
+            AudioManager.Play("ItemPickup")
+        end
     end)
 end
 
@@ -294,6 +308,7 @@ end
 
 local function dropActiveItem()
     if dropItemEvent then
+        AudioManager.Play("ItemDrop")
         dropItemEvent:FireServer(selectedHotbarSlot)
     end
 end

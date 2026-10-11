@@ -24,6 +24,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local InventoryConfig = require(sharedFolder:WaitForChild("InventoryConfig"))
 local IconPack = require(sharedFolder:WaitForChild("IconPack"))
+local AudioManager = require(script.Parent.Parent:WaitForChild("AudioManager"))
 
 export type InventoryItemData = {
     Id: string,
@@ -322,12 +323,14 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
 
         if not isLocked then
             slotBtn.Activated:Connect(function()
+                AudioManager.Play("Click")
                 selectedSlotIndex = i
                 updateSlotVisuals()
                 updateInspector(i)
             end)
 
             slotBtn.MouseEnter:Connect(function()
+                AudioManager.Play("Hover")
                 if selectedSlotIndex ~= i then
                     TweenService:Create(sStroke, TweenInfo.new(0.12), {
                         Transparency = 0.65,
@@ -1019,24 +1022,28 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
     local onSplitCallback: ((slot: number) -> ())? = nil
 
     btnEquip.Activated:Connect(function()
+        AudioManager.Play("ItemEquip")
         if onEquipCallback then
             onEquipCallback(selectedSlotIndex)
         end
     end)
 
     btnDrop.Activated:Connect(function()
+        AudioManager.Play("ItemDrop")
         if onDropCallback then
             onDropCallback(selectedSlotIndex)
         end
     end)
 
     btnSplit.Activated:Connect(function()
+        AudioManager.Play("ItemSplit")
         if onSplitCallback then
             onSplitCallback(selectedSlotIndex)
         end
     end)
 
     btnDiscard.Activated:Connect(function()
+        AudioManager.Play("ItemDrop")
         if onDiscardCallback then
             onDiscardCallback(selectedSlotIndex)
         elseif onDropCallback then
@@ -1056,6 +1063,8 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
         if isTransitioning or isOpen then return end
         isTransitioning = true
         isOpen = true
+
+        AudioManager.Play("InventoryOpen")
 
         veil.Visible = true
         veil.BackgroundTransparency = 1
@@ -1094,6 +1103,8 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
         if isTransitioning or not isOpen then return end
         isTransitioning = true
         isOpen = false
+
+        AudioManager.Play("InventoryClose")
 
         if inputConn then
             inputConn:Disconnect()
