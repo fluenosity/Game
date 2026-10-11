@@ -28,9 +28,19 @@ local function getOrCreateRemoteEvent(name: string): RemoteEvent
     return ev :: RemoteEvent
 end
 
+local ProximityPromptService = game:GetService("ProximityPromptService")
+
 local requestBarterEvent = getOrCreateRemoteEvent("RequestBarterTrade")
 local barterResultEvent = getOrCreateRemoteEvent("BarterResult")
 local notificationEvent = getOrCreateRemoteEvent("ShowNotification")
+local openBarterMenuEvent = getOrCreateRemoteEvent("OpenBarterMenu")
+
+-- Server-side fallback prompt listener
+ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt, player: Player)
+    if prompt.Name == "SilasBarterPrompt" or prompt.ActionText == "Barter" then
+        openBarterMenuEvent:FireClient(player)
+    end
+end)
 
 local function sendNotification(player: Player, message: string, iconName: string?, accentColor: Color3?)
     notificationEvent:FireClient(

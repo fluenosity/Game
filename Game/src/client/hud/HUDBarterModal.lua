@@ -404,7 +404,10 @@ function HUDBarterModal.Create(parent: Instance): HUDBarterModalInstance
         end)
     end
 
+    local lastOpenedAt = 0
+
     local function openModal()
+        lastOpenedAt = tick()
         veil.Visible = true
         veil.Modal = true
         UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -427,10 +430,12 @@ function HUDBarterModal.Create(parent: Instance): HUDBarterModalInstance
 
     closeButton.MouseButton1Click:Connect(closeModal)
 
-    -- ESC / E Key to Close
+    -- ESC / E Key to Close (with debounce so holding E on prompt doesn't instantly close)
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if veil.Visible and not gameProcessed then
-            if input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.E then
+        if veil.Visible then
+            if input.KeyCode == Enum.KeyCode.Escape then
+                closeModal()
+            elseif input.KeyCode == Enum.KeyCode.E and not gameProcessed and (tick() - lastOpenedAt > 0.45) then
                 closeModal()
             end
         end

@@ -319,16 +319,30 @@ if syncInventoryEvent then
     end)
 end
 
-local openBarterMenuEvent = sharedFolder:WaitForChild("OpenBarterMenu", 5) :: RemoteEvent?
-if openBarterMenuEvent then
-    openBarterMenuEvent.OnClientEvent:Connect(function()
-        if inventoryModal.IsOpen() then
-            inventoryModal.Close()
-        end
-        barterModal.UpdateInventory(currentInventory)
-        barterModal.Open()
-    end)
+local ProximityPromptService = game:GetService("ProximityPromptService")
+
+local function openBarterUI()
+    if inventoryModal.IsOpen() then
+        inventoryModal.Close()
+    end
+    barterModal.UpdateInventory(currentInventory)
+    barterModal.Open()
 end
+
+-- 1. Direct Instant Client Prompt Hook (0ms latency, guaranteed trigger)
+ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt, triggeringPlayer: Player)
+    if triggeringPlayer == player and (prompt.Name == "SilasBarterPrompt" or prompt.ActionText == "Barter") then
+        openBarterUI()
+    end
+end)
+
+-- 2. Server Remote Event Backup
+task.spawn(function()
+    local openBarterMenuEvent = sharedFolder:WaitForChild("OpenBarterMenu") :: RemoteEvent
+    openBarterMenuEvent.OnClientEvent:Connect(function()
+        openBarterUI()
+    end)
+end)
 
 local function dropActiveItem()
     if dropItemEvent then
