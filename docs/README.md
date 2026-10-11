@@ -143,4 +143,4 @@
 
 > **Last updated:** 2026-10-11
 > **Document count:** 60+ files across 9 directories
-> **Idea bank target:** 10,000 candidates
+> **Idea bank:** 500 distinct deduplicated candidates

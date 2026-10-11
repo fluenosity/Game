@@ -1,6 +1,6 @@
-# Idea Research Catalog (10,000 Ideas) — Project: Undecided
+# Idea Research Catalog (500 Distinct Ideas) — Project: Undecided
 
-> **Status:** Research Database  
+> **Status:** Research Database (Deduplicated & Cleaned)  
 > **Last updated:** 2026-10-11  
 > **Database File:** [IDEA_CATALOG.csv](file:///i:/RobloxDev/docs/research/IDEA_CATALOG.csv)  
 > **Related Documents:** [IDEA_QUALITY_REPORT.md](file:///i:/RobloxDev/docs/research/IDEA_QUALITY_REPORT.md), [IDEA_SCORING_MODEL.md](file:///i:/RobloxDev/docs/research/IDEA_SCORING_MODEL.md)
@@ -9,7 +9,7 @@
 
 ## 1. Database Overview
 
-The Idea Catalog is a structured research repository containing **10,000 distinct candidate improvements** for *Project: Undecided*. It systematically explores design permutations across all 15 survival horror categories defined in [IDEA_TAXONOMY.md](file:///i:/RobloxDev/docs/research/IDEA_TAXONOMY.md).
+The Idea Catalog is an auditable, hand-crafted research repository containing **500 distinct candidate improvements** for *Project: Undecided*. All synthetic templated permutations have been purged to eliminate duplicates. It explores design variations across all 15 survival horror categories defined in [IDEA_TAXONOMY.md](file:///i:/RobloxDev/docs/research/IDEA_TAXONOMY.md).
 
 ---
 
@@ -44,8 +44,8 @@ python scripts/validate_catalog.py
 ```
 
 This verifies:
-1. Exact row count equals 10,000 valid records.
+1. Exact row count equals 500 valid, hand-crafted records.
 2. Zero duplicate IDs.
 3. Zero exact duplicate titles.
 4. Zero missing or malformed fields.
-5. All 15 taxonomy categories meet minimum representation quotas.
+5. All 15 taxonomy categories represented.

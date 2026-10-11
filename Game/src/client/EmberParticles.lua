@@ -7,7 +7,7 @@
 ]]
 
 local TweenService = game:GetService("TweenService")
-local MenuTheme = require(script.Parent:WaitForChild("MenuTheme"))
+local UITheme = require(script.Parent:WaitForChild("UITheme"))
 
 local EmberParticles = {}
 EmberParticles.__index = EmberParticles
@@ -44,10 +44,10 @@ function EmberParticles.SetReducedMotion(self: EmberSystem, enabled: boolean)
 end
 
 local EMBER_COLORS = {
-    MenuTheme.Colors.FireEmber,
-    MenuTheme.Colors.FireHot,
-    MenuTheme.Colors.FireCore,
-    MenuTheme.Colors.FireCrimson,
+    UITheme.Colors.EmberPrimary,
+    UITheme.Colors.EmberHot,
+    UITheme.Colors.EmberGold,
+    UITheme.Colors.EmberCrimson,
 }
 
 local function spawnSingleEmber(self: EmberSystem)
@@ -55,15 +55,14 @@ local function spawnSingleEmber(self: EmberSystem)
         return
     end
 
-    -- Randomize particle dimensions: 2px to 5px
     local size = math.random(2, 4)
-    local startX = math.random(35, 65) / 100 -- Centered near fire source
-    local startY = math.random(80, 95) / 100
+    local startX = math.random(32, 68) / 100
+    local startY = math.random(82, 96) / 100
     
-    local driftX = (math.random(-15, 15) / 100)
+    local driftX = (math.random(-14, 14) / 100)
     local targetY = startY - (math.random(35, 60) / 100)
     
-    local lifetime = math.random(25, 45) / 10 -- 2.5s to 4.5s
+    local lifetime = math.random(24, 42) / 10
     local color = EMBER_COLORS[math.random(1, #EMBER_COLORS)]
 
     local ember = Instance.new("Frame")
@@ -83,7 +82,6 @@ local function spawnSingleEmber(self: EmberSystem)
     ember.Parent = self.Container
     self.ActiveEmbers[ember] = true
 
-    -- Animate drifting upwards and fading out
     local targetPos = UDim2.fromScale(startX + driftX, targetY)
     local tweenInfo = TweenInfo.new(lifetime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
     
@@ -108,7 +106,6 @@ function EmberParticles.Start(self: EmberSystem)
     self.SpawnConnection = task.spawn(function()
         while self.IsActive do
             if not self.ReducedMotion then
-                -- Restrained count: spawn an ember every 0.25 to 0.55 seconds
                 spawnSingleEmber(self)
             end
             task.wait(math.random(25, 55) / 100)

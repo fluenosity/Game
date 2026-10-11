@@ -79,13 +79,13 @@ def generate_top_10(records):
 > **Status:** `RECOMMENDATIONS FOR PROJECT OWNER APPROVAL`  
 > **Last updated:** 2026-10-11  
 > **Scoring Standard:** [IDEA_SCORING_MODEL.md](file:///i:/RobloxDev/docs/research/IDEA_SCORING_MODEL.md) (Weights: Differentiation 20%, Fun 20%, Feasibility 15%, Mobile 10%, Co-op 10%, Replay 10%, Vision 10%, Perf 5%)  
-> **Database Source:** [IDEA_CATALOG.csv](file:///i:/RobloxDev/docs/research/IDEA_CATALOG.csv) (10,000 Ideas Evaluated)
+> **Database Source:** [IDEA_CATALOG.csv](file:///i:/RobloxDev/docs/research/IDEA_CATALOG.csv) (500 Curated Deduplicated Ideas Evaluated)
 
 ---
 
 ## Executive Summary
 
-From the 10,000 distinct candidate records analyzed in the research catalog, these ten proposals represent the highest-synergy, highest-differentiation features for *Project: Undecided*. Together, they form a cohesive, implementation-ready survival horror experience that sets the game decisively apart from competitors like *99 Nights in the Forest*.
+From the 500 distinct candidate records analyzed in the research catalog, these ten proposals represent the highest-synergy, highest-differentiation features for *Project: Undecided*. Together, they form a cohesive, implementation-ready survival horror experience that sets the game decisively apart from competitors like *99 Nights in the Forest*.
 
 ---
 

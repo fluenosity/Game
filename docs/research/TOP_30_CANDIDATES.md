@@ -23,23 +23,23 @@
 | 11 | `IDEA-00343` | Monster & Threats | Stalking phase before hunt | **90.0** | S | Psychological horror during previously safe daytime.... |
 | 12 | `IDEA-00346` | Presentation & Horror | Whisper name mechanic | **90.0** | S | Deeply personal horror moment. The monster knows you.... |
 | 13 | `IDEA-00492` | Monster & Threats | The Hollow knows you've played before | **90.0** | S | Meta-horror that acknowledges replay. The monster remembers ... |
-| 14 | `IDEA-01321` | Fire, Light, Darkness | System: Tending slow-burn peat briquettes (dense hardwood fuel log) Tier 6 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 15 | `IDEA-01327` | Fire, Light, Darkness | System: Crafting animal fat candle (peat moss briquette) Tier 7 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 16 | `IDEA-01333` | Fire, Light, Darkness | System: Fuel siphoning from abandoned truck (hanging perimeter kerosene lantern) Tier 8 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 17 | `IDEA-01339` | Fire, Light, Darkness | System: Extinguishing stray spark hazard (flint and steel striker) Tier 9 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 18 | `IDEA-01345` | Fire, Light, Darkness | System: Polishing reflective tin shield (magnesium emergency road flare) Tier 10 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 19 | `IDEA-01351` | Fire, Light, Darkness | System: Lighting kerosene storm lantern (dense hardwood fuel log) Tier 11 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 20 | `IDEA-01357` | Fire, Light, Darkness | System: Deploying magnesium flare stick (peat moss briquette) Tier 12 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 21 | `IDEA-01363` | Fire, Light, Darkness | System: Stoking hardwood logs (hanging perimeter kerosene lantern) Tier 13 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 22 | `IDEA-01369` | Fire, Light, Darkness | System: Kindling dry pine cones (flint and steel striker) Tier 14 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 23 | `IDEA-01375` | Fire, Light, Darkness | System: Maintaining ash insulating layer (magnesium emergency road flare) Tier 14 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 24 | `IDEA-01381` | Fire, Light, Darkness | System: Sheltering flame from gale gusts (dense hardwood fuel log) Tier 15 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 25 | `IDEA-01387` | Fire, Light, Darkness | System: Lighting defensive campfire flash (peat moss briquette) Tier 16 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 26 | `IDEA-01393` | Fire, Light, Darkness | System: Creating perimeter ember torches (hanging perimeter kerosene lantern) Tier 17 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 27 | `IDEA-01399` | Fire, Light, Darkness | System: Tending slow-burn peat briquettes (flint and steel striker) Tier 18 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 28 | `IDEA-01405` | Fire, Light, Darkness | System: Crafting animal fat candle (magnesium emergency road flare) Tier 19 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 29 | `IDEA-01411` | Fire, Light, Darkness | System: Fuel siphoning from abandoned truck (dense hardwood fuel log) Tier 20 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
-| 30 | `IDEA-01417` | Fire, Light, Darkness | System: Extinguishing stray spark hazard (peat moss briquette) Tier 21 | **90.0** | L | Significantly transforms light maintenance into an active ps... |
+| 14 | `IDEA-00021` | Core Gameplay | Flare gun signal | **89.0** | S | Creates a save-or-use decision. Emergency panic button.... |
+| 15 | `IDEA-00099` | Monster & Threats | Monster eye glow indicator | **89.0** | S | Elegant visual threat indicator. Players learn to watch for ... |
+| 16 | `IDEA-00120` | Monster & Threats | Challenge roar | **89.0** | S | Climactic moment that signals the final battle is coming.... |
+| 17 | `IDEA-00311` | Co-op & Social | Sacrifice mechanic | **89.0** | S | Heroic last-resort mechanic. Creates intense co-op moments.... |
+| 18 | `IDEA-00322` | Core Gameplay | Emergency barricade quick-build | **89.0** | S | Panic-button defense for emergencies. Consumes resources but... |
+| 19 | `IDEA-00324` | Monster & Threats | The Hollow's pause before attack | **89.0** | S | Skill-based survival against the monster. Learnable pattern.... |
+| 20 | `IDEA-00334` | Fire, Light, Darkness | Burning object as weapon | **89.0** | S | Active defense tool with very limited duration. Risk/reward.... |
+| 21 | `IDEA-00364` | Presentation & Horror | First-person death cam | **89.0** | S | Maximum horror impact at death. The face is the last thing y... |
+| 22 | `IDEA-00044` | Fire, Light, Darkness | Shadow puppet warning system | **87.0** | S | Beautiful visual warning system. The shadow arrives before t... |
+| 23 | `IDEA-00080` | Fire, Light, Darkness | Shadow creature decoys | **87.0** | M | Monster deception that increases psychological horror.... |
+| 24 | `IDEA-00081` | Monster & Threats | Sound mimicry | **87.0** | M | Psychological horror. Players can't trust what they hear.... |
+| 25 | `IDEA-00089` | Monster & Threats | Monster watching cutscene | **87.0** | M | Terrifying perspective shift. Players realize they've been o... |
+| 26 | `IDEA-00096` | Monster & Threats | Monster vocalization evolution | **87.0** | M | Escalating audio horror that becomes deeply personal.... |
+| 27 | `IDEA-00112` | Monster & Threats | Ceiling/above approach | **87.0** | M | New threat vector that makes players look UP.... |
+| 28 | `IDEA-00134` | Co-op & Social | Voice proximity chat | **87.0** | M | Separated players can't coordinate — increases tension drama... |
+| 29 | `IDEA-00183` | Campaign & Narrative | The Hollow origin flashback | **87.0** | M | Emotional payoff. The monster becomes sympathetic.... |
+| 30 | `IDEA-00306` | Fire, Light, Darkness | Controlled burn mechanic | **87.0** | M | High-cost tactical tool with permanent consequences.... |
 
 ---
 

@@ -14,8 +14,7 @@
 |------|--------|----------|
 | Game concept document | ✅ Complete | `Game.md` |
 | Task specification | ✅ Complete | `task.md` |
-| Documentation repository | ✅ Complete (60+ docs) | `docs/` |
-| 10,000-Idea Research Bank | ✅ Complete (10,000 records) | `docs/research/IDEA_CATALOG.csv` |
+| Idea Research Bank | ✅ Complete (500 distinct, deduplicated) | `docs/research/IDEA_CATALOG.csv` |
 | Top 10 Recommendations | ✅ Complete | `docs/research/TOP_10_RECOMMENDATIONS.md` |
 | Roblox Studio project | 🔄 Ready for Phase 0 | `Game/Place1.rbxl` |
 | Game code (Luau) | 🔄 Ready for Phase 0 | `Game/src/` |
