@@ -5,7 +5,7 @@
     Developed for Fluenosity Studio.
     
     Sequence:
-    1. Pure White Studio Splash ("A FLUENOSITY STUDIO PRODUCTION", ~2s)
+    1. Pure White Studio Splash ("A FLUENOSITY STUDIO PRODUCTION", ~2s target)
     2. Transition into Darkness (warm ember ignition & floating sparks)
     3. Cinematic Game Logo Reveal ("DON'T LET THE FIRE DIE")
     4. Interactive Main Menu (PLAY, SETTINGS, CREDITS)
@@ -14,8 +14,7 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local GuiService = game:GetService("GuiService")
-local RunService = game:GetService("RunService")
+local SoundService = game:GetService("SoundService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
@@ -23,6 +22,9 @@ local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
 local MenuTheme = require(script.Parent:WaitForChild("MenuTheme"))
 local EmberParticles = require(script.Parent:WaitForChild("EmberParticles"))
 local CampfireEmblem = require(script.Parent:WaitForChild("CampfireEmblem"))
+
+-- Initialize game audio routing to MasterSoundGroup
+MenuTheme.InitAudioRouting()
 
 --------------------------------------------------------------------------------
 -- STATE VARIABLES
@@ -32,7 +34,7 @@ local hasIntroCompleted = false
 local reducedMotionEnabled = false
 local currentMasterVolume = MenuTheme.GetMasterVolume()
 
--- Camera & Control references
+-- Camera reference
 local camera = workspace.CurrentCamera
 if not camera then
     camera = workspace:WaitForChild("Camera", 5) :: Camera
@@ -55,7 +57,7 @@ local function setCharacterControlsEnabled(enabled: boolean)
         end
     end)
 
-    -- Fallback safety for character humanoid
+    -- Fallback safety for humanoid movement
     local character = player.Character
     if character then
         local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -66,18 +68,36 @@ local function setCharacterControlsEnabled(enabled: boolean)
     end
 end
 
--- Lock camera and controls during menu initialization
+-- Lock camera and controls during menu sequence
 if camera then
     camera.CameraType = Enum.CameraType.Scriptable
 end
 setCharacterControlsEnabled(false)
+
+-- Ensure character spawning during menu remains controlled
+player.CharacterAdded:Connect(function(newCharacter)
+    if not hasIntroCompleted then
+        task.wait(0.1)
+        setCharacterControlsEnabled(false)
+        if camera then
+            camera.CameraType = Enum.CameraType.Scriptable
+        end
+    else
+        -- If player has already clicked play, camera attaches normally
+        local humanoid = newCharacter:WaitForChild("Humanoid", 3)
+        if humanoid and camera then
+            camera.CameraSubject = humanoid
+            camera.CameraType = Enum.CameraType.Custom
+        end
+    end
+end)
 
 --------------------------------------------------------------------------------
 -- ROOT SCREEN GUI CREATION
 --------------------------------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "DontLetTheFireDie_MenuGui"
-screenGui.ResetOnSpawn = false -- Crucial: Intro never restarts on player respawn
+screenGui.ResetOnSpawn = false -- Intro never restarts unexpectedly on respawn
 screenGui.IgnoreGuiInset = true -- True fullscreen aesthetic
 screenGui.DisplayOrder = 100
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -135,7 +155,7 @@ mainContent.BackgroundTransparency = 1
 mainContent.ZIndex = 5
 mainContent.Parent = screenGui
 
--- Safe-area padding constraint to preserve breathing room on mobile / safe areas
+-- Safe-area padding constraint for clean mobile notch & desktop presentation
 local contentPadding = Instance.new("UIPadding")
 contentPadding.PaddingTop = UDim.new(0.06, 0)
 contentPadding.PaddingBottom = UDim.new(0.06, 0)
@@ -143,13 +163,14 @@ contentPadding.PaddingLeft = UDim.new(0.05, 0)
 contentPadding.PaddingRight = UDim.new(0.05, 0)
 contentPadding.Parent = mainContent
 
--- Centered Container for Title & Logo
-local brandingContainer = Instance.new("Frame")
+-- Centered CanvasGroup for Title & Logo (Smooth unified alpha fade)
+local brandingContainer = Instance.new("CanvasGroup")
 brandingContainer.Name = "BrandingContainer"
-brandingContainer.Size = UDim2.new(0.9, 0, 0.45, 0)
+brandingContainer.Size = UDim2.new(0.9, 0, 0.44, 0)
 brandingContainer.Position = UDim2.fromScale(0.5, 0.48) -- Initial centered position for reveal
 brandingContainer.AnchorPoint = Vector2.new(0.5, 0.5)
 brandingContainer.BackgroundTransparency = 1
+brandingContainer.GroupTransparency = 1 -- Hidden initially until Phase 3
 brandingContainer.ZIndex = 6
 brandingContainer.Parent = mainContent
 
@@ -173,16 +194,15 @@ titleLabel.Font = MenuTheme.Fonts.Title
 titleLabel.Text = "DON'T LET THE FIRE DIE"
 titleLabel.TextColor3 = MenuTheme.Colors.TextPrimary
 titleLabel.TextSize = 34
-titleLabel.TextTransparency = 1
 titleLabel.TextStrokeColor3 = Color3.fromRGB(15, 8, 5)
-titleLabel.TextStrokeTransparency = 0.4
+titleLabel.TextStrokeTransparency = 0.35
 titleLabel.ZIndex = 7
 titleLabel.Parent = brandingContainer
 
 -- Responsive Title Size Constraint
 local titleSizeConstraint = Instance.new("UITextSizeConstraint")
 titleSizeConstraint.MaxTextSize = 38
-titleSizeConstraint.MinTextSize = 22
+titleSizeConstraint.MinTextSize = 20
 titleSizeConstraint.Parent = titleLabel
 
 -- Subtitle Tagline
@@ -194,7 +214,6 @@ subtitleLabel.Font = MenuTheme.Fonts.Sub
 subtitleLabel.Text = "S U R V I V A L   H O R R O R"
 subtitleLabel.TextColor3 = MenuTheme.Colors.FireHot
 subtitleLabel.TextSize = 13
-subtitleLabel.TextTransparency = 1
 subtitleLabel.ZIndex = 7
 subtitleLabel.Parent = brandingContainer
 
@@ -202,7 +221,7 @@ subtitleLabel.Parent = brandingContainer
 local buttonsContainer = Instance.new("Frame")
 buttonsContainer.Name = "ButtonsContainer"
 buttonsContainer.Size = UDim2.new(0, 260, 0, 210)
-buttonsContainer.Position = UDim2.fromScale(0.5, 0.76)
+buttonsContainer.Position = UDim2.fromScale(0.5, 0.78)
 buttonsContainer.AnchorPoint = Vector2.new(0.5, 0.5)
 buttonsContainer.BackgroundTransparency = 1
 buttonsContainer.Visible = false
@@ -216,7 +235,7 @@ buttonsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 buttonsLayout.Padding = UDim.new(0, 14)
 buttonsLayout.Parent = buttonsContainer
 
--- Footer Label
+-- Footer Watermark Label
 local footerLabel = Instance.new("TextLabel")
 footerLabel.Name = "FooterInfo"
 footerLabel.Size = UDim2.new(1, 0, 0, 20)
@@ -258,7 +277,7 @@ local function createMenuButton(text: string, isPrimary: boolean): (TextButton, 
     stroke.Transparency = 0.2
     stroke.Parent = button
 
-    -- Interactive Hover / Press Animations
+    -- Interactive Hover / Focus Animations
     button.MouseEnter:Connect(function()
         if isBusy then return end
         TweenService:Create(button, MenuTheme.Tweens.Fast, {
@@ -356,8 +375,8 @@ local function createModalFrame(name: string, size: UDim2): Frame
     local padding = Instance.new("UIPadding")
     padding.PaddingTop = UDim.new(0, 24)
     padding.PaddingBottom = UDim.new(0, 24)
-    padding.PaddingLeft = UDim.new(0, 28)
-    padding.PaddingRight = UDim.new(0, 28)
+    padding.PaddingLeft = UDim.new(0, 26)
+    padding.PaddingRight = UDim.new(0, 26)
     padding.Parent = frame
 
     return frame
@@ -525,15 +544,19 @@ local isDraggingSlider = false
 sliderTrack.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         isDraggingSlider = true
-        local relativeX = math.clamp((input.Position.X - sliderTrack.AbsolutePosition.X) / sliderTrack.AbsoluteSize.X, 0, 1)
-        updateVolume(relativeX)
+        if sliderTrack.AbsoluteSize.X > 0 then
+            local relativeX = math.clamp((input.Position.X - sliderTrack.AbsolutePosition.X) / sliderTrack.AbsoluteSize.X, 0, 1)
+            updateVolume(relativeX)
+        end
     end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
     if isDraggingSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local relativeX = math.clamp((input.Position.X - sliderTrack.AbsolutePosition.X) / sliderTrack.AbsoluteSize.X, 0, 1)
-        updateVolume(relativeX)
+        if sliderTrack.AbsoluteSize.X > 0 then
+            local relativeX = math.clamp((input.Position.X - sliderTrack.AbsolutePosition.X) / sliderTrack.AbsoluteSize.X, 0, 1)
+            updateVolume(relativeX)
+        end
     end
 end)
 
@@ -787,7 +810,6 @@ btnPlay.Activated:Connect(function()
     if isBusy then return end
     isBusy = true
 
-    -- Fade out interactive menu elements
     local fadeInfo = reducedMotionEnabled and MenuTheme.Tweens.Fast or MenuTheme.Tweens.Smooth
     
     local fadeTween = TweenService:Create(mainContent, fadeInfo, {
@@ -795,7 +817,11 @@ btnPlay.Activated:Connect(function()
     })
     fadeTween:Play()
 
-    -- Fade canvas groups / text
+    -- Fade canvas groups, text, frames, and strokes
+    TweenService:Create(brandingContainer, fadeInfo, {
+        GroupTransparency = 1,
+    }):Play()
+
     for _, obj in ipairs(mainContent:GetDescendants()) do
         if obj:IsA("TextLabel") or obj:IsA("TextButton") then
             TweenService:Create(obj, fadeInfo, { TextTransparency = 1 }):Play()
@@ -808,7 +834,7 @@ btnPlay.Activated:Connect(function()
         end
     end
 
-    -- Fade out background and ember system
+    -- Fade out background and stop ember particles
     TweenService:Create(backgroundContainer, fadeInfo, {
         BackgroundTransparency = 1,
     }):Play()
@@ -879,7 +905,7 @@ local function runCinematicIntro()
     studioTextConstraint.MinTextSize = 12
     studioTextConstraint.Parent = studioText
 
-    -- Timing: Fade in (0.5s), hold (~1.0s), fade out (0.5s) -> ~2.0s total
+    -- Timing: Fade in (0.5s), hold (~1.0s), fade out (0.5s) -> ~2.0s total target
     local fadeInText = TweenService:Create(studioText, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
         TextTransparency = 0,
     })
@@ -941,26 +967,17 @@ local function runCinematicIntro()
     ----------------------------------------------------------------------------
     -- PHASE 3: Game Logo & Title Reveal
     ----------------------------------------------------------------------------
-    -- Fade in Emblem
+    -- Smoothly reveal the branding container (emblem, title, subtitle)
     emblem.Root.Size = UDim2.fromOffset(100, 100)
-    local emblemReveal = TweenService:Create(emblem.Root, MenuTheme.Tweens.Smooth, {
+    TweenService:Create(emblem.Root, MenuTheme.Tweens.Smooth, {
         Size = UDim2.fromOffset(130, 130),
-    })
-    emblemReveal:Play()
+    }):Play()
 
-    -- Fade in Title text
-    local titleReveal = TweenService:Create(titleLabel, MenuTheme.Tweens.Normal, {
-        TextTransparency = 0,
-        TextStrokeTransparency = 0.3,
+    local brandingReveal = TweenService:Create(brandingContainer, MenuTheme.Tweens.Smooth, {
+        GroupTransparency = 0,
     })
-    titleReveal:Play()
-
-    -- Fade in Subtitle
-    task.wait(0.2)
-    local subReveal = TweenService:Create(subtitleLabel, MenuTheme.Tweens.Normal, {
-        TextTransparency = 0,
-    })
-    subReveal:Play()
+    brandingReveal:Play()
+    brandingReveal.Completed:Wait()
 
     task.wait(1.0)
 
