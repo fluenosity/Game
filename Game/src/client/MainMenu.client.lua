@@ -4,18 +4,22 @@
     Production-grade client intro sequence and interactive main menu for
     "Don't Let the Fire Die". Developed for Fluenosity Studio.
     
-    Architecture:
-    - Native vector rendering (NO CanvasGroup rasterization blur—100% crisp at 4K)
-    - Dynamic responsive Viewport UIScale controller (Desktop, Tablet, Mobile)
-    - Reusable UI component architecture via UIComponents & UITheme
-    - Seamless Unreal/Unity game lifecycle (Frontend menu -> server character spawn on Play)
-    - Fully accessible: Master Volume audio routing & Reduced Motion controls
+    Features:
+    - Pure Safe Area Architecture with GuiService:GetGuiInset() (Zero clipping on PC/Mobile)
+    - Fully responsive across desktop (1080p, 1440p, 4K), tablet, and phone screen ratios
+    - Image 2 Layout Reference:
+      * Left Header: Campfire Emblem + "DON'T LET THE FIRE DIE" + "THE NIGHT WILL CLAIM YOU"
+      * Left Navigation: PLAY (ON TOP with glowing amber rules), SETTINGS, CREDITS
+      * Bottom-Left: Co-op Party Slots (YOU + EMPTY [+] slots) perfectly within viewport
+      * Right Column: Stacked feature showcase cards (auto-adapted for small screens)
+    - Reusable Cinematic Loading Screen with bottom-right rotating ember spinner & survival tips
+    - Unreal/Unity Lifecycle: Server spawns character only on PLAY with smooth loading transition
 ]]
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local SoundService = game:GetService("SoundService")
+local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
@@ -30,21 +34,17 @@ local CampfireEmblem = require(script.Parent:WaitForChild("CampfireEmblem"))
 UITheme.InitAudioRouting()
 
 --------------------------------------------------------------------------------
--- STATE MACHINE
+-- STATE MACHINE & CAMERA LOCK
 --------------------------------------------------------------------------------
 local isBusy = false
 local hasIntroCompleted = false
 local reducedMotionEnabled = false
 
--- Camera reference
 local camera = workspace.CurrentCamera
 if not camera then
     camera = workspace:WaitForChild("Camera", 5) :: Camera
 end
 
---------------------------------------------------------------------------------
--- PLAYER CONTROLS HELPER
---------------------------------------------------------------------------------
 local function setCharacterControlsEnabled(enabled: boolean)
     pcall(function()
         local playerScripts = player:WaitForChild("PlayerScripts", 3)
@@ -69,7 +69,6 @@ local function setCharacterControlsEnabled(enabled: boolean)
     end
 end
 
--- Lock camera and controls during frontend menu state
 if camera then
     camera.CameraType = Enum.CameraType.Scriptable
 end
@@ -86,35 +85,8 @@ screenGui.DisplayOrder = 100
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = playerGui
 
--- Master Responsive Scaler Container
-local responsiveContainer = Instance.new("Frame")
-responsiveContainer.Name = "ResponsiveContainer"
-responsiveContainer.Size = UDim2.fromScale(1, 1)
-responsiveContainer.Position = UDim2.fromScale(0, 0)
-responsiveContainer.BackgroundTransparency = 1
-responsiveContainer.Parent = screenGui
-
-local uiScale = Instance.new("UIScale")
-uiScale.Parent = responsiveContainer
-
-local function updateResponsiveScale()
-    if not camera then return end
-    local viewport = camera.ViewportSize
-    if viewport.X == 0 or viewport.Y == 0 then return end
-    -- Reference resolution: 1280x720. Auto-scale smoothly for 4K down to phone screens
-    local scaleX = viewport.X / 1280
-    local scaleY = viewport.Y / 720
-    local scale = math.clamp(math.min(scaleX, scaleY), 0.70, 1.25)
-    uiScale.Scale = scale
-end
-
-updateResponsiveScale()
-if camera then
-    camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsiveScale)
-end
-
 --------------------------------------------------------------------------------
--- ATMOSPHERIC BACKGROUND & EMBER PARTICLES
+-- ATMOSPHERIC BACKGROUND & DRIFTING EMBERS
 --------------------------------------------------------------------------------
 local background = Instance.new("Frame")
 background.Name = "Background"
@@ -122,9 +94,9 @@ background.Size = UDim2.fromScale(1, 1)
 background.BackgroundColor3 = UITheme.Colors.Void
 background.BorderSizePixel = 0
 background.ZIndex = 1
-background.Parent = responsiveContainer
+background.Parent = screenGui
 
--- Ambient warm firelight radial gradient at center-bottom
+-- Ambient warm firelight radial gradient (biased to left where fire burns)
 local ambientFirelight = Instance.new("Frame")
 ambientFirelight.Name = "AmbientFirelight"
 ambientFirelight.Size = UDim2.fromScale(1, 1)
@@ -136,135 +108,302 @@ ambientFirelight.ZIndex = 2
 local fireGrad = Instance.new("UIGradient")
 fireGrad.Color = ColorSequence.new({
     ColorSequenceKeypoint.new(0, UITheme.Colors.EmberHot),
-    ColorSequenceKeypoint.new(0.65, UITheme.Colors.EmberCrimson),
+    ColorSequenceKeypoint.new(0.5, UITheme.Colors.EmberCrimson),
     ColorSequenceKeypoint.new(1, UITheme.Colors.Void),
 })
 fireGrad.Transparency = NumberSequence.new({
-    NumberSequenceKeypoint.new(0, 0.82),
-    NumberSequenceKeypoint.new(0.65, 0.94),
+    NumberSequenceKeypoint.new(0, 0.76),
+    NumberSequenceKeypoint.new(0.6, 0.92),
     NumberSequenceKeypoint.new(1, 1),
 })
-fireGrad.Rotation = 90
+fireGrad.Rotation = 45
 fireGrad.Parent = ambientFirelight
 ambientFirelight.Parent = background
 
--- Floating embers particle system
+-- Vignette Border Shadow
+local vignette = Instance.new("Frame")
+vignette.Name = "Vignette"
+vignette.Size = UDim2.fromScale(1, 1)
+vignette.BackgroundColor3 = UITheme.Colors.PureBlack
+vignette.BackgroundTransparency = 0.8
+vignette.BorderSizePixel = 0
+vignette.ZIndex = 3
+
+local vigGrad = Instance.new("UIGradient")
+vigGrad.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0, 0.3),
+    NumberSequenceKeypoint.new(0.8, 0.85),
+    NumberSequenceKeypoint.new(1, 1),
+})
+vigGrad.Parent = vignette
+vignette.Parent = background
+
 local emberSystem = EmberParticles.new(background)
 
 --------------------------------------------------------------------------------
--- MAIN CONTENT CONTAINER
+-- TRUE SAFE AREA CONTAINER (Guarantees zero overlap with topbar or screen edges)
 --------------------------------------------------------------------------------
-local mainContent = Instance.new("Frame")
-mainContent.Name = "MainContent"
-mainContent.Size = UDim2.fromScale(1, 1)
-mainContent.Position = UDim2.fromScale(0.5, 0.5)
-mainContent.AnchorPoint = Vector2.new(0.5, 0.5)
-mainContent.BackgroundTransparency = 1
-mainContent.ZIndex = 5
-mainContent.Parent = responsiveContainer
+local safeArea = Instance.new("Frame")
+safeArea.Name = "SafeArea"
+safeArea.Size = UDim2.fromScale(1, 1)
+safeArea.Position = UDim2.fromScale(0, 0)
+safeArea.BackgroundTransparency = 1
+safeArea.ZIndex = 5
+safeArea.Parent = screenGui
 
---------------------------------------------------------------------------------
--- BRANDING: LOGO & TITLE (Native Vector Primitives—Zero CanvasGroup Blur)
---------------------------------------------------------------------------------
-local brandingGroup = Instance.new("Frame")
-brandingGroup.Name = "BrandingGroup"
-brandingGroup.Size = UDim2.new(0, 600, 0, 240)
-brandingGroup.Position = UDim2.fromScale(0.5, 0.48) -- Initial centered position for reveal
-brandingGroup.AnchorPoint = Vector2.new(0.5, 0.5)
-brandingGroup.BackgroundTransparency = 1
-brandingGroup.Visible = false
-brandingGroup.ZIndex = 6
-brandingGroup.Parent = mainContent
-
-local brandingLayout = Instance.new("UIListLayout")
-brandingLayout.FillDirection = Enum.FillDirection.Vertical
-brandingLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-brandingLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-brandingLayout.Padding = UDim.new(0, 12)
-brandingLayout.Parent = brandingGroup
-
--- Native Sharp Campfire Emblem
-local emblem = CampfireEmblem.new(UDim2.fromOffset(130, 130))
-emblem.Root.Parent = brandingGroup
-
--- Title Text: DON'T LET THE FIRE DIE (100% Vector Crispness)
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Name = "Title"
-titleLabel.Size = UDim2.new(1, 0, 0, 46)
-titleLabel.BackgroundTransparency = 1
-titleLabel.Font = UITheme.Fonts.Title
-titleLabel.Text = "DON'T LET THE FIRE DIE"
-titleLabel.TextColor3 = UITheme.Colors.TextPrimary
-titleLabel.TextSize = 34
-titleLabel.TextTransparency = 1
-titleLabel.TextStrokeColor3 = Color3.fromRGB(16, 10, 8)
-titleLabel.TextStrokeTransparency = 0.35
-titleLabel.ZIndex = 7
-titleLabel.Parent = brandingGroup
-
-local titleConstraint = Instance.new("UITextSizeConstraint")
-titleConstraint.MaxTextSize = 36
-titleConstraint.MinTextSize = 22
-titleConstraint.Parent = titleLabel
-
--- Subtitle Tagline
-local subtitleLabel = Instance.new("TextLabel")
-subtitleLabel.Name = "Subtitle"
-subtitleLabel.Size = UDim2.new(1, 0, 0, 18)
-subtitleLabel.BackgroundTransparency = 1
-subtitleLabel.Font = UITheme.Fonts.Subheading
-subtitleLabel.Text = "[ S U R V I V A L   H O R R O R   •   F L U E N O S I T Y   S T U D I O ]"
-subtitleLabel.TextColor3 = UITheme.Colors.EmberHot
-subtitleLabel.TextSize = 12
-subtitleLabel.TextTransparency = 1
-subtitleLabel.ZIndex = 7
-subtitleLabel.Parent = brandingGroup
+local safePadding = Instance.new("UIPadding")
+safePadding.Parent = safeArea
 
 --------------------------------------------------------------------------------
--- MENU BUTTONS CONTAINER
+-- LEFT AREA: HEROIC TITLE, NAVIGATION (PLAY ON TOP) & PARTY SLOTS
 --------------------------------------------------------------------------------
-local buttonsContainer = Instance.new("Frame")
-buttonsContainer.Name = "ButtonsContainer"
-buttonsContainer.Size = UDim2.new(0, 290, 0, 210)
-buttonsContainer.Position = UDim2.fromScale(0.5, 0.76)
-buttonsContainer.AnchorPoint = Vector2.new(0.5, 0.5)
-buttonsContainer.BackgroundTransparency = 1
-buttonsContainer.Visible = false
-buttonsContainer.ZIndex = 8
-buttonsContainer.Parent = mainContent
+local leftArea = Instance.new("Frame")
+leftArea.Name = "LeftArea"
+leftArea.Size = UDim2.new(0.52, 0, 1, 0)
+leftArea.Position = UDim2.new(0, 0, 0, 0)
+leftArea.AnchorPoint = Vector2.new(0, 0)
+leftArea.BackgroundTransparency = 1
+leftArea.Visible = false
+leftArea.ZIndex = 6
+leftArea.Parent = safeArea
 
-local buttonsLayout = Instance.new("UIListLayout")
-buttonsLayout.FillDirection = Enum.FillDirection.Vertical
-buttonsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-buttonsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-buttonsLayout.Padding = UDim.new(0, 12)
-buttonsLayout.Parent = buttonsContainer
+-- 1. Top Branding Group (Emblem + Title + Subtitle)
+local brandingHeader = Instance.new("Frame")
+brandingHeader.Name = "BrandingHeader"
+brandingHeader.Size = UDim2.new(1, 0, 0, 100)
+brandingHeader.Position = UDim2.new(0, 0, 0, 0)
+brandingHeader.BackgroundTransparency = 1
+brandingHeader.ZIndex = 7
+brandingHeader.Parent = leftArea
 
--- Footer Watermark
-local footer = Instance.new("TextLabel")
-footer.Name = "Footer"
-footer.Size = UDim2.new(1, 0, 0, 20)
-footer.Position = UDim2.fromScale(0.5, 0.97)
-footer.AnchorPoint = Vector2.new(0.5, 1)
-footer.BackgroundTransparency = 1
-footer.Font = UITheme.Fonts.Tag
-footer.Text = "DON'T LET THE FIRE DIE • v0.1.0-ALPHA • ENGINE: ROBLOX LUAU • ROJO 7.7.1"
-footer.TextColor3 = UITheme.Colors.TextSubdued
-footer.TextSize = 10
-footer.TextTransparency = 1
-footer.ZIndex = 6
-footer.Parent = mainContent
+-- Campfire Emblem
+local emblem = CampfireEmblem.new(UDim2.fromOffset(80, 80))
+emblem.Root.Position = UDim2.new(0, 40, 0, 40)
+emblem.Root.AnchorPoint = Vector2.new(0.5, 0.5)
+emblem.Root.Parent = brandingHeader
+
+-- Title & Subtitle next to Emblem
+local titleContainer = Instance.new("Frame")
+titleContainer.Name = "TitleContainer"
+titleContainer.Size = UDim2.new(1, -95, 1, 0)
+titleContainer.Position = UDim2.new(0, 95, 0, 0)
+titleContainer.BackgroundTransparency = 1
+titleContainer.ZIndex = 7
+titleContainer.Parent = brandingHeader
+
+local titleLayout = Instance.new("UIListLayout")
+titleLayout.FillDirection = Enum.FillDirection.Vertical
+titleLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+titleLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+titleLayout.Padding = UDim.new(0, 2)
+titleLayout.Parent = titleContainer
+
+local mainTitle = Instance.new("TextLabel")
+mainTitle.Name = "MainTitle"
+mainTitle.Size = UDim2.new(1, 0, 0, 36)
+mainTitle.BackgroundTransparency = 1
+mainTitle.Font = UITheme.Fonts.Heading
+mainTitle.Text = "DON'T LET THE FIRE DIE"
+mainTitle.TextColor3 = UITheme.Colors.TextPrimary
+mainTitle.TextScaled = true
+mainTitle.TextWrapped = true
+mainTitle.TextSize = 25
+mainTitle.TextXAlignment = Enum.TextXAlignment.Left
+mainTitle.TextStrokeColor3 = Color3.fromRGB(15, 8, 6)
+mainTitle.TextStrokeTransparency = 0.25
+mainTitle.ZIndex = 8
+mainTitle.Parent = titleContainer
+
+local mainTitleConstraint = Instance.new("UITextSizeConstraint")
+mainTitleConstraint.MaxTextSize = 28
+mainTitleConstraint.MinTextSize = 16
+mainTitleConstraint.Parent = mainTitle
+
+local subTitle = Instance.new("TextLabel")
+subTitle.Name = "SubTitle"
+subTitle.Size = UDim2.new(1, 0, 0, 18)
+subTitle.BackgroundTransparency = 1
+subTitle.Font = UITheme.Fonts.Heading
+subTitle.Text = '"THE NIGHT WILL CLAIM YOU"'
+subTitle.TextColor3 = UITheme.Colors.EmberCrimson
+subTitle.TextSize = 13
+subTitle.TextXAlignment = Enum.TextXAlignment.Left
+subTitle.TextStrokeColor3 = Color3.fromRGB(12, 6, 6)
+subTitle.TextStrokeTransparency = 0.3
+subTitle.ZIndex = 8
+subTitle.Parent = titleContainer
+
+-- 2. Middle Navigation Actions Container
+local navContainer = Instance.new("Frame")
+navContainer.Name = "NavContainer"
+navContainer.Size = UDim2.new(0, 300, 0, 190)
+navContainer.Position = UDim2.new(0, 6, 0.46, 0)
+navContainer.AnchorPoint = Vector2.new(0, 0.5)
+navContainer.BackgroundTransparency = 1
+navContainer.ZIndex = 9
+navContainer.Parent = leftArea
+
+local navLayout = Instance.new("UIListLayout")
+navLayout.FillDirection = Enum.FillDirection.Vertical
+navLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+navLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+navLayout.SortOrder = Enum.SortOrder.LayoutOrder -- CRITICAL: Strict LayoutOrder so PLAY is on top!
+navLayout.Padding = UDim.new(0, 14)
+navLayout.Parent = navContainer
+
+-- 3. Bottom-Left Party / Co-op Slots (Anchored to exact bottom of LeftArea)
+local partyContainer = Instance.new("Frame")
+partyContainer.Name = "PartyContainer"
+partyContainer.Size = UDim2.new(1, 0, 0, 70)
+partyContainer.Position = UDim2.new(0, 0, 1, 0)
+partyContainer.AnchorPoint = Vector2.new(0, 1) -- Anchored at bottom!
+partyContainer.BackgroundTransparency = 1
+partyContainer.ZIndex = 14
+partyContainer.Parent = leftArea
+
+local partyLayout = Instance.new("UIListLayout")
+partyLayout.FillDirection = Enum.FillDirection.Horizontal
+partyLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+partyLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+partyLayout.Padding = UDim.new(0, 12)
+partyLayout.Parent = partyContainer
+
+-- Slot 1: YOU (Player Avatar)
+UIComponents.CreatePartySlot({
+    Index = 1,
+    IsPlayer = true,
+    Player = player,
+    Parent = partyContainer,
+})
+
+-- Slots 2, 3, 4: EMPTY [+] Slots
+for i = 2, 4 do
+    UIComponents.CreatePartySlot({
+        Index = i,
+        IsPlayer = false,
+        Player = nil,
+        Parent = partyContainer,
+    })
+end
+
+--------------------------------------------------------------------------------
+-- RIGHT AREA: SHOWCASE / ANNOUNCEMENT CARDS (Image 2 Style)
+--------------------------------------------------------------------------------
+local rightArea = Instance.new("Frame")
+rightArea.Name = "RightArea"
+rightArea.Size = UDim2.new(0, 340, 0, 370)
+rightArea.Position = UDim2.new(1, 0, 0.5, 0)
+rightArea.AnchorPoint = Vector2.new(1, 0.5) -- Anchored at right edge of safe area!
+rightArea.BackgroundTransparency = 1
+rightArea.Visible = false
+rightArea.ZIndex = 14
+rightArea.Parent = safeArea
+
+local rightLayout = Instance.new("UIListLayout")
+rightLayout.FillDirection = Enum.FillDirection.Vertical
+rightLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+rightLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+rightLayout.Padding = UDim.new(0, 16)
+rightLayout.Parent = rightArea
+
+-- Card 1: Official Release / Day 0 Prologue
+UIComponents.CreateFeatureCard({
+    Title = "DAY 0: THE LONG NIGHT",
+    Subtitle = "Survive the blizzard. Keep the fire burning.",
+    BadgeText = "ALPHA RELEASE",
+    BannerGradientColors = {
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(48, 22, 16)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(86, 38, 22)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(18, 14, 20)),
+    },
+    Parent = rightArea,
+})
+
+-- Card 2: The Hollow Monster Stalker Lore
+UIComponents.CreateFeatureCard({
+    Title = "BEWARE THE HOLLOW",
+    Subtitle = "When light fades, the shadows hunt.",
+    BadgeText = "SURVIVAL INTEL",
+    BannerGradientColors = {
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(22, 16, 28)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(38, 22, 32)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 10, 14)),
+    },
+    Parent = rightArea,
+})
+
+--------------------------------------------------------------------------------
+-- PRODUCTION-GRADE RESPONSIVE ADAPTATION ENGINE
+--------------------------------------------------------------------------------
+local function updateLayoutResponsiveness()
+    if not camera then return end
+    local viewport = camera.ViewportSize
+    if viewport.X == 0 or viewport.Y == 0 then return end
+
+    local topInset, bottomInset = GuiService:GetGuiInset()
+    local sidePad = math.clamp(math.round(viewport.X * 0.04), 24, 52)
+    local topPad = math.max(topInset.Y, 44) + 14
+    local botPad = math.max(bottomInset.Y, 16) + 16
+
+    safePadding.PaddingTop = UDim.new(0, topPad)
+    safePadding.PaddingBottom = UDim.new(0, botPad)
+    safePadding.PaddingLeft = UDim.new(0, sidePad)
+    safePadding.PaddingRight = UDim.new(0, sidePad)
+
+    -- Dynamic vertical adapting for short screens (laptops / mobile landscape)
+    if viewport.Y < 580 then
+        brandingHeader.Size = UDim2.new(1, 0, 0, 75)
+        emblem.Root.Size = UDim2.fromOffset(60, 60)
+        emblem.Root.Position = UDim2.new(0, 30, 0, 30)
+        titleContainer.Position = UDim2.new(0, 75, 0, 0)
+        mainTitle.TextSize = 20
+        subTitle.TextSize = 11
+        partyContainer.Size = UDim2.new(1, 0, 0, 56)
+        navContainer.Size = UDim2.new(0, 260, 0, 160)
+        rightArea.Size = UDim2.new(0, 290, 0, 310)
+    else
+        brandingHeader.Size = UDim2.new(1, 0, 0, 100)
+        emblem.Root.Size = UDim2.fromOffset(80, 80)
+        emblem.Root.Position = UDim2.new(0, 40, 0, 40)
+        titleContainer.Position = UDim2.new(0, 95, 0, 0)
+        mainTitle.TextSize = 25
+        subTitle.TextSize = 13
+        partyContainer.Size = UDim2.new(1, 0, 0, 70)
+        navContainer.Size = UDim2.new(0, 300, 0, 190)
+        rightArea.Size = UDim2.new(0, 340, 0, 370)
+    end
+
+    -- Width adapting (Hide right column on narrow/phone screens < 820px)
+    if viewport.X < 820 then
+        rightArea.Visible = false
+        leftArea.Size = UDim2.new(1, 0, 1, 0)
+    else
+        if hasIntroCompleted then
+            rightArea.Visible = true
+        end
+        leftArea.Size = UDim2.new(0.52, 0, 1, 0)
+    end
+end
+
+updateLayoutResponsiveness()
+if camera then
+    camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateLayoutResponsiveness)
+end
+
+--------------------------------------------------------------------------------
+-- REUSABLE CINEMATIC LOADING SCREEN COMPONENT
+--------------------------------------------------------------------------------
+local loadingScreen = UIComponents.CreateLoadingScreen(screenGui)
 
 --------------------------------------------------------------------------------
 -- MODALS (SETTINGS & CREDITS)
 --------------------------------------------------------------------------------
--- 1. SETTINGS MODAL
 local settingsModal = UIComponents.CreateModal({
     Title = "SETTINGS",
     CategoryTag = "[ CONFIGURATION ]",
-    Width = 430,
+    Width = 440,
     Height = 390,
-    Parent = responsiveContainer,
+    Parent = screenGui,
 })
 
 local settingsLayout = Instance.new("UIListLayout")
@@ -273,7 +412,6 @@ settingsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 settingsLayout.Padding = UDim.new(0, 18)
 settingsLayout.Parent = settingsModal.Content
 
--- Master Volume Slider
 UIComponents.CreateSlider({
     Label = "MASTER VOLUME",
     Description = "Controls game-wide sound effects & ambience",
@@ -284,10 +422,8 @@ UIComponents.CreateSlider({
     end,
 })
 
--- Hairline Divider
 UIComponents.CreateDivider(settingsModal.Content)
 
--- Reduced Motion Toggle
 UIComponents.CreateToggle({
     Label = "REDUCED MOTION",
     Description = "Disables background embers & breathing animations",
@@ -300,13 +436,12 @@ UIComponents.CreateToggle({
     end,
 })
 
--- 2. CREDITS MODAL
 local creditsModal = UIComponents.CreateModal({
     Title = "CREDITS",
     CategoryTag = "[ PRODUCTION TEAM ]",
     Width = 450,
     Height = 410,
-    Parent = responsiveContainer,
+    Parent = screenGui,
 })
 
 local creditsLayout = Instance.new("UIListLayout")
@@ -319,7 +454,7 @@ local function addCreditItem(role: string, name: string, isAccent: boolean)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 36)
     row.BackgroundTransparency = 1
-    row.ZIndex = 34
+    row.ZIndex = 44
     row.Parent = creditsModal.Content
 
     local roleLbl = Instance.new("TextLabel")
@@ -330,7 +465,7 @@ local function addCreditItem(role: string, name: string, isAccent: boolean)
     roleLbl.TextColor3 = UITheme.Colors.TextMuted
     roleLbl.TextSize = 10
     roleLbl.TextXAlignment = Enum.TextXAlignment.Left
-    roleLbl.ZIndex = 34
+    roleLbl.ZIndex = 44
     roleLbl.Parent = row
 
     local nameLbl = Instance.new("TextLabel")
@@ -342,7 +477,7 @@ local function addCreditItem(role: string, name: string, isAccent: boolean)
     nameLbl.TextColor3 = isAccent and UITheme.Colors.EmberHot or UITheme.Colors.TextPrimary
     nameLbl.TextSize = isAccent and 15 or 14
     nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-    nameLbl.ZIndex = 34
+    nameLbl.ZIndex = 44
     nameLbl.Parent = row
 end
 
@@ -356,7 +491,7 @@ local quoteBox = Instance.new("Frame")
 quoteBox.Size = UDim2.new(1, 0, 0, 36)
 quoteBox.BackgroundColor3 = UITheme.Colors.Surface
 quoteBox.BorderSizePixel = 0
-quoteBox.ZIndex = 34
+quoteBox.ZIndex = 44
 quoteBox.Parent = creditsModal.Content
 
 local quoteCorner = Instance.new("UICorner")
@@ -372,55 +507,52 @@ quoteText.Font = UITheme.Fonts.Body
 quoteText.Text = '"The night is long. Never turn your back on the fire."'
 quoteText.TextColor3 = UITheme.Colors.EmberHot
 quoteText.TextSize = 11
-quoteText.ZIndex = 35
+quoteText.ZIndex = 45
 quoteText.Parent = quoteBox
 
 --------------------------------------------------------------------------------
--- INTERACTIVE BUTTONS
+-- INTERACTIVE NAV ACTIONS (ORDER: 1. PLAY, 2. SETTINGS, 3. CREDITS)
 --------------------------------------------------------------------------------
--- 1. PLAY BUTTON (Primary Action)
-UIComponents.CreateButton({
+-- 1. PLAY Action (ON TOP with LayoutOrder = 1)
+UIComponents.CreateNavAction({
     Text = "PLAY",
-    Subtext = "ENTER THE CABIN",
-    Width = 280,
-    Height = 54,
     IsPrimary = true,
-    Parent = buttonsContainer,
+    LayoutOrder = 1, -- Strictly on top!
+    Parent = navContainer,
     OnClick = function()
         if isBusy then return end
         isBusy = true
 
-        local fadeTime = reducedMotionEnabled and 0.25 or 0.5
+        local fadeTime = reducedMotionEnabled and 0.25 or 0.4
         local fadeInfo = TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
-        -- Fade out branding & buttons
-        TweenService:Create(titleLabel, fadeInfo, { TextTransparency = 1 }):Play()
-        TweenService:Create(subtitleLabel, fadeInfo, { TextTransparency = 1 }):Play()
-        TweenService:Create(footer, fadeInfo, { TextTransparency = 1 }):Play()
-        emblem:AnimateFade(1, fadeInfo)
+        -- 1. Smoothly fade out menu navigation & columns
+        local leftSlide = TweenService:Create(leftArea, fadeInfo, {
+            Position = UDim2.new(-0.06, 0, 0, 0),
+        })
+        local rightSlide = TweenService:Create(rightArea, fadeInfo, {
+            Position = UDim2.new(1.06, 0, 0.5, 0),
+        })
+        leftSlide:Play()
+        rightSlide:Play()
 
-        for _, btn in ipairs(buttonsContainer:GetChildren()) do
-            if btn:IsA("GuiObject") then
-                for _, desc in ipairs(btn:GetDescendants()) do
-                    if desc:IsA("TextLabel") then
-                        TweenService:Create(desc, fadeInfo, { TextTransparency = 1 }):Play()
-                    elseif desc:IsA("UIStroke") then
-                        TweenService:Create(desc, fadeInfo, { Transparency = 1 }):Play()
-                    elseif desc:IsA("Frame") or desc:IsA("TextButton") then
-                        TweenService:Create(desc, fadeInfo, { BackgroundTransparency = 1 }):Play()
-                    end
-                end
+        for _, desc in ipairs(safeArea:GetDescendants()) do
+            if desc:IsA("TextLabel") then
+                TweenService:Create(desc, fadeInfo, { TextTransparency = 1 }):Play()
+            elseif desc:IsA("UIStroke") then
+                TweenService:Create(desc, fadeInfo, { Transparency = 1 }):Play()
+            elseif desc:IsA("Frame") or desc:IsA("TextButton") then
+                TweenService:Create(desc, fadeInfo, { BackgroundTransparency = 1 }):Play()
             end
         end
 
-        -- Fade out atmospheric background
-        local bgFade = TweenService:Create(background, fadeInfo, { BackgroundTransparency = 1 })
-        TweenService:Create(ambientFirelight, fadeInfo, { BackgroundTransparency = 1 }):Play()
-        bgFade:Play()
+        -- 2. Fade in Cinematic Loading Screen with Bottom-Right Spinner & Survival Tip
+        loadingScreen.Show({
+            Status = "CONNECTING TO FOREST SECTOR...",
+            Tip = "The campfire is your only safe haven. When it dies, the forest takes you.",
+        })
 
-        emberSystem:Stop()
-
-        -- Signal server to spawn player character into the world
+        -- 3. Request server to spawn character into the world
         local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared", 3)
         if sharedFolder then
             local spawnEvent = sharedFolder:WaitForChild("RequestSpawnCharacter", 3) :: RemoteEvent?
@@ -429,60 +561,66 @@ UIComponents.CreateButton({
             end
         end
 
-        bgFade.Completed:Connect(function()
-            -- Wait for character to spawn
+        task.spawn(function()
+            -- Wait for character to spawn & physics to settle
             local character = player.Character
             if not character then
                 character = player.CharacterAdded:Wait()
             end
 
             local humanoid = character:WaitForChild("Humanoid", 10) :: Humanoid?
+            local rootPart = character:WaitForChild("HumanoidRootPart", 10)
 
-            if camera then
+            -- Update loading spinner status
+            loadingScreen.SetStatus("WARMING CABIN...")
+
+            -- Attach camera to character
+            if camera and humanoid then
                 camera.CameraType = Enum.CameraType.Custom
-                if humanoid then
-                    camera.CameraSubject = humanoid
-                end
+                camera.CameraSubject = humanoid
             end
 
+            -- Allow world streaming to settle
+            task.wait(0.6)
+
+            -- Enable player controls
             setCharacterControlsEnabled(true)
             hasIntroCompleted = true
 
-            emberSystem:Destroy()
-            emblem:Destroy()
-            screenGui:Destroy()
+            -- Smoothly dissolve loading screen to reveal the world
+            loadingScreen.Hide(function()
+                emberSystem:Destroy()
+                emblem:Destroy()
+                screenGui:Destroy()
+            end)
         end)
     end,
 })
 
--- 2. SETTINGS BUTTON
-UIComponents.CreateButton({
+-- 2. SETTINGS Action (LayoutOrder = 2)
+UIComponents.CreateNavAction({
     Text = "SETTINGS",
-    Subtext = "AUDIO & ACCESSIBILITY",
-    Width = 280,
-    Height = 50,
     IsPrimary = false,
-    Parent = buttonsContainer,
+    LayoutOrder = 2, -- Second
+    Parent = navContainer,
     OnClick = function()
         settingsModal.Open()
     end,
 })
 
--- 3. CREDITS BUTTON
-UIComponents.CreateButton({
+-- 3. CREDITS Action (LayoutOrder = 3)
+UIComponents.CreateNavAction({
     Text = "CREDITS",
-    Subtext = "DEVELOPMENT TEAM",
-    Width = 280,
-    Height = 50,
     IsPrimary = false,
-    Parent = buttonsContainer,
+    LayoutOrder = 3, -- Third
+    Parent = navContainer,
     OnClick = function()
         creditsModal.Open()
     end,
 })
 
 --------------------------------------------------------------------------------
--- CINEMATIC INTRO SEQUENCE (SPLASH -> DARKNESS -> EMBERS -> LOGO -> MENU)
+-- CINEMATIC INTRO SEQUENCE (SPLASH -> DARKNESS -> EMBERS -> REVEAL)
 --------------------------------------------------------------------------------
 local function runCinematicIntro()
     isBusy = true
@@ -507,6 +645,8 @@ local function runCinematicIntro()
     studioTitle.Font = UITheme.Fonts.Studio
     studioTitle.Text = "A  F L U E N O S I T Y   S T U D I O   P R O D U C T I O N"
     studioTitle.TextColor3 = UITheme.Colors.TextStudioSplash
+    studioTitle.TextScaled = true
+    studioTitle.TextWrapped = true
     studioTitle.TextSize = 18
     studioTitle.TextTransparency = 1
     studioTitle.ZIndex = 61
@@ -514,10 +654,9 @@ local function runCinematicIntro()
 
     local studioConstraint = Instance.new("UITextSizeConstraint")
     studioConstraint.MaxTextSize = 20
-    studioConstraint.MinTextSize = 13
+    studioConstraint.MinTextSize = 12
     studioConstraint.Parent = studioTitle
 
-    -- Fade in text
     local fadeInText = TweenService:Create(studioTitle, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
         TextTransparency = 0,
     })
@@ -526,7 +665,6 @@ local function runCinematicIntro()
 
     task.wait(1.0)
 
-    -- Fade out text
     local fadeOutText = TweenService:Create(studioTitle, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
         TextTransparency = 1,
     })
@@ -543,7 +681,6 @@ local function runCinematicIntro()
     darkTransition.Completed:Wait()
     splashScreen:Destroy()
 
-    -- Center ember spark ignition
     local sparkIgnition = Instance.new("Frame")
     sparkIgnition.Name = "SparkIgnition"
     sparkIgnition.Size = UDim2.fromOffset(4, 4)
@@ -576,51 +713,44 @@ local function runCinematicIntro()
     sparkIgnition:Destroy()
 
     ----------------------------------------------------------------------------
-    -- PHASE 3: Crisp Logo & Title Reveal
+    -- PHASE 3: Center Reveal
     ----------------------------------------------------------------------------
-    brandingGroup.Visible = true
-    brandingGroup.Position = UDim2.fromScale(0.5, 0.48)
+    leftArea.Visible = true
+    leftArea.Position = UDim2.new(0.25, 0, 0, 0)
+    
     emblem:SetTransparency(1)
-
     emblem:AnimateFade(0, UITheme.Tweens.Smooth)
 
-    TweenService:Create(titleLabel, UITheme.Tweens.Normal, {
-        TextTransparency = 0,
-    }):Play()
+    mainTitle.TextTransparency = 1
+    subTitle.TextTransparency = 1
 
+    TweenService:Create(mainTitle, UITheme.Tweens.Normal, { TextTransparency = 0 }):Play()
     task.wait(0.15)
-    TweenService:Create(subtitleLabel, UITheme.Tweens.Normal, {
-        TextTransparency = 0,
-    }):Play()
+    TweenService:Create(subTitle, UITheme.Tweens.Normal, { TextTransparency = 0 }):Play()
 
-    task.wait(1.1)
+    task.wait(0.9)
 
     ----------------------------------------------------------------------------
-    -- PHASE 4: Transition to Interactive Main Menu
+    -- PHASE 4: Glide into Safe Layout Position
     ----------------------------------------------------------------------------
-    -- Glide branding smoothly to top header position
-    local brandShift = TweenService:Create(brandingGroup, UITheme.Tweens.Smooth, {
-        Position = UDim2.fromScale(0.5, 0.33),
+    local leftGlide = TweenService:Create(leftArea, UITheme.Tweens.Smooth, {
+        Position = UDim2.new(0, 0, 0, 0),
     })
-    brandShift:Play()
+    leftGlide:Play()
 
     task.wait(0.2)
 
-    -- Present Buttons Container with upward slide
-    buttonsContainer.Visible = true
-    buttonsContainer.Position = UDim2.fromScale(0.5, 0.78)
+    local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+    if viewport.X >= 820 then
+        rightArea.Visible = true
+        rightArea.Position = UDim2.new(1.06, 0, 0.5, 0)
+        TweenService:Create(rightArea, UITheme.Tweens.Normal, {
+            Position = UDim2.new(1, 0, 0.5, 0),
+        }):Play()
+    end
 
-    local buttonsSlide = TweenService:Create(buttonsContainer, UITheme.Tweens.Normal, {
-        Position = UDim2.fromScale(0.5, 0.72),
-    })
-    buttonsSlide:Play()
-
-    -- Fade in footer
-    TweenService:Create(footer, UITheme.Tweens.Slow, {
-        TextTransparency = 0,
-    }):Play()
-
-    brandShift.Completed:Wait()
+    leftGlide.Completed:Wait()
+    hasIntroCompleted = true
     isBusy = false
 end
 
