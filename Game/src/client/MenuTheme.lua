@@ -44,7 +44,7 @@ MenuTheme.Colors = {
 
 -- Typography
 MenuTheme.Fonts = {
-    Title = Enum.Font.Cinzel,
+    Title = Enum.Font.GothamBold,
     Studio = Enum.Font.GothamMedium,
     Heading = Enum.Font.GothamBold,
     Button = Enum.Font.GothamMedium,

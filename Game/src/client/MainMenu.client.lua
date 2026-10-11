@@ -844,20 +844,35 @@ btnPlay.Activated:Connect(function()
 
     emberSystem:Stop()
 
+    -- Request server to spawn player character into the game world (Unity / Unreal game flow)
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared", 3)
+    if sharedFolder then
+        local spawnEvent = sharedFolder:WaitForChild("RequestSpawnCharacter", 3) :: RemoteEvent?
+        if spawnEvent then
+            spawnEvent:FireServer()
+        end
+    end
+
     fadeTween.Completed:Connect(function()
+        -- Wait for character to spawn into the game world
+        local character = player.Character
+        if not character then
+            character = player.CharacterAdded:Wait()
+        end
+
+        local humanoid = character:WaitForChild("Humanoid", 10) :: Humanoid?
+
         -- Restore Player Character Controls & Camera
         if camera then
             camera.CameraType = Enum.CameraType.Custom
-            local character = player.Character
-            if character then
-                local humanoid = character:FindFirstChildOfClass("Humanoid")
-                if humanoid then
-                    camera.CameraSubject = humanoid
-                end
+            if humanoid then
+                camera.CameraSubject = humanoid
             end
         end
 
         setCharacterControlsEnabled(true)
+        hasIntroCompleted = true
 
         -- Clean up menu GUI and particles
         emberSystem:Destroy()
