@@ -1,0 +1,12 @@
+# Roblox Studio lock and temporary files
+*.rbxl.lock
+*.rbxlx.lock
+*.tmp
+
+# Operating system files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Toolchain / Cache
+.rokit/tool-storage/
