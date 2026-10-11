@@ -58,7 +58,7 @@ UITheme.Colors = {
 }
 
 --------------------------------------------------------------------------------
--- TYPOGRAPHY HIERARCHY
+-- TYPOGRAPHY HIERARCHY (Gotham Unified Project-Wide Standard)
 --------------------------------------------------------------------------------
 UITheme.Fonts = {
     Title = Enum.Font.GothamBold,
@@ -68,7 +68,12 @@ UITheme.Fonts = {
     ButtonSub = Enum.Font.Gotham,
     Body = Enum.Font.Gotham,
     Studio = Enum.Font.GothamMedium,
-    Tag = Enum.Font.RobotoMono,
+    Tag = Enum.Font.Gotham,            -- Gotham Regular (Type in ALL CAPS)
+    SmallLabel = Enum.Font.Gotham,     -- Gotham Regular (Type in ALL CAPS)
+    Regular = Enum.Font.Gotham,
+    Medium = Enum.Font.GothamMedium,
+    Bold = Enum.Font.GothamBold,
+    Black = Enum.Font.GothamBlack,
 }
 
 --------------------------------------------------------------------------------
@@ -102,7 +107,7 @@ function UITheme.GetMasterSoundGroup(): SoundGroup
 
     local newGroup = Instance.new("SoundGroup")
     newGroup.Name = "MasterSoundGroup"
-    newGroup.Volume = 1.0
+    newGroup.Volume = 0.5 -- 50% default volume per user request
     newGroup.Parent = SoundService
     masterSoundGroup = newGroup
     return newGroup
@@ -142,4 +147,38 @@ function UITheme.InitAudioRouting()
     workspace.DescendantAdded:Connect(routeSound)
 end
 
+--------------------------------------------------------------------------------
+-- GLOBAL ASSETS REGISTRY (Main Menu Art, Game Logo, Posters)
+--------------------------------------------------------------------------------
+UITheme.Assets = {
+    -- Verified Roblox Cloud Asset IDs uploaded by Fluenosity
+    MainMenuBackground = "rbxassetid://77749440485321", -- Forest Campfire Thumbnail
+    GameLogo = "rbxassetid://106299822759980",           -- Stylized Campfire Emblem Icon
+}
+
+-- Returns the best resolution background art, automatically pulling the
+-- Creator Hub thumbnail for all collaborators in Roblox Studio if PlaceId > 0
+function UITheme.GetBackgroundAsset(): string
+    if string.find(UITheme.Assets.MainMenuBackground, "rbxassetid://") then
+        return UITheme.Assets.MainMenuBackground
+    end
+    if game.PlaceId > 0 then
+        return string.format("rbxthumb://type=GameThumbnail&id=%d&w=768&h=432", game.PlaceId)
+    end
+    return UITheme.Assets.MainMenuBackground
+end
+
+-- Returns the game logo/icon, automatically pulling the Creator Hub icon if PlaceId > 0
+function UITheme.GetLogoAsset(): string
+    if string.find(UITheme.Assets.GameLogo, "rbxassetid://") then
+        return UITheme.Assets.GameLogo
+    end
+    local targetId = if game.GameId > 0 then game.GameId else game.PlaceId
+    if targetId > 0 then
+        return string.format("rbxthumb://type=GameIcon&id=%d&w=150&h=150", targetId)
+    end
+    return UITheme.Assets.GameLogo
+end
+
 return UITheme
+

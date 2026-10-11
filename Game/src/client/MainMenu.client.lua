@@ -86,7 +86,7 @@ screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = playerGui
 
 --------------------------------------------------------------------------------
--- ATMOSPHERIC BACKGROUND & DRIFTING EMBERS
+-- ATMOSPHERIC BACKGROUND & CINEMATIC WALLPAPER
 --------------------------------------------------------------------------------
 local background = Instance.new("Frame")
 background.Name = "Background"
@@ -96,6 +96,19 @@ background.BorderSizePixel = 0
 background.ZIndex = 1
 background.Parent = screenGui
 
+-- Main Menu Wallpaper Image (I:\RobloxDev\image\mainmenubg.png)
+local bgImage = Instance.new("ImageLabel")
+bgImage.Name = "BackgroundImage"
+bgImage.Size = UDim2.fromScale(1, 1)
+bgImage.Position = UDim2.fromScale(0.5, 0.5)
+bgImage.AnchorPoint = Vector2.new(0.5, 0.5)
+bgImage.BackgroundTransparency = 1
+bgImage.Image = UITheme.GetBackgroundAsset()
+bgImage.ScaleType = Enum.ScaleType.Crop
+bgImage.ImageTransparency = 0.15
+bgImage.ZIndex = 2
+bgImage.Parent = background
+
 -- Ambient warm firelight radial gradient (biased to left where fire burns)
 local ambientFirelight = Instance.new("Frame")
 ambientFirelight.Name = "AmbientFirelight"
@@ -103,7 +116,7 @@ ambientFirelight.Size = UDim2.fromScale(1, 1)
 ambientFirelight.BackgroundColor3 = UITheme.Colors.EmberCrimson
 ambientFirelight.BackgroundTransparency = 0.94
 ambientFirelight.BorderSizePixel = 0
-ambientFirelight.ZIndex = 2
+ambientFirelight.ZIndex = 3
 
 local fireGrad = Instance.new("UIGradient")
 fireGrad.Color = ColorSequence.new({
@@ -307,7 +320,7 @@ rightLayout.Padding = UDim.new(0, 16)
 rightLayout.Parent = rightArea
 
 -- Card 1: Official Release / Day 0 Prologue
-UIComponents.CreateFeatureCard({
+local featureCard1 = UIComponents.CreateFeatureCard({
     Title = "DAY 0: THE LONG NIGHT",
     Subtitle = "Survive the blizzard. Keep the fire burning.",
     BadgeText = "ALPHA RELEASE",
@@ -320,7 +333,7 @@ UIComponents.CreateFeatureCard({
 })
 
 -- Card 2: The Hollow Monster Stalker Lore
-UIComponents.CreateFeatureCard({
+local featureCard2 = UIComponents.CreateFeatureCard({
     Title = "BEWARE THE HOLLOW",
     Subtitle = "When light fades, the shadows hunt.",
     BadgeText = "SURVIVAL INTEL",
@@ -514,7 +527,8 @@ quoteText.Parent = quoteBox
 -- INTERACTIVE NAV ACTIONS (ORDER: 1. PLAY, 2. SETTINGS, 3. CREDITS)
 --------------------------------------------------------------------------------
 -- 1. PLAY Action (ON TOP with LayoutOrder = 1)
-UIComponents.CreateNavAction({
+-- 1. PLAY Action (ON TOP with LayoutOrder = 1)
+local navPlay = UIComponents.CreateNavAction({
     Text = "PLAY",
     IsPrimary = true,
     LayoutOrder = 1, -- Strictly on top!
@@ -598,7 +612,7 @@ UIComponents.CreateNavAction({
 })
 
 -- 2. SETTINGS Action (LayoutOrder = 2)
-UIComponents.CreateNavAction({
+local navSettings = UIComponents.CreateNavAction({
     Text = "SETTINGS",
     IsPrimary = false,
     LayoutOrder = 2, -- Second
@@ -609,7 +623,7 @@ UIComponents.CreateNavAction({
 })
 
 -- 3. CREDITS Action (LayoutOrder = 3)
-UIComponents.CreateNavAction({
+local navCredits = UIComponents.CreateNavAction({
     Text = "CREDITS",
     IsPrimary = false,
     LayoutOrder = 3, -- Third
@@ -620,7 +634,7 @@ UIComponents.CreateNavAction({
 })
 
 --------------------------------------------------------------------------------
--- CINEMATIC INTRO SEQUENCE (SPLASH -> DARKNESS -> EMBERS -> REVEAL)
+-- CINEMATIC INTRO SEQUENCE (STAGGERED: LEFT FROM LEFT, RIGHT FROM RIGHT)
 --------------------------------------------------------------------------------
 local function runCinematicIntro()
     isBusy = true
@@ -713,43 +727,132 @@ local function runCinematicIntro()
     sparkIgnition:Destroy()
 
     ----------------------------------------------------------------------------
-    -- PHASE 3: Center Reveal
+    -- PHASE 3: STAGGERED ENTRANCE (LEFT FROM LEFT, RIGHT FROM RIGHT)
     ----------------------------------------------------------------------------
+    -- Ensure leftArea is locked to the left margin (never starts in the middle!)
     leftArea.Visible = true
-    leftArea.Position = UDim2.new(0.25, 0, 0, 0)
-    
-    emblem:SetTransparency(1)
-    emblem:AnimateFade(0, UITheme.Tweens.Smooth)
+    leftArea.Position = UDim2.new(0, 0, 0, 0)
 
+    -- Step 1: Branding Header (Emblem + Title + Subtitle) arrives from the LEFT
+    brandingHeader.Position = UDim2.new(0, -90, 0, 0)
     mainTitle.TextTransparency = 1
     subTitle.TextTransparency = 1
+    emblem:SetTransparency(1)
 
-    TweenService:Create(mainTitle, UITheme.Tweens.Normal, { TextTransparency = 0 }):Play()
-    task.wait(0.15)
-    TweenService:Create(subTitle, UITheme.Tweens.Normal, { TextTransparency = 0 }):Play()
-
-    task.wait(0.9)
-
-    ----------------------------------------------------------------------------
-    -- PHASE 4: Glide into Safe Layout Position
-    ----------------------------------------------------------------------------
-    local leftGlide = TweenService:Create(leftArea, UITheme.Tweens.Smooth, {
+    local headerTween = TweenService:Create(brandingHeader, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
         Position = UDim2.new(0, 0, 0, 0),
     })
-    leftGlide:Play()
+    headerTween:Play()
+    emblem:AnimateFade(0, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out))
+    TweenService:Create(mainTitle, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
+    TweenService:Create(subTitle, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
 
-    task.wait(0.2)
+    task.wait(0.12)
 
+    -- Step 2: Nav Actions (PLAY, SETTINGS, CREDITS) arrive from the LEFT, one by one!
+    navContainer.Position = UDim2.new(0, -70, 0.46, 0)
+    local navContainerTween = TweenService:Create(navContainer, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0, 6, 0.46, 0),
+    })
+    navContainerTween:Play()
+
+    local navItems = { navPlay, navSettings, navCredits }
+    for i, btn in ipairs(navItems) do
+        local content = btn:FindFirstChild("Content") :: Frame?
+        if content then
+            content.Position = UDim2.new(0, -45, 0, 0)
+            for _, d in ipairs(content:GetDescendants()) do
+                if d:IsA("TextLabel") then
+                    d.TextTransparency = 1
+                elseif d:IsA("Frame") and d.Name:find("Rule") then
+                    d.BackgroundTransparency = 1
+                end
+            end
+            task.delay((i - 1) * 0.10, function()
+                TweenService:Create(content, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Position = UDim2.new(0, 0, 0, 0),
+                }):Play()
+                for _, d in ipairs(content:GetDescendants()) do
+                    if d:IsA("TextLabel") then
+                        TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
+                    elseif d:IsA("Frame") and d.Name:find("Rule") then
+                        TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0 }):Play()
+                    end
+                end
+            end)
+        end
+    end
+
+    task.wait(0.18)
+
+    -- Step 3: Co-op Party Slots arrive from bottom-left
+    partyContainer.Position = UDim2.new(0, -70, 1, 0)
+    for _, slot in ipairs(partyContainer:GetChildren()) do
+        if slot:IsA("Frame") then
+            for _, d in ipairs(slot:GetDescendants()) do
+                if d:IsA("TextLabel") then
+                    d.TextTransparency = 1
+                elseif d:IsA("ImageLabel") then
+                    d.ImageTransparency = 1
+                end
+            end
+        end
+    end
+
+    local partyTween = TweenService:Create(partyContainer, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0, 0, 1, 0),
+    })
+    partyTween:Play()
+
+    for idx, slot in ipairs(partyContainer:GetChildren()) do
+        if slot:IsA("Frame") then
+            task.delay((idx - 1) * 0.08, function()
+                for _, d in ipairs(slot:GetDescendants()) do
+                    if d:IsA("TextLabel") then
+                        TweenService:Create(d, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
+                    elseif d:IsA("ImageLabel") then
+                        TweenService:Create(d, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { ImageTransparency = 0 }):Play()
+                    end
+                end
+            end)
+        end
+    end
+
+    task.wait(0.15)
+
+    -- Step 4: Right Column Cards arrive from the RIGHT, one by one!
     local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
     if viewport.X >= 820 then
         rightArea.Visible = true
-        rightArea.Position = UDim2.new(1.06, 0, 0.5, 0)
-        TweenService:Create(rightArea, UITheme.Tweens.Normal, {
+        rightArea.Position = UDim2.new(1.15, 0, 0.5, 0)
+        local rightTween = TweenService:Create(rightArea, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             Position = UDim2.new(1, 0, 0.5, 0),
-        }):Play()
+        })
+        rightTween:Play()
+
+        local rightCards = { featureCard1, featureCard2 }
+        for idx, card in ipairs(rightCards) do
+            if card then
+                for _, d in ipairs(card:GetDescendants()) do
+                    if d:IsA("TextLabel") then
+                        d.TextTransparency = 1
+                    elseif d:IsA("Frame") and d.Name == "Banner" then
+                        d.BackgroundTransparency = 1
+                    end
+                end
+                task.delay((idx - 1) * 0.12, function()
+                    for _, d in ipairs(card:GetDescendants()) do
+                        if d:IsA("TextLabel") then
+                            TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
+                        elseif d:IsA("Frame") and d.Name == "Banner" then
+                            TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0 }):Play()
+                        end
+                    end
+                end)
+            end
+        end
     end
 
-    leftGlide.Completed:Wait()
     hasIntroCompleted = true
     isBusy = false
 end

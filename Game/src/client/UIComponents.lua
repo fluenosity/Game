@@ -15,10 +15,14 @@
 ]]
 
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local SocialService = game:GetService("SocialService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UITheme = require(script.Parent:WaitForChild("UITheme"))
+local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
+local IconPack = require(sharedFolder:WaitForChild("IconPack"))
 
 local UIComponents = {}
 
@@ -1060,7 +1064,7 @@ export type SpinnerInstance = {
 function UIComponents.CreateLoadingSpinner(parent: Instance, initialStatus: string?): SpinnerInstance
     local container = Instance.new("Frame")
     container.Name = "LoadingSpinnerContainer"
-    container.Size = UDim2.fromOffset(190, 36)
+    container.Size = UDim2.fromOffset(280, 36)
     container.BackgroundTransparency = 1
     container.ZIndex = 85
     container.Parent = parent
@@ -1111,25 +1115,24 @@ function UIComponents.CreateLoadingSpinner(parent: Instance, initialStatus: stri
     -- Status Text beside spinner
     local statusLabel = Instance.new("TextLabel")
     statusLabel.Name = "StatusLabel"
-    statusLabel.Size = UDim2.new(1, -34, 1, 0)
-    statusLabel.Position = UDim2.new(0, 34, 0, 0)
+    statusLabel.Size = UDim2.new(1, -38, 1, 0)
+    statusLabel.Position = UDim2.new(0, 38, 0, 0)
     statusLabel.BackgroundTransparency = 1
     statusLabel.Font = UITheme.Fonts.Tag
     statusLabel.Text = initialStatus or "LOADING SECTOR..."
-    statusLabel.TextColor3 = UITheme.Colors.TextMuted
+    statusLabel.TextColor3 = Color3.fromRGB(225, 230, 240)
     statusLabel.TextSize = 11
     statusLabel.TextXAlignment = Enum.TextXAlignment.Left
     statusLabel.ZIndex = 86
     statusLabel.Parent = container
 
-    -- Smooth Continuous Rotation Animation
-    local rotateTween = TweenService:Create(ring, TweenInfo.new(1.1, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1), {
-        Rotation = 360,
-    })
-    rotateTween:Play()
+    -- High-precision smooth continuous rotation via RenderStepped (avoids TweenService loop lock)
+    local spinConn: RBXScriptConnection? = RunService.RenderStepped:Connect(function(dt: number)
+        ring.Rotation = (ring.Rotation + dt * 240) % 360
+    end)
 
     -- Subtle breathing pulse on the center dot
-    local dotPulse = TweenService:Create(centerDot, TweenInfo.new(0.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+    local dotPulse = TweenService:Create(centerDot, TweenInfo.new(0.85, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
         Size = UDim2.fromOffset(8, 8),
         BackgroundColor3 = UITheme.Colors.EmberPrimary,
     })
@@ -1141,7 +1144,10 @@ function UIComponents.CreateLoadingSpinner(parent: Instance, initialStatus: stri
             statusLabel.Text = status
         end,
         Destroy = function()
-            rotateTween:Cancel()
+            if spinConn then
+                spinConn:Disconnect()
+                spinConn = nil
+            end
             dotPulse:Cancel()
             container:Destroy()
         end,
@@ -1170,157 +1176,163 @@ local SURVIVAL_TIPS = {
 }
 
 function UIComponents.CreateLoadingScreen(parent: Instance): LoadingScreenInstance
+    -- Using native Frame (NEVER CanvasGroup, which downsamples & blurs fullscreen text/assets in Roblox!)
     local container = Instance.new("Frame")
     container.Name = "CinematicLoadingScreen"
     container.Size = UDim2.fromScale(1, 1)
     container.Position = UDim2.fromScale(0, 0)
-    container.BackgroundColor3 = UITheme.Colors.Void
-    container.BackgroundTransparency = 1
+    container.BackgroundColor3 = Color3.fromRGB(6, 7, 9)
     container.BorderSizePixel = 0
     container.Visible = false
     container.ZIndex = 80
     container.Parent = parent
 
-    -- Center Ambient Warm Glow
-    local centerGlow = Instance.new("Frame")
-    centerGlow.Name = "CenterGlow"
-    centerGlow.Size = UDim2.fromOffset(360, 360)
-    centerGlow.Position = UDim2.fromScale(0.5, 0.45)
-    centerGlow.AnchorPoint = Vector2.new(0.5, 0.5)
-    centerGlow.BackgroundColor3 = UITheme.Colors.EmberCrimson
-    centerGlow.BackgroundTransparency = 0.95
-    centerGlow.BorderSizePixel = 0
-    centerGlow.ZIndex = 81
-    centerGlow.Parent = container
+    -- 1. Fullscreen Wallpaper Image (Identical to Main Menu art - native resolution)
+    local bgImage = Instance.new("ImageLabel")
+    bgImage.Name = "BackgroundImage"
+    bgImage.Size = UDim2.fromScale(1, 1)
+    bgImage.Position = UDim2.fromScale(0.5, 0.5)
+    bgImage.AnchorPoint = Vector2.new(0.5, 0.5)
+    bgImage.BackgroundTransparency = 1
+    bgImage.Image = UITheme.GetBackgroundAsset()
+    bgImage.ScaleType = Enum.ScaleType.Crop
+    bgImage.ImageTransparency = 0.16 -- Crisp high-contrast art
+    bgImage.ZIndex = 81
+    bgImage.Parent = container
 
-    local glowCorner = Instance.new("UICorner")
-    glowCorner.CornerRadius = UDim.new(1, 0)
-    glowCorner.Parent = centerGlow
+    -- 2. Dark Shading Overlay / Vignette
+    local bgOverlay = Instance.new("Frame")
+    bgOverlay.Name = "BgOverlay"
+    bgOverlay.Size = UDim2.fromScale(1, 1)
+    bgOverlay.BackgroundColor3 = Color3.fromRGB(6, 7, 10)
+    bgOverlay.BackgroundTransparency = 0.32
+    bgOverlay.BorderSizePixel = 0
+    bgOverlay.ZIndex = 82
+    bgOverlay.Parent = container
 
-    local glowGrad = Instance.new("UIGradient")
-    glowGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.7),
-        NumberSequenceKeypoint.new(0.6, 0.9),
-        NumberSequenceKeypoint.new(1, 1),
+    local vigGrad = Instance.new("UIGradient")
+    vigGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
+        ColorSequenceKeypoint.new(0.55, Color3.fromRGB(10, 12, 16)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(2, 3, 5)),
     })
-    glowGrad.Parent = centerGlow
+    vigGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.22),
+        NumberSequenceKeypoint.new(0.5, 0.45),
+        NumberSequenceKeypoint.new(1, 0.18),
+    })
+    vigGrad.Rotation = 90
+    vigGrad.Parent = bgOverlay
 
-    -- Center Content Stack (Emblem icon, title, survival tip card)
-    local centerStack = Instance.new("Frame")
-    centerStack.Name = "CenterStack"
-    centerStack.Size = UDim2.new(0.88, 0, 0, 220)
-    centerStack.Position = UDim2.fromScale(0.5, 0.46)
-    centerStack.AnchorPoint = Vector2.new(0.5, 0.5)
-    centerStack.BackgroundTransparency = 1
-    centerStack.ZIndex = 82
-    centerStack.Parent = container
+    -- 3. Top-Right Content Banner with "Left Faded to Right" Gradient Background
+    local topRightBanner = Instance.new("Frame")
+    topRightBanner.Name = "TopRightBanner"
+    topRightBanner.Size = UDim2.fromOffset(450, 86)
+    topRightBanner.Position = UDim2.new(1, -32, 0, 32)
+    topRightBanner.AnchorPoint = Vector2.new(1, 0)
+    topRightBanner.BackgroundColor3 = Color3.fromRGB(8, 10, 14)
+    topRightBanner.BorderSizePixel = 0
+    topRightBanner.ZIndex = 83
+    topRightBanner.Parent = container
 
-    local stackConstraint = Instance.new("UISizeConstraint")
-    stackConstraint.MaxSize = Vector2.new(480, 240)
-    stackConstraint.MinSize = Vector2.new(280, 160)
-    stackConstraint.Parent = centerStack
+    local bannerCorner = Instance.new("UICorner")
+    bannerCorner.CornerRadius = UDim.new(0, 8)
+    bannerCorner.Parent = topRightBanner
 
-    local stackLayout = Instance.new("UIListLayout")
-    stackLayout.FillDirection = Enum.FillDirection.Vertical
-    stackLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    stackLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-    stackLayout.Padding = UDim.new(0, 10)
-    stackLayout.Parent = centerStack
+    -- "Left Faded to Right" Horizontal Gradient Background
+    local bannerGrad = Instance.new("UIGradient")
+    bannerGrad.Rotation = 0 -- Horizontal (left to right)
+    bannerGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1.0),    -- Fully transparent on left
+        NumberSequenceKeypoint.new(0.25, 0.45), -- Smooth soft fade
+        NumberSequenceKeypoint.new(0.65, 0.15), -- Deep glass
+        NumberSequenceKeypoint.new(1, 0.05),   -- Solid dark black on right edge
+    })
+    bannerGrad.Parent = topRightBanner
 
-    -- Title
-    local titleLbl = Instance.new("TextLabel")
-    titleLbl.Name = "Title"
-    titleLbl.Size = UDim2.new(1, 0, 0, 28)
-    titleLbl.BackgroundTransparency = 1
-    titleLbl.Font = UITheme.Fonts.Heading
-    titleLbl.Text = "DON'T LET THE FIRE DIE"
-    titleLbl.TextColor3 = UITheme.Colors.TextPrimary
-    titleLbl.TextScaled = true
-    titleLbl.TextSize = 22
-    titleLbl.TextStrokeColor3 = Color3.fromRGB(15, 8, 6)
-    titleLbl.TextStrokeTransparency = 0.3
-    titleLbl.ZIndex = 83
-    titleLbl.Parent = centerStack
+    local bannerStroke = Instance.new("UIStroke")
+    bannerStroke.Color = Color3.fromRGB(255, 190, 80)
+    bannerStroke.Transparency = 0.90
+    bannerStroke.Thickness = 1
+    bannerStroke.Parent = topRightBanner
 
-    local titleConstraint = Instance.new("UITextSizeConstraint")
-    titleConstraint.MaxTextSize = 24
-    titleConstraint.MinTextSize = 16
-    titleConstraint.Parent = titleLbl
+    local strokeGrad = Instance.new("UIGradient")
+    strokeGrad.Rotation = 0
+    strokeGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1.0),
+        NumberSequenceKeypoint.new(0.35, 0.95),
+        NumberSequenceKeypoint.new(1, 0.82),
+    })
+    strokeGrad.Parent = bannerStroke
 
-    -- Subtitle Badge
-    local sessionBadge = Instance.new("TextLabel")
-    sessionBadge.Name = "SessionBadge"
-    sessionBadge.Size = UDim2.new(1, 0, 0, 16)
-    sessionBadge.BackgroundTransparency = 1
-    sessionBadge.Font = UITheme.Fonts.Tag
-    sessionBadge.Text = "[ PREPARING SURVIVAL SECTOR ]"
-    sessionBadge.TextColor3 = UITheme.Colors.EmberHot
-    sessionBadge.TextSize = 10
-    sessionBadge.ZIndex = 83
-    sessionBadge.Parent = centerStack
+    local bannerPadding = Instance.new("UIPadding")
+    bannerPadding.PaddingTop = UDim.new(0, 12)
+    bannerPadding.PaddingBottom = UDim.new(0, 12)
+    bannerPadding.PaddingLeft = UDim.new(0, 26)
+    bannerPadding.PaddingRight = UDim.new(0, 22)
+    bannerPadding.Parent = topRightBanner
 
-    -- Tip Container Box
-    local tipBox = Instance.new("Frame")
-    tipBox.Name = "TipBox"
-    tipBox.Size = UDim2.new(1, 0, 0, 72)
-    tipBox.BackgroundColor3 = UITheme.Colors.SurfaceElevated
-    tipBox.BorderSizePixel = 0
-    tipBox.ZIndex = 83
-    tipBox.Parent = centerStack
+    local headerRow = Instance.new("Frame")
+    headerRow.Name = "TipHeaderRow"
+    headerRow.Size = UDim2.new(1, 0, 0, 16)
+    headerRow.BackgroundTransparency = 1
+    headerRow.ZIndex = 84
+    headerRow.Parent = topRightBanner
 
-    local tipCorner = Instance.new("UICorner")
-    tipCorner.CornerRadius = UDim.new(0, 8)
-    tipCorner.Parent = tipBox
-
-    local tipStroke = Instance.new("UIStroke")
-    tipStroke.Color = UITheme.Colors.BorderHairline
-    tipStroke.Thickness = 1
-    tipStroke.Parent = tipBox
-
-    local tipPadding = Instance.new("UIPadding")
-    tipPadding.PaddingTop = UDim.new(0, 10)
-    tipPadding.PaddingBottom = UDim.new(0, 10)
-    tipPadding.PaddingLeft = UDim.new(0, 16)
-    tipPadding.PaddingRight = UDim.new(0, 16)
-    tipPadding.Parent = tipBox
+    local tipIcon = IconPack.CreateIcon("radio", 13, Color3.fromRGB(245, 160, 40), 0)
+    tipIcon.Position = UDim2.fromOffset(0, 1)
+    tipIcon.ZIndex = 85
+    tipIcon.Parent = headerRow
 
     local tipHeader = Instance.new("TextLabel")
     tipHeader.Name = "TipHeader"
-    tipHeader.Size = UDim2.new(1, 0, 0, 14)
+    tipHeader.Size = UDim2.new(1, -20, 1, 0)
+    tipHeader.Position = UDim2.fromOffset(20, 0)
     tipHeader.BackgroundTransparency = 1
-    tipHeader.Font = UITheme.Fonts.Tag
+    tipHeader.Font = UITheme.Fonts.Heading
     tipHeader.Text = "SURVIVAL INTEL"
-    tipHeader.TextColor3 = UITheme.Colors.EmberPrimary
-    tipHeader.TextSize = 10
+    tipHeader.TextColor3 = Color3.fromRGB(245, 160, 40) -- Luminous ember amber
+    tipHeader.TextSize = 12
     tipHeader.TextXAlignment = Enum.TextXAlignment.Left
-    tipHeader.ZIndex = 84
-    tipHeader.Parent = tipBox
+    tipHeader.ZIndex = 85
+    tipHeader.Parent = headerRow
 
     local tipBody = Instance.new("TextLabel")
     tipBody.Name = "TipBody"
-    tipBody.Size = UDim2.new(1, 0, 0, 32)
-    tipBody.Position = UDim2.new(0, 0, 0, 16)
+    tipBody.Size = UDim2.new(1, 0, 0, 44)
+    tipBody.Position = UDim2.new(0, 0, 0, 20)
     tipBody.BackgroundTransparency = 1
     tipBody.Font = UITheme.Fonts.Body
     tipBody.Text = SURVIVAL_TIPS[math.random(1, #SURVIVAL_TIPS)]
-    tipBody.TextColor3 = UITheme.Colors.TextSecondary
-    tipBody.TextSize = 11
+    tipBody.TextColor3 = Color3.fromRGB(225, 230, 240)
+    tipBody.TextSize = 13
     tipBody.TextWrapped = true
     tipBody.TextXAlignment = Enum.TextXAlignment.Left
     tipBody.ZIndex = 84
-    tipBody.Parent = tipBox
+    tipBody.Parent = topRightBanner
 
-    -- Bottom-Right Animated Spinner
+    -- 4. Bottom-Right Animated Spinner
     local spinnerHolder = Instance.new("Frame")
     spinnerHolder.Name = "SpinnerHolder"
-    spinnerHolder.Size = UDim2.fromOffset(210, 36)
-    spinnerHolder.Position = UDim2.new(1, -36, 1, -28)
+    spinnerHolder.Size = UDim2.fromOffset(300, 38)
+    spinnerHolder.Position = UDim2.new(1, -32, 1, -28)
     spinnerHolder.AnchorPoint = Vector2.new(1, 1)
     spinnerHolder.BackgroundTransparency = 1
     spinnerHolder.ZIndex = 85
     spinnerHolder.Parent = container
 
     local spinner = UIComponents.CreateLoadingSpinner(spinnerHolder, "INITIALIZING WORLD...")
+
+    -- 5. Native Smooth Transition Curtain (Eliminates CanvasGroup downsample blur)
+    local fadeCurtain = Instance.new("Frame")
+    fadeCurtain.Name = "FadeCurtain"
+    fadeCurtain.Size = UDim2.fromScale(1, 1)
+    fadeCurtain.Position = UDim2.fromScale(0, 0)
+    fadeCurtain.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    fadeCurtain.BackgroundTransparency = 0
+    fadeCurtain.BorderSizePixel = 0
+    fadeCurtain.ZIndex = 95
+    fadeCurtain.Parent = container
 
     local isTransitioning = false
 
@@ -1338,10 +1350,10 @@ function UIComponents.CreateLoadingScreen(parent: Instance): LoadingScreenInstan
         end
 
         container.Visible = true
-        container.BackgroundTransparency = 1
+        fadeCurtain.BackgroundTransparency = 0
 
-        local fadeTween = TweenService:Create(container, UITheme.Tweens.Fast, {
-            BackgroundTransparency = 0,
+        local fadeTween = TweenService:Create(fadeCurtain, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 1,
         })
         fadeTween.Completed:Connect(function()
             isTransitioning = false
@@ -1353,8 +1365,8 @@ function UIComponents.CreateLoadingScreen(parent: Instance): LoadingScreenInstan
         if isTransitioning then return end
         isTransitioning = true
 
-        local fadeTween = TweenService:Create(container, UITheme.Tweens.Smooth, {
-            BackgroundTransparency = 1,
+        local fadeTween = TweenService:Create(fadeCurtain, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            BackgroundTransparency = 0,
         })
         fadeTween.Completed:Connect(function()
             container.Visible = false
@@ -1371,6 +1383,9 @@ function UIComponents.CreateLoadingScreen(parent: Instance): LoadingScreenInstan
         Show = showLoading,
         SetStatus = function(statusText: string)
             spinner.SetStatus(statusText)
+        end,
+        SetTip = function(tipText: string)
+            tipBody.Text = tipText
         end,
         Hide = hideLoading,
         Destroy = function()
@@ -1455,7 +1470,7 @@ function UIComponents.CreateHUDClock(parent: Instance): HUDClockInstance
     phaseText.Size = UDim2.fromScale(1, 1)
     phaseText.BackgroundTransparency = 1
     phaseText.Font = UITheme.Fonts.Tag
-    phaseText.Text = "☀️ DAY"
+    phaseText.Text = "DAY"
     phaseText.TextColor3 = UITheme.Colors.EmberGold
     phaseText.TextSize = 10
     phaseText.ZIndex = 53
@@ -1502,11 +1517,11 @@ function UIComponents.CreateHUDClock(parent: Instance): HUDClockInstance
         local m = math.floor((hour - h) * 60)
         timeLabel.Text = string.format("%02d:%02d", h, m)
 
-        local phaseIcons = {
-            Dawn = "🌅 DAWN",
-            Day = "☀️ DAY",
-            Dusk = "🌆 DUSK",
-            Night = "🌙 NIGHT",
+        local phaseNames = {
+            Dawn = "DAWN",
+            Day = "DAY",
+            Dusk = "DUSK",
+            Night = "NIGHT",
         }
         local phaseColors = {
             Dawn = Color3.fromRGB(240, 140, 80),
@@ -1514,7 +1529,7 @@ function UIComponents.CreateHUDClock(parent: Instance): HUDClockInstance
             Dusk = Color3.fromRGB(220, 70, 50),
             Night = Color3.fromRGB(130, 140, 190),
         }
-        phaseText.Text = phaseIcons[phase] or phase:upper()
+        phaseText.Text = phaseNames[phase] or phase:upper()
         local color = phaseColors[phase] or UITheme.Colors.EmberHot
         phaseText.TextColor3 = color
         pillStroke.Color = color
@@ -1533,11 +1548,12 @@ function UIComponents.CreateHUDClock(parent: Instance): HUDClockInstance
 end
 
 --------------------------------------------------------------------------------
--- 11. GENSHIN IMPACT STYLE STAMINA BAR (Right-Side Curved Arc)
+-- 11. GENSHIN IMPACT STYLE STAMINA BAR (Smooth Crescent Half-Circle)
 --------------------------------------------------------------------------------
 export type GenshinStaminaInstance = {
     Billboard: BillboardGui,
-    SetStamina: (current: number, max: number, isSprinting: boolean) -> (),
+    SetStamina: (current: number, max: number, isConsuming: boolean) -> (),
+    UpdateCameraAlignment: (cameraRight: Vector3?, cameraUp: Vector3?) -> (),
     Destroy: () -> (),
 }
 
@@ -1545,8 +1561,7 @@ function UIComponents.CreateGenshinStaminaBar(character: Model): GenshinStaminaI
     local rootPart = character:WaitForChild("HumanoidRootPart", 5) :: BasePart?
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "GenshinStaminaBar"
-    billboard.Size = UDim2.fromOffset(60, 130)
-    billboard.StudsOffsetWorldSpace = Vector3.new(1.8, 0.4, 0)
+    billboard.Size = UDim2.fromOffset(70, 130)
     billboard.AlwaysOnTop = true
     billboard.ResetOnSpawn = false
     billboard.Enabled = false
@@ -1556,73 +1571,133 @@ function UIComponents.CreateGenshinStaminaBar(character: Model): GenshinStaminaI
         billboard.Adornee = rootPart
     end
 
-    local NUM_SEGMENTS = 6
-    local segments: { { Box: Frame, Fill: Frame } } = {}
+    -- Dynamic camera-relative alignment:
+    -- Guarantees the stamina bar stays strictly to the camera's right side of the character at all times,
+    -- preventing any left/right inversion or flipped curvature when rotating camera 360 degrees.
+    local function alignToCamera(customRight: Vector3?, customUp: Vector3?)
+        local camera = workspace.CurrentCamera
+        if not camera or not rootPart or not rootPart.Parent then return end
 
-    -- Arc coordinates bending gently to the right like Genshin Impact
-    local ARC_OFFSETS = {
-        { X = 12, Y = 6, Rot = 18 },
-        { X = 20, Y = 26, Rot = 10 },
-        { X = 24, Y = 48, Rot = 0 },
-        { X = 24, Y = 70, Rot = 0 },
-        { X = 20, Y = 92, Rot = -10 },
-        { X = 12, Y = 112, Rot = -18 },
-    }
+        local camDist = (camera.CFrame.Position - rootPart.Position).Magnitude
+        -- If player is in 1st person zoom (< 1.2 studs), hide to avoid obstructing screen
+        if camDist < 1.2 then
+            billboard.Enabled = false
+            return
+        end
+
+        local rightVec = customRight or camera.CFrame.RightVector
+        local upVec = customUp or camera.CFrame.UpVector
+        billboard.StudsOffsetWorldSpace = (rightVec * 1.85) + (upVec * 0.15)
+    end
+
+    local renderConn: RBXScriptConnection? = RunService.RenderStepped:Connect(function()
+        alignToCamera()
+    end)
+    alignToCamera()
+
+    -- CanvasGroup for smooth group fading and anti-aliased presentation
+    local canvas = Instance.new("CanvasGroup")
+    canvas.Name = "ArcContainer"
+    canvas.Size = UDim2.fromScale(1, 1)
+    canvas.BackgroundTransparency = 1
+    canvas.GroupTransparency = 1
+    canvas.BorderSizePixel = 0
+    canvas.Parent = billboard
+
+    -- 36 micro-segments forming a seamless, continuous Genshin crescent arc ')'
+    local NUM_SEGMENTS = 36
+    local segments: { { Glow: Frame, Fill: Frame, Core: Frame } } = {}
+
+    local ARC_CENTER_X = 10
+    local ARC_CENTER_Y = 65
+    local ARC_RADIUS = 48
+    local ANGLE_SPAN = 92 -- degrees (-46 to +46)
 
     for i = 1, NUM_SEGMENTS do
-        local coord = ARC_OFFSETS[i]
-        local box = Instance.new("Frame")
-        box.Name = "Segment_" .. i
-        box.Size = UDim2.fromOffset(8, 17)
-        box.Position = UDim2.fromOffset(coord.X, coord.Y)
-        box.Rotation = coord.Rot
-        box.BackgroundColor3 = Color3.fromRGB(34, 26, 22) -- Dark Genshin track
-        box.BorderSizePixel = 0
-        box.ZIndex = 80
-        box.Parent = billboard
+        local t = (i - 1) / (NUM_SEGMENTS - 1) -- 0 at bottom, 1 at top
+        local angleDeg = (ANGLE_SPAN / 2) - (t * ANGLE_SPAN) -- +46 at bottom, -46 at top
+        local angleRad = math.rad(angleDeg)
 
-        local boxCorner = Instance.new("UICorner")
-        boxCorner.CornerRadius = UDim.new(0, 3)
-        boxCorner.Parent = box
+        local posX = ARC_CENTER_X + (ARC_RADIUS * math.cos(angleRad))
+        local posY = ARC_CENTER_Y + (ARC_RADIUS * math.sin(angleRad))
 
-        local boxStroke = Instance.new("UIStroke")
-        boxStroke.Color = Color3.fromRGB(18, 12, 10)
-        boxStroke.Thickness = 1
-        boxStroke.Parent = box
+        -- 1. Dark background track (solid overlapping ribbon)
+        local track = Instance.new("Frame")
+        track.Name = "Track_" .. i
+        track.Size = UDim2.fromOffset(8, 8)
+        track.AnchorPoint = Vector2.new(0.5, 0.5)
+        track.Position = UDim2.fromOffset(posX, posY)
+        track.BackgroundColor3 = Color3.fromRGB(24, 18, 14)
+        track.BackgroundTransparency = 0.35
+        track.BorderSizePixel = 0
+        track.ZIndex = 80
+        track.Parent = canvas
 
+        local trackCorner = Instance.new("UICorner")
+        trackCorner.CornerRadius = UDim.new(1, 0)
+        trackCorner.Parent = track
+
+        -- 2. Outer radiant glow
+        local glow = Instance.new("Frame")
+        glow.Name = "Glow_" .. i
+        glow.Size = UDim2.fromOffset(10, 10)
+        glow.AnchorPoint = Vector2.new(0.5, 0.5)
+        glow.Position = UDim2.fromOffset(posX, posY)
+        glow.BackgroundColor3 = UITheme.Colors.EmberGold
+        glow.BackgroundTransparency = 0.78
+        glow.BorderSizePixel = 0
+        glow.ZIndex = 82
+        glow.Visible = false
+        glow.Parent = canvas
+
+        local glowCorner = Instance.new("UICorner")
+        glowCorner.CornerRadius = UDim.new(1, 0)
+        glowCorner.Parent = glow
+
+        -- 3. Vibrant liquid fill
         local fill = Instance.new("Frame")
-        fill.Name = "Fill"
-        fill.Size = UDim2.fromScale(1, 1)
-        fill.Position = UDim2.fromScale(0, 1)
-        fill.AnchorPoint = Vector2.new(0, 1)
+        fill.Name = "Fill_" .. i
+        fill.Size = UDim2.fromOffset(6, 6)
+        fill.AnchorPoint = Vector2.new(0.5, 0.5)
+        fill.Position = UDim2.fromOffset(posX, posY)
         fill.BackgroundColor3 = UITheme.Colors.EmberGold
         fill.BorderSizePixel = 0
-        fill.ZIndex = 81
-        fill.Parent = box
+        fill.ZIndex = 84
+        fill.Visible = false
+        fill.Parent = canvas
 
         local fillCorner = Instance.new("UICorner")
-        fillCorner.CornerRadius = UDim.new(0, 3)
+        fillCorner.CornerRadius = UDim.new(1, 0)
         fillCorner.Parent = fill
 
-        local fillGrad = Instance.new("UIGradient")
-        fillGrad.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 225, 120)),
-            ColorSequenceKeypoint.new(1, UITheme.Colors.EmberGold),
-        })
-        fillGrad.Rotation = 90
-        fillGrad.Parent = fill
+        -- 4. Bright inner core line
+        local core = Instance.new("Frame")
+        core.Name = "Core_" .. i
+        core.Size = UDim2.fromOffset(3, 3)
+        core.AnchorPoint = Vector2.new(0.5, 0.5)
+        core.Position = UDim2.fromOffset(posX, posY)
+        core.BackgroundColor3 = Color3.fromRGB(255, 235, 170)
+        core.BorderSizePixel = 0
+        core.ZIndex = 86
+        core.Visible = false
+        core.Parent = canvas
 
-        table.insert(segments, { Box = box, Fill = fill })
+        local coreCorner = Instance.new("UICorner")
+        coreCorner.CornerRadius = UDim.new(1, 0)
+        coreCorner.Parent = core
+
+        table.insert(segments, { Glow = glow, Fill = fill, Core = core })
     end
 
     local isVisible = false
     local hideTimer: thread? = nil
+    local fadeTween: Tween? = nil
 
-    local function setStamina(current: number, max: number, isSprinting: boolean)
+    local function setStamina(current: number, max: number, isConsuming: boolean)
         local ratio = math.clamp(current / math.max(max, 1), 0, 1)
 
-        -- Visibility logic: show while sprinting or stamina drained
-        if ratio < 0.999 or isSprinting then
+        -- Visibility logic: show while sprinting/jumping or stamina depleted
+        if ratio < 0.999 or isConsuming then
             if hideTimer then
                 task.cancel(hideTimer)
                 hideTimer = nil
@@ -1630,39 +1705,92 @@ function UIComponents.CreateGenshinStaminaBar(character: Model): GenshinStaminaI
             if not isVisible then
                 isVisible = true
                 billboard.Enabled = true
+                if fadeTween then fadeTween:Cancel() end
+                fadeTween = TweenService:Create(canvas, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    GroupTransparency = 0,
+                })
+                fadeTween:Play()
             end
         else
-            -- Fade out after full recovery
+            -- Smooth fade out after full recovery
             if isVisible and not hideTimer then
-                hideTimer = task.delay(0.5, function()
-                    billboard.Enabled = false
-                    isVisible = false
+                hideTimer = task.delay(0.6, function()
+                    if fadeTween then fadeTween:Cancel() end
+                    fadeTween = TweenService:Create(canvas, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                        GroupTransparency = 1,
+                    })
+                    fadeTween:Play()
+                    fadeTween.Completed:Connect(function()
+                        if canvas.GroupTransparency >= 0.95 then
+                            billboard.Enabled = false
+                            isVisible = false
+                        end
+                    end)
                     hideTimer = nil
                 end)
             end
         end
 
-        local fillColor = (ratio < 0.22) and UITheme.Colors.EmberCrimson or UITheme.Colors.EmberGold
-        local segmentSpan = 1 / NUM_SEGMENTS
+        local isCritical = (ratio < 0.22)
+        local fillColor = isCritical and UITheme.Colors.EmberCrimson or UITheme.Colors.EmberGold
+        local coreColor = isCritical and Color3.fromRGB(255, 180, 160) or Color3.fromRGB(255, 235, 170)
+        local glowColor = isCritical and UITheme.Colors.EmberCrimson or UITheme.Colors.EmberGold
 
-        -- Fill segments sequentially from bottom (segment 6) to top (segment 1)
+        local continuousVal = ratio * NUM_SEGMENTS
+        local fullThreshold = math.floor(continuousVal)
+        local partialFraction = continuousVal - fullThreshold
+
+        -- Drains from top (index 36) to bottom (index 1), refills bottom to top
         for i = 1, NUM_SEGMENTS do
-            local segIndex = NUM_SEGMENTS - i + 1
-            local segMin = (i - 1) * segmentSpan
-            local segRatio = math.clamp((ratio - segMin) / segmentSpan, 0, 1)
+            local seg = segments[i]
+            if i <= fullThreshold then
+                seg.Glow.Visible = true
+                seg.Glow.BackgroundColor3 = glowColor
+                seg.Glow.BackgroundTransparency = 0.78
 
-            local seg = segments[segIndex]
-            seg.Fill.Size = UDim2.fromScale(1, segRatio)
-            seg.Fill.BackgroundColor3 = fillColor
+                seg.Fill.Visible = true
+                seg.Fill.BackgroundColor3 = fillColor
+                seg.Fill.BackgroundTransparency = 0
+
+                seg.Core.Visible = true
+                seg.Core.BackgroundColor3 = coreColor
+                seg.Core.BackgroundTransparency = 0
+            elseif i == fullThreshold + 1 and partialFraction > 0.02 then
+                seg.Glow.Visible = true
+                seg.Glow.BackgroundColor3 = glowColor
+                seg.Glow.BackgroundTransparency = 0.78 + (1 - partialFraction) * 0.22
+
+                seg.Fill.Visible = true
+                seg.Fill.BackgroundColor3 = fillColor
+                seg.Fill.BackgroundTransparency = 1 - partialFraction
+
+                seg.Core.Visible = true
+                seg.Core.BackgroundColor3 = coreColor
+                seg.Core.BackgroundTransparency = 1 - partialFraction
+            else
+                seg.Glow.Visible = false
+                seg.Fill.Visible = false
+                seg.Core.Visible = false
+            end
         end
     end
 
     return {
         Billboard = billboard,
         SetStamina = setStamina,
+        UpdateCameraAlignment = function(camRight: Vector3?, camUp: Vector3?)
+            alignToCamera(camRight, camUp)
+        end,
         Destroy = function()
+            if renderConn then
+                renderConn:Disconnect()
+                renderConn = nil
+            end
             if hideTimer then
                 task.cancel(hideTimer)
+            end
+            if fadeTween then
+                fadeTween:Cancel()
             end
             billboard:Destroy()
         end,
@@ -1856,174 +1984,710 @@ function UIComponents.CreateHotbar(parent: Instance, onSelected: ((slotIndex: nu
 end
 
 --------------------------------------------------------------------------------
--- 13. IN-GAME PAUSE MENU COMPONENT (ESC / M)
+-- 13. AAA FULLSCREEN GLASSMORPHIC SYSTEM / ESC MENU (Image 3 Style)
 --------------------------------------------------------------------------------
-export type PauseMenuCallbacks = {
+export type SystemMenuCallbacks = {
     OnResume: () -> (),
-    OnSettings: () -> (),
     OnQuit: () -> (),
 }
 
-export type PauseMenuInstance = {
-    Backdrop: TextButton,
+export type SystemMenuInstance = {
+    Container: Frame,
     Open: () -> (),
     Close: () -> (),
     Destroy: () -> (),
 }
 
-function UIComponents.CreatePauseMenu(parent: Instance, callbacks: PauseMenuCallbacks): PauseMenuInstance
-    local backdrop = Instance.new("TextButton")
-    backdrop.Name = "InGamePauseBackdrop"
-    backdrop.Size = UDim2.fromScale(1, 1)
-    backdrop.BackgroundColor3 = UITheme.Colors.PureBlack
-    backdrop.BackgroundTransparency = 1
-    backdrop.AutoButtonColor = false
-    backdrop.Text = ""
-    backdrop.Visible = false
-    backdrop.ZIndex = 90
-    backdrop.Parent = parent
+function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCallbacks): SystemMenuInstance
+    local container = Instance.new("Frame")
+    container.Name = "AAASystemMenu"
+    container.Size = UDim2.fromScale(1, 1)
+    container.Position = UDim2.fromScale(0, 0)
+    container.BackgroundColor3 = Color3.fromRGB(6, 6, 8)
+    container.BackgroundTransparency = 1
+    container.BorderSizePixel = 0
+    container.Visible = false
+    container.ZIndex = 90
+    container.Parent = parent
 
-    local card = Instance.new("Frame")
-    card.Name = "PauseCard"
-    card.Size = UDim2.new(0.9, 0, 0.85, 0)
-    card.Position = UDim2.fromScale(0.5, 0.52)
-    card.AnchorPoint = Vector2.new(0.5, 0.5)
-    card.BackgroundColor3 = UITheme.Colors.SurfaceElevated
-    card.BorderSizePixel = 0
-    card.ZIndex = 91
-    card.Parent = backdrop
+    -- Glassmorphic Dark Radial Vignette
+    local vignette = Instance.new("Frame")
+    vignette.Name = "Vignette"
+    vignette.Size = UDim2.fromScale(1, 1)
+    vignette.BackgroundColor3 = UITheme.Colors.PureBlack
+    vignette.BackgroundTransparency = 0.4
+    vignette.BorderSizePixel = 0
+    vignette.ZIndex = 91
+    vignette.Parent = container
 
-    local cardConstraint = Instance.new("UISizeConstraint")
-    cardConstraint.MaxSize = Vector2.new(380, 420)
-    cardConstraint.MinSize = Vector2.new(280, 320)
-    cardConstraint.Parent = card
+    local vigGrad = Instance.new("UIGradient")
+    vigGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.4),
+        NumberSequenceKeypoint.new(0.65, 0.75),
+        NumberSequenceKeypoint.new(1, 0.95),
+    })
+    vigGrad.Parent = vignette
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
-    corner.Parent = card
+    ----------------------------------------------------------------------------
+    -- TOP NAVIGATION BAR (Header across top screen)
+    ----------------------------------------------------------------------------
+    local topBar = Instance.new("Frame")
+    topBar.Name = "TopBar"
+    topBar.Size = UDim2.new(1, 0, 0, 60)
+    topBar.BackgroundColor3 = Color3.fromRGB(12, 10, 14)
+    topBar.BackgroundTransparency = 0.25
+    topBar.BorderSizePixel = 0
+    topBar.ZIndex = 92
+    topBar.Parent = container
 
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = UITheme.Colors.BorderSubtle
-    stroke.Thickness = 1.4
-    stroke.Parent = card
+    local topDivider = Instance.new("Frame")
+    topDivider.Name = "Divider"
+    topDivider.Size = UDim2.new(1, 0, 0, 1)
+    topDivider.Position = UDim2.new(0, 0, 1, -1)
+    topDivider.BackgroundColor3 = UITheme.Colors.BorderHairline
+    topDivider.BorderSizePixel = 0
+    topDivider.ZIndex = 93
+    topDivider.Parent = topBar
 
-    local cardPadding = Instance.new("UIPadding")
-    cardPadding.PaddingTop = UDim.new(0, 24)
-    cardPadding.PaddingBottom = UDim.new(0, 24)
-    cardPadding.PaddingLeft = UDim.new(0, 28)
-    cardPadding.PaddingRight = UDim.new(0, 28)
-    cardPadding.Parent = card
+    local topPadding = Instance.new("UIPadding")
+    topPadding.PaddingLeft = UDim.new(0, 28)
+    topPadding.PaddingRight = UDim.new(0, 28)
+    topPadding.Parent = topBar
 
-    local titleLayout = Instance.new("UIListLayout")
-    titleLayout.FillDirection = Enum.FillDirection.Vertical
-    titleLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    titleLayout.Padding = UDim.new(0, 14)
-    titleLayout.Parent = card
+    -- Left Title / Logo
+    local titleBlock = Instance.new("Frame")
+    titleBlock.Name = "TitleBlock"
+    titleBlock.Size = UDim2.new(0, 260, 1, 0)
+    titleBlock.BackgroundTransparency = 1
+    titleBlock.ZIndex = 93
+    titleBlock.Parent = topBar
 
-    local tagLbl = Instance.new("TextLabel")
-    tagLbl.Name = "CategoryTag"
-    tagLbl.Size = UDim2.new(1, 0, 0, 14)
-    tagLbl.BackgroundTransparency = 1
-    tagLbl.Font = UITheme.Fonts.Tag
-    tagLbl.Text = "[ SURVIVAL SECTOR PAUSED ]"
-    tagLbl.TextColor3 = UITheme.Colors.EmberHot
-    tagLbl.TextSize = 10
-    tagLbl.ZIndex = 92
-    tagLbl.Parent = card
+    local logoText = Instance.new("TextLabel")
+    logoText.Name = "LogoText"
+    logoText.Size = UDim2.new(1, 0, 0, 22)
+    logoText.Position = UDim2.fromOffset(0, 12)
+    logoText.BackgroundTransparency = 1
+    logoText.Font = UITheme.Fonts.Heading
+    logoText.Text = "DON'T LET THE FIRE DIE"
+    logoText.TextColor3 = UITheme.Colors.TextPrimary
+    logoText.TextSize = 16
+    logoText.TextXAlignment = Enum.TextXAlignment.Left
+    logoText.ZIndex = 94
+    logoText.Parent = titleBlock
 
-    local titleLbl = Instance.new("TextLabel")
-    titleLbl.Name = "Title"
-    titleLbl.Size = UDim2.new(1, 0, 0, 26)
-    titleLbl.BackgroundTransparency = 1
-    titleLbl.Font = UITheme.Fonts.Heading
-    titleLbl.Text = "DON'T LET THE FIRE DIE"
-    titleLbl.TextColor3 = UITheme.Colors.TextPrimary
-    titleLbl.TextSize = 18
-    titleLbl.ZIndex = 92
-    titleLbl.Parent = card
+    local sectorTag = Instance.new("TextLabel")
+    sectorTag.Name = "SectorTag"
+    sectorTag.Size = UDim2.new(1, 0, 0, 14)
+    sectorTag.Position = UDim2.fromOffset(0, 34)
+    sectorTag.BackgroundTransparency = 1
+    sectorTag.Font = UITheme.Fonts.Tag
+    sectorTag.Text = "[ SURVIVAL SECTOR // PROLOGUE ]"
+    sectorTag.TextColor3 = UITheme.Colors.EmberHot
+    sectorTag.TextSize = 9
+    sectorTag.TextXAlignment = Enum.TextXAlignment.Left
+    sectorTag.ZIndex = 94
+    sectorTag.Parent = titleBlock
 
-    UIComponents.CreateDivider(card)
+    -- Center Tabs Container
+    local tabsContainer = Instance.new("Frame")
+    tabsContainer.Name = "TabsContainer"
+    tabsContainer.Size = UDim2.new(0, 480, 1, 0)
+    tabsContainer.Position = UDim2.fromScale(0.5, 0)
+    tabsContainer.AnchorPoint = Vector2.new(0.5, 0)
+    tabsContainer.BackgroundTransparency = 1
+    tabsContainer.ZIndex = 93
+    tabsContainer.Parent = topBar
 
-    local function createMenuBtn(text: string, isPrimary: boolean, onClick: () -> ())
-        local btn = Instance.new("TextButton")
-        btn.Name = "Btn_" .. text:gsub("%s+", "")
-        btn.Size = UDim2.new(1, 0, 0, 44)
-        btn.BackgroundColor3 = isPrimary and UITheme.Colors.EmberPrimary or UITheme.Colors.Surface
-        btn.AutoButtonColor = false
-        btn.Font = UITheme.Fonts.Heading
-        btn.Text = text
-        btn.TextColor3 = isPrimary and UITheme.Colors.PureWhite or UITheme.Colors.TextPrimary
-        btn.TextSize = 13
-        btn.ZIndex = 93
-        btn.Parent = card
+    local tabsLayout = Instance.new("UIListLayout")
+    tabsLayout.FillDirection = Enum.FillDirection.Horizontal
+    tabsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    tabsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    tabsLayout.Padding = UDim.new(0, 24)
+    tabsLayout.Parent = tabsContainer
 
-        local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 8)
-        btnCorner.Parent = btn
+    -- Right Resume Button
+    local btnResume = Instance.new("TextButton")
+    btnResume.Name = "BtnResume"
+    btnResume.Size = UDim2.fromOffset(130, 36)
+    btnResume.Position = UDim2.new(1, 0, 0.5, 0)
+    btnResume.AnchorPoint = Vector2.new(1, 0.5)
+    btnResume.BackgroundColor3 = UITheme.Colors.EmberPrimary
+    btnResume.AutoButtonColor = false
+    btnResume.Font = UITheme.Fonts.Heading
+    btnResume.Text = "[ ESC ] RESUME"
+    btnResume.TextColor3 = UITheme.Colors.PureWhite
+    btnResume.TextSize = 12
+    btnResume.ZIndex = 94
+    btnResume.Parent = topBar
 
-        local btnStroke = Instance.new("UIStroke")
-        btnStroke.Color = isPrimary and UITheme.Colors.BorderActive or UITheme.Colors.BorderHairline
-        btnStroke.Thickness = 1
-        btnStroke.Parent = btn
+    local resumeCorner = Instance.new("UICorner")
+    resumeCorner.CornerRadius = UDim.new(0, 6)
+    resumeCorner.Parent = btnResume
 
-        btn.MouseEnter:Connect(function()
-            TweenService:Create(btn, UITheme.Tweens.Fast, {
-                BackgroundColor3 = isPrimary and UITheme.Colors.EmberHot or UITheme.Colors.SurfaceHighlight,
-            }):Play()
-        end)
-        btn.MouseLeave:Connect(function()
-            TweenService:Create(btn, UITheme.Tweens.Fast, {
-                BackgroundColor3 = isPrimary and UITheme.Colors.EmberPrimary or UITheme.Colors.Surface,
-            }):Play()
-        end)
-        btn.Activated:Connect(onClick)
+    -- Content Area below TopBar
+    local contentArea = Instance.new("Frame")
+    contentArea.Name = "ContentArea"
+    contentArea.Size = UDim2.new(1, 0, 1, -60)
+    contentArea.Position = UDim2.fromOffset(0, 60)
+    contentArea.BackgroundTransparency = 1
+    contentArea.ZIndex = 92
+    contentArea.Parent = container
+
+    local contentPadding = Instance.new("UIPadding")
+    contentPadding.PaddingLeft = UDim.new(0, 36)
+    contentPadding.PaddingRight = UDim.new(0, 36)
+    contentPadding.PaddingTop = UDim.new(0, 26)
+    contentPadding.PaddingBottom = UDim.new(0, 26)
+    contentPadding.Parent = contentArea
+
+    -- Left Action Column (Image 3 Style)
+    local leftColumn = Instance.new("Frame")
+    leftColumn.Name = "LeftColumn"
+    leftColumn.Size = UDim2.new(0, 320, 1, 0)
+    leftColumn.BackgroundTransparency = 1
+    leftColumn.ZIndex = 93
+    leftColumn.Parent = contentArea
+
+    local leftLayout = Instance.new("UIListLayout")
+    leftLayout.FillDirection = Enum.FillDirection.Vertical
+    leftLayout.Padding = UDim.new(0, 14)
+    leftLayout.Parent = leftColumn
+
+    -- Right Dynamic Panel
+    local rightPanel = Instance.new("Frame")
+    rightPanel.Name = "RightPanel"
+    rightPanel.Size = UDim2.new(1, -350, 1, 0)
+    rightPanel.Position = UDim2.fromOffset(350, 0)
+    rightPanel.BackgroundColor3 = UITheme.Colors.Surface
+    rightPanel.BackgroundTransparency = 0.2
+    rightPanel.BorderSizePixel = 0
+    rightPanel.ZIndex = 93
+    rightPanel.Parent = contentArea
+
+    local panelCorner = Instance.new("UICorner")
+    panelCorner.CornerRadius = UDim.new(0, 12)
+    panelCorner.Parent = rightPanel
+
+    local panelStroke = Instance.new("UIStroke")
+    panelStroke.Color = UITheme.Colors.BorderHairline
+    panelStroke.Thickness = 1.2
+    panelStroke.Parent = rightPanel
+
+    local panelPadding = Instance.new("UIPadding")
+    panelPadding.PaddingTop = UDim.new(0, 22)
+    panelPadding.PaddingBottom = UDim.new(0, 22)
+    panelPadding.PaddingLeft = UDim.new(0, 26)
+    panelPadding.PaddingRight = UDim.new(0, 26)
+    panelPadding.Parent = rightPanel
+
+    ----------------------------------------------------------------------------
+    -- TAB MANAGEMENT
+    ----------------------------------------------------------------------------
+    local currentTab = "SURVIVAL"
+    local tabButtons: { [string]: { Button: TextButton, Underline: Frame } } = {}
+    local tabViews: { [string]: Frame } = {}
+
+    local TAB_NAMES = { "SURVIVAL", "CONTROLS", "SETTINGS", "INTEL" }
+
+    for _, tName in ipairs(TAB_NAMES) do
+        local tabBtn = Instance.new("TextButton")
+        tabBtn.Name = "Tab_" .. tName
+        tabBtn.Size = UDim2.fromOffset(80, 40)
+        tabBtn.BackgroundTransparency = 1
+        tabBtn.AutoButtonColor = false
+        tabBtn.Font = UITheme.Fonts.Heading
+        tabBtn.Text = tName
+        tabBtn.TextColor3 = (tName == currentTab) and UITheme.Colors.TextPrimary or UITheme.Colors.TextMuted
+        tabBtn.TextSize = 13
+        tabBtn.ZIndex = 94
+        tabBtn.Parent = tabsContainer
+
+        local underline = Instance.new("Frame")
+        underline.Name = "Underline"
+        underline.Size = UDim2.new(1, 0, 0, 3)
+        underline.Position = UDim2.fromScale(0, 1)
+        underline.BackgroundColor3 = UITheme.Colors.EmberHot
+        underline.BorderSizePixel = 0
+        underline.Visible = (tName == currentTab)
+        underline.ZIndex = 95
+        underline.Parent = tabBtn
+
+        tabButtons[tName] = { Button = tabBtn, Underline = underline }
+
+        local viewFrame = Instance.new("Frame")
+        viewFrame.Name = "View_" .. tName
+        viewFrame.Size = UDim2.fromScale(1, 1)
+        viewFrame.BackgroundTransparency = 1
+        viewFrame.Visible = (tName == currentTab)
+        viewFrame.ZIndex = 94
+        viewFrame.Parent = rightPanel
+        tabViews[tName] = viewFrame
     end
 
-    local isBusy = false
+    local function switchTab(targetTab: string)
+        currentTab = targetTab
+        for tName, data in pairs(tabButtons) do
+            local isSel = (tName == currentTab)
+            data.Button.TextColor3 = isSel and UITheme.Colors.TextPrimary or UITheme.Colors.TextMuted
+            data.Underline.Visible = isSel
+        end
+        for tName, view in pairs(tabViews) do
+            view.Visible = (tName == currentTab)
+        end
+    end
+
+    for tName, data in pairs(tabButtons) do
+        data.Button.Activated:Connect(function()
+            switchTab(tName)
+        end)
+    end
+
+    ----------------------------------------------------------------------------
+    -- LEFT COLUMN ACTION CARDS (Image 3 Style)
+    ----------------------------------------------------------------------------
+    local function createActionCard(title: string, sub: string, isAccent: boolean, onClick: () -> ())
+        local card = Instance.new("TextButton")
+        card.Name = "Card_" .. title:gsub("%s+", "")
+        card.Size = UDim2.new(1, 0, 0, 68)
+        card.BackgroundColor3 = isAccent and UITheme.Colors.SurfaceElevated or UITheme.Colors.Surface
+        card.BackgroundTransparency = 0.25
+        card.AutoButtonColor = false
+        card.Text = ""
+        card.ZIndex = 94
+        card.Parent = leftColumn
+
+        local cardCorner = Instance.new("UICorner")
+        cardCorner.CornerRadius = UDim.new(0, 8)
+        cardCorner.Parent = card
+
+        local cardStroke = Instance.new("UIStroke")
+        cardStroke.Color = isAccent and UITheme.Colors.EmberHot or UITheme.Colors.BorderHairline
+        cardStroke.Thickness = isAccent and 1.6 or 1
+        cardStroke.Parent = card
+
+        local cardPadding = Instance.new("UIPadding")
+        cardPadding.PaddingLeft = UDim.new(0, 16)
+        cardPadding.PaddingRight = UDim.new(0, 16)
+        cardPadding.PaddingTop = UDim.new(0, 12)
+        cardPadding.PaddingBottom = UDim.new(0, 12)
+        cardPadding.Parent = card
+
+        local tLbl = Instance.new("TextLabel")
+        tLbl.Name = "Title"
+        tLbl.Size = UDim2.new(1, 0, 0, 20)
+        tLbl.BackgroundTransparency = 1
+        tLbl.Font = UITheme.Fonts.Heading
+        tLbl.Text = title
+        tLbl.TextColor3 = isAccent and UITheme.Colors.EmberGold or UITheme.Colors.TextPrimary
+        tLbl.TextSize = 14
+        tLbl.TextXAlignment = Enum.TextXAlignment.Left
+        tLbl.ZIndex = 95
+        tLbl.Parent = card
+
+        local sLbl = Instance.new("TextLabel")
+        sLbl.Name = "Sub"
+        sLbl.Size = UDim2.new(1, 0, 0, 18)
+        sLbl.Position = UDim2.fromOffset(0, 22)
+        sLbl.BackgroundTransparency = 1
+        sLbl.Font = UITheme.Fonts.Body
+        sLbl.Text = sub
+        sLbl.TextColor3 = UITheme.Colors.TextMuted
+        sLbl.TextSize = 11
+        sLbl.TextXAlignment = Enum.TextXAlignment.Left
+        sLbl.ZIndex = 95
+        sLbl.Parent = card
+
+        card.MouseEnter:Connect(function()
+            TweenService:Create(cardStroke, UITheme.Tweens.Fast, { Color = UITheme.Colors.EmberHot }):Play()
+            TweenService:Create(card, UITheme.Tweens.Fast, { BackgroundColor3 = UITheme.Colors.SurfaceHighlight }):Play()
+        end)
+        card.MouseLeave:Connect(function()
+            TweenService:Create(cardStroke, UITheme.Tweens.Fast, { Color = isAccent and UITheme.Colors.EmberHot or UITheme.Colors.BorderHairline }):Play()
+            TweenService:Create(card, UITheme.Tweens.Fast, { BackgroundColor3 = isAccent and UITheme.Colors.SurfaceElevated or UITheme.Colors.Surface }):Play()
+        end)
+
+        card.Activated:Connect(onClick)
+    end
+
+    createActionCard("RESUME SECTOR", "Continue your survival journey", true, function()
+        container.Visible = false
+        callbacks.OnResume()
+    end)
+
+    createActionCard("CAMPFIRE STATUS", "Inspect flame health & fuel reserves", false, function()
+        switchTab("SURVIVAL")
+    end)
+
+    createActionCard("KEYBINDINGS & CONTROLS", "View full keyboard & touch controls", false, function()
+        switchTab("CONTROLS")
+    end)
+
+    UIComponents.CreateDivider(leftColumn)
+
+    local btnSettingsLink = Instance.new("TextButton")
+    btnSettingsLink.Name = "BtnSettings"
+    btnSettingsLink.Size = UDim2.new(1, 0, 0, 36)
+    btnSettingsLink.BackgroundTransparency = 1
+    btnSettingsLink.Text = ""
+    btnSettingsLink.ZIndex = 94
+    btnSettingsLink.Parent = leftColumn
+
+    local settingsIcon = IconPack.CreateIcon("settings", 15, UITheme.Colors.TextSecondary, 0)
+    settingsIcon.Position = UDim2.fromOffset(0, 10)
+    settingsIcon.ZIndex = 95
+    settingsIcon.Parent = btnSettingsLink
+
+    local settingsLabel = Instance.new("TextLabel")
+    settingsLabel.Name = "Label"
+    settingsLabel.Size = UDim2.new(1, -26, 1, 0)
+    settingsLabel.Position = UDim2.fromOffset(26, 0)
+    settingsLabel.BackgroundTransparency = 1
+    settingsLabel.Font = UITheme.Fonts.Heading
+    settingsLabel.Text = "SETTINGS & AUDIO"
+    settingsLabel.TextColor3 = UITheme.Colors.TextSecondary
+    settingsLabel.TextSize = 13
+    settingsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    settingsLabel.ZIndex = 95
+    settingsLabel.Parent = btnSettingsLink
+
+    btnSettingsLink.Activated:Connect(function()
+        switchTab("SETTINGS")
+    end)
+
+    local btnQuit = Instance.new("TextButton")
+    btnQuit.Name = "BtnQuit"
+    btnQuit.Size = UDim2.new(1, 0, 0, 36)
+    btnQuit.BackgroundTransparency = 1
+    btnQuit.Text = ""
+    btnQuit.ZIndex = 94
+    btnQuit.Parent = leftColumn
+
+    local quitIcon = IconPack.CreateIcon("power", 15, UITheme.Colors.EmberCrimson, 0)
+    quitIcon.Position = UDim2.fromOffset(0, 10)
+    quitIcon.ZIndex = 95
+    quitIcon.Parent = btnQuit
+
+    local quitLabel = Instance.new("TextLabel")
+    quitLabel.Name = "Label"
+    quitLabel.Size = UDim2.new(1, -26, 1, 0)
+    quitLabel.Position = UDim2.fromOffset(26, 0)
+    quitLabel.BackgroundTransparency = 1
+    quitLabel.Font = UITheme.Fonts.Heading
+    quitLabel.Text = "QUIT TO MAIN MENU"
+    quitLabel.TextColor3 = UITheme.Colors.EmberCrimson
+    quitLabel.TextSize = 13
+    quitLabel.TextXAlignment = Enum.TextXAlignment.Left
+    quitLabel.ZIndex = 95
+    quitLabel.Parent = btnQuit
+
+    btnQuit.Activated:Connect(function()
+        container.Visible = false
+        callbacks.OnQuit()
+    end)
+
+    ----------------------------------------------------------------------------
+    -- VIEW 1: SURVIVAL TAB
+    ----------------------------------------------------------------------------
+    local survView = tabViews["SURVIVAL"]
+    local survLayout = Instance.new("UIListLayout")
+    survLayout.FillDirection = Enum.FillDirection.Vertical
+    survLayout.Padding = UDim.new(0, 14)
+    survLayout.Parent = survView
+
+    local survHeader = Instance.new("TextLabel")
+    survHeader.Size = UDim2.new(1, 0, 0, 24)
+    survHeader.BackgroundTransparency = 1
+    survHeader.Font = UITheme.Fonts.Heading
+    survHeader.Text = "SECTOR 01: THE LONG NIGHT"
+    survHeader.TextColor3 = UITheme.Colors.TextPrimary
+    survHeader.TextSize = 18
+    survHeader.TextXAlignment = Enum.TextXAlignment.Left
+    survHeader.Parent = survView
+
+    local survBadge = Instance.new("TextLabel")
+    survBadge.Size = UDim2.new(1, 0, 0, 16)
+    survBadge.BackgroundTransparency = 1
+    survBadge.Font = UITheme.Fonts.Tag
+    survBadge.Text = "[ OBJECTIVE: CHOP 2 TREES AND RETURN TO SHELTER BEFORE NIGHTFALL ]"
+    survBadge.TextColor3 = UITheme.Colors.EmberHot
+    survBadge.TextSize = 11
+    survBadge.TextXAlignment = Enum.TextXAlignment.Left
+    survBadge.Parent = survView
+
+    UIComponents.CreateDivider(survView)
+
+    local function addCheckItem(text: string, isDone: boolean)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 28)
+        row.BackgroundTransparency = 1
+        row.Parent = survView
+
+        local checkIcon = IconPack.CreateIcon(isDone and "check" or "circle", 16, isDone and UITheme.Colors.EmberHot or UITheme.Colors.TextMuted, 0)
+        checkIcon.Position = UDim2.fromOffset(4, 6)
+        checkIcon.ZIndex = 95
+        checkIcon.Parent = row
+
+        local desc = Instance.new("TextLabel")
+        desc.Size = UDim2.new(1, -30, 1, 0)
+        desc.Position = UDim2.fromOffset(30, 0)
+        desc.BackgroundTransparency = 1
+        desc.Font = UITheme.Fonts.Body
+        desc.Text = text
+        desc.TextColor3 = isDone and UITheme.Colors.TextPrimary or UITheme.Colors.TextSecondary
+        desc.TextSize = 12
+        desc.TextXAlignment = Enum.TextXAlignment.Left
+        desc.Parent = row
+    end
+
+    addCheckItem("Explore shelter perimeter & locate campfire stone pit", true)
+    addCheckItem("Use Stone Hatchet [Slot 1] to chop trees for fuel", false)
+    addCheckItem("Deposit wood logs into campfire before 19:00 nightfall", false)
+
+    ----------------------------------------------------------------------------
+    -- VIEW 2: CONTROLS TAB (Full Keybindings Guide)
+    ----------------------------------------------------------------------------
+    local ctrlView = tabViews["CONTROLS"]
+    local ctrlScroll = Instance.new("ScrollingFrame")
+    ctrlScroll.Size = UDim2.fromScale(1, 1)
+    ctrlScroll.BackgroundTransparency = 1
+    ctrlScroll.BorderSizePixel = 0
+    ctrlScroll.ScrollBarThickness = 3
+    ctrlScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    ctrlScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    ctrlScroll.Parent = ctrlView
+
+    local ctrlLayout = Instance.new("UIListLayout")
+    ctrlLayout.FillDirection = Enum.FillDirection.Vertical
+    ctrlLayout.Padding = UDim.new(0, 10)
+    ctrlLayout.Parent = ctrlScroll
+
+    local ctrlTitle = Instance.new("TextLabel")
+    ctrlTitle.Size = UDim2.new(1, 0, 0, 22)
+    ctrlTitle.BackgroundTransparency = 1
+    ctrlTitle.Font = UITheme.Fonts.Heading
+    ctrlTitle.Text = "SURVIVAL CONTROLS & KEYBINDINGS"
+    ctrlTitle.TextColor3 = UITheme.Colors.TextPrimary
+    ctrlTitle.TextSize = 16
+    ctrlTitle.TextXAlignment = Enum.TextXAlignment.Left
+    ctrlTitle.Parent = ctrlScroll
+
+    local function addKeyRow(actionName: string, pcKey: string, mobileTouch: string)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 36)
+        row.BackgroundColor3 = UITheme.Colors.SurfaceElevated
+        row.BorderSizePixel = 0
+        row.Parent = ctrlScroll
+
+        local rowCorner = Instance.new("UICorner")
+        rowCorner.CornerRadius = UDim.new(0, 6)
+        rowCorner.Parent = row
+
+        local actLbl = Instance.new("TextLabel")
+        actLbl.Size = UDim2.new(0.45, 0, 1, 0)
+        actLbl.Position = UDim2.fromOffset(14, 0)
+        actLbl.BackgroundTransparency = 1
+        actLbl.Font = UITheme.Fonts.Subheading
+        actLbl.Text = actionName
+        actLbl.TextColor3 = UITheme.Colors.TextPrimary
+        actLbl.TextSize = 12
+        actLbl.TextXAlignment = Enum.TextXAlignment.Left
+        actLbl.Parent = row
+
+        local keyPill = Instance.new("TextLabel")
+        keyPill.Size = UDim2.new(0.28, 0, 0, 24)
+        keyPill.Position = UDim2.new(0.48, 0, 0.5, 0)
+        keyPill.AnchorPoint = Vector2.new(0, 0.5)
+        keyPill.BackgroundColor3 = UITheme.Colors.Void
+        keyPill.Font = UITheme.Fonts.Tag
+        keyPill.Text = pcKey
+        keyPill.TextColor3 = UITheme.Colors.EmberHot
+        keyPill.TextSize = 11
+        keyPill.Parent = row
+
+        local pillCorner = Instance.new("UICorner")
+        pillCorner.CornerRadius = UDim.new(0, 4)
+        pillCorner.Parent = keyPill
+
+        local mobLbl = Instance.new("TextLabel")
+        mobLbl.Size = UDim2.new(0.22, 0, 1, 0)
+        mobLbl.Position = UDim2.new(0.78, 0, 0, 0)
+        mobLbl.BackgroundTransparency = 1
+        mobLbl.Font = UITheme.Fonts.Body
+        mobLbl.Text = mobileTouch
+        mobLbl.TextColor3 = UITheme.Colors.TextMuted
+        mobLbl.TextSize = 10
+        mobLbl.TextXAlignment = Enum.TextXAlignment.Left
+        mobLbl.Parent = row
+    end
+
+    addKeyRow("Movement", "[ W ] [ A ] [ S ] [ D ]", "Virtual Thumbstick")
+    addKeyRow("Sprint (Uses Stamina)", "[ Left Shift ]", "Sprint Toggle Button")
+    addKeyRow("Jump", "[ Spacebar ]", "Jump Button")
+    addKeyRow("Select Hotbar Tool", "[ 1 ] [ 2 ] [ 3 ]", "Tap QuickSlot")
+    addKeyRow("Interact / Pick Up", "[ E ]", "Tap Object Prompt")
+    addKeyRow("Drop Carried Item", "[ Q ]", "Tap Drop Button")
+    addKeyRow("Open Backpack", "[ B ] or [ Tab ]", "Tap Backpack Icon")
+    addKeyRow("In-Game Menu", "[ Esc ] or [ M ]", "Tap Menu Icon")
+
+    ----------------------------------------------------------------------------
+    -- VIEW 3: SETTINGS TAB (Inline Embedded Sliders - No Dropdown Modals!)
+    ----------------------------------------------------------------------------
+    local settView = tabViews["SETTINGS"]
+    local settLayout = Instance.new("UIListLayout")
+    settLayout.FillDirection = Enum.FillDirection.Vertical
+    settLayout.Padding = UDim.new(0, 14)
+    settLayout.Parent = settView
+
+    local settTitle = Instance.new("TextLabel")
+    settTitle.Size = UDim2.new(1, 0, 0, 22)
+    settTitle.BackgroundTransparency = 1
+    settTitle.Font = UITheme.Fonts.Heading
+    settTitle.Text = "AUDIO & IMMERSION CONFIGURATION"
+    settTitle.TextColor3 = UITheme.Colors.TextPrimary
+    settTitle.TextSize = 16
+    settTitle.TextXAlignment = Enum.TextXAlignment.Left
+    settTitle.Parent = settView
+
+    UIComponents.CreateSlider({
+        Label = "MASTER AUDIO VOLUME",
+        Description = "Controls game-wide ambience, blizzard winds & sound effects",
+        InitialValue = UITheme.GetMasterVolume(),
+        Parent = settView,
+        OnChanged = function(val: number)
+            UITheme.SetMasterVolume(val)
+        end,
+    })
+
+    UIComponents.CreateDivider(settView)
+
+    UIComponents.CreateToggle({
+        Label = "REDUCED MOTION",
+        Description = "Limits intense camera shakes, screen blurs & particle speeds",
+        InitialValue = false,
+        Parent = settView,
+        OnChanged = function(enabled: boolean)
+            -- Motion toggle callback
+        end,
+    })
+
+    UIComponents.CreateDivider(settView)
+
+    UIComponents.CreateToggle({
+        Label = "CAMERA HEAD BOBBING",
+        Description = "Realistic first-person head bob while walking and sprinting",
+        InitialValue = true,
+        Parent = settView,
+        OnChanged = function(enabled: boolean)
+            -- Camera bob toggle callback
+        end,
+    })
+
+    ----------------------------------------------------------------------------
+    -- VIEW 4: INTEL TAB (Survival Knowledge & Hollow Lore)
+    ----------------------------------------------------------------------------
+    local intelView = tabViews["INTEL"]
+    local intelLayout = Instance.new("UIListLayout")
+    intelLayout.FillDirection = Enum.FillDirection.Vertical
+    intelLayout.Padding = UDim.new(0, 12)
+    intelLayout.Parent = intelView
+
+    local intelTitle = Instance.new("TextLabel")
+    intelTitle.Size = UDim2.new(1, 0, 0, 22)
+    intelTitle.BackgroundTransparency = 1
+    intelTitle.Font = UITheme.Fonts.Heading
+    intelTitle.Text = "SURVIVAL INTELLIGENCE"
+    intelTitle.TextColor3 = UITheme.Colors.TextPrimary
+    intelTitle.TextSize = 16
+    intelTitle.TextXAlignment = Enum.TextXAlignment.Left
+    intelTitle.Parent = intelView
+
+    local function addIntelCard(title: string, body: string)
+        local box = Instance.new("Frame")
+        box.Size = UDim2.new(1, 0, 0, 76)
+        box.BackgroundColor3 = UITheme.Colors.SurfaceElevated
+        box.BorderSizePixel = 0
+        box.Parent = intelView
+
+        local bCorner = Instance.new("UICorner")
+        bCorner.CornerRadius = UDim.new(0, 8)
+        bCorner.Parent = box
+
+        local bStroke = Instance.new("UIStroke")
+        bStroke.Color = UITheme.Colors.BorderHairline
+        bStroke.Thickness = 1
+        bStroke.Parent = box
+
+        local bPad = Instance.new("UIPadding")
+        bPad.PaddingLeft = UDim.new(0, 16)
+        bPad.PaddingRight = UDim.new(0, 16)
+        bPad.PaddingTop = UDim.new(0, 10)
+        bPad.PaddingBottom = UDim.new(0, 10)
+        bPad.Parent = box
+
+        local t = Instance.new("TextLabel")
+        t.Size = UDim2.new(1, 0, 0, 16)
+        t.BackgroundTransparency = 1
+        t.Font = UITheme.Fonts.Heading
+        t.Text = title
+        t.TextColor3 = UITheme.Colors.EmberHot
+        t.TextSize = 12
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.Parent = box
+
+        local b = Instance.new("TextLabel")
+        b.Size = UDim2.new(1, 0, 0, 36)
+        b.Position = UDim2.fromOffset(0, 18)
+        b.BackgroundTransparency = 1
+        b.Font = UITheme.Fonts.Body
+        b.Text = body
+        b.TextColor3 = UITheme.Colors.TextSecondary
+        b.TextSize = 11
+        b.TextWrapped = true
+        b.TextXAlignment = Enum.TextXAlignment.Left
+        b.Parent = box
+    end
+
+    addIntelCard("THE CAMPFIRE IS SANCTUARY", "Light from the campfire repels the entity. Never let it deplete completely.")
+    addIntelCard("THE HOLLOW STALKS IN DARKNESS", "At 19:00 nightfall, the entity roams outside the illuminated radius.")
+    addIntelCard("LIGHT RELAYS EXTEND PERIMETER", "Deploy solar lantern relays to create safe paths across the forest.")
+
+    ----------------------------------------------------------------------------
+    -- VISIBILITY CONTROLS
+    ----------------------------------------------------------------------------
+    local isTransitioning = false
 
     local function openMenu()
-        if isBusy then return end
-        isBusy = true
-        backdrop.Visible = true
-        card.Position = UDim2.fromScale(0.5, 0.52)
-        TweenService:Create(backdrop, UITheme.Tweens.Fast, { BackgroundTransparency = 0.55 }):Play()
-        local cardTween = TweenService:Create(card, UITheme.Tweens.Fast, { Position = UDim2.fromScale(0.5, 0.5) })
-        cardTween.Completed:Connect(function() isBusy = false end)
-        cardTween:Play()
+        if isTransitioning then return end
+        isTransitioning = true
+        container.Visible = true
+        switchTab("SURVIVAL")
+        TweenService:Create(container, UITheme.Tweens.Fast, { BackgroundTransparency = 0.28 }):Play()
+        task.wait(0.2)
+        isTransitioning = false
     end
 
     local function closeMenu()
-        if isBusy then return end
-        isBusy = true
-        TweenService:Create(backdrop, UITheme.Tweens.Fast, { BackgroundTransparency = 1 }):Play()
-        local cardTween = TweenService:Create(card, UITheme.Tweens.Fast, { Position = UDim2.fromScale(0.5, 0.52) })
-        cardTween.Completed:Connect(function()
-            backdrop.Visible = false
-            isBusy = false
+        if isTransitioning then return end
+        isTransitioning = true
+        local fadeTween = TweenService:Create(container, UITheme.Tweens.Fast, { BackgroundTransparency = 1 })
+        fadeTween.Completed:Connect(function()
+            container.Visible = false
+            isTransitioning = false
         end)
-        cardTween:Play()
+        fadeTween:Play()
     end
 
-    createMenuBtn("RESUME GAME", true, function()
+    btnResume.Activated:Connect(function()
         closeMenu()
         callbacks.OnResume()
     end)
 
-    createMenuBtn("SETTINGS", false, function()
-        callbacks.OnSettings()
-    end)
-
-    createMenuBtn("QUIT TO MAIN MENU", false, function()
-        closeMenu()
-        callbacks.OnQuit()
-    end)
-
     return {
-        Backdrop = backdrop,
+        Container = container,
         Open = openMenu,
         Close = closeMenu,
         Destroy = function()
-            backdrop:Destroy()
+            container:Destroy()
         end,
     }
 end
