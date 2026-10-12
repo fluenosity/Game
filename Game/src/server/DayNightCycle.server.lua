@@ -47,7 +47,7 @@ end
 -- ---------------------------------------------------------------------------
 
 local currentDay: number = TimeConfig.StartDay
-local currentHour: number = TimeConfig.StartHour
+local currentHour: number = TimeConfig.FreezeTime and (TimeConfig.FreezeHour or 14.0) or TimeConfig.StartHour
 local currentPhase: string = "Day"
 local phaseProgress: number = 0.0
 
@@ -96,12 +96,34 @@ end
 -- ---------------------------------------------------------------------------
 
 local function advanceTime(deltaTime: number)
+	if TimeConfig.FreezeTime then
+		currentHour = TimeConfig.FreezeHour or 14.0
+		local newPhase = getPhaseFromHour(currentHour)
+		currentPhase = newPhase
+		phaseProgress = 0.5
+
+		if timeState then
+			timeState:SetAttribute("CurrentDay", currentDay)
+			timeState:SetAttribute("CurrentHour", currentHour)
+			timeState:SetAttribute("CurrentPhase", currentPhase)
+			timeState:SetAttribute("PhaseProgress", phaseProgress)
+		end
+
+		visualSyncTimer = visualSyncTimer + deltaTime
+		if visualSyncTimer >= 1.5 then
+			visualSyncTimer = 0.0
+			TimeVisuals.Apply(currentHour, currentDay)
+		end
+		return
+	end
+
 	local phaseName = getPhaseFromHour(currentHour)
 	local duration = getPhaseDuration(phaseName)
 	local phaseHours = getPhaseHours(phaseName)
 
-	-- Advance game hours based on phase pacing
-	local hoursPerSecond = phaseHours / duration
+	-- Advance game hours based on phase pacing with configurable speed multiplier
+	local speedMult = TimeConfig.TimeSpeedMultiplier or 1.0
+	local hoursPerSecond = (phaseHours / duration) * speedMult
 	currentHour = currentHour + (hoursPerSecond * deltaTime)
 
 	-- Wrap past midnight

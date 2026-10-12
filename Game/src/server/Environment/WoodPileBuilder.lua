@@ -173,6 +173,7 @@ function WoodPileBuilder.Build(): Model
     prompt.MaxActivationDistance = 20.0
     prompt.RequiresLineOfSight = false
     prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton
+    prompt.ClickablePrompt = false
     prompt.Parent = promptAnchor
 
     model.Parent = Workspace

@@ -386,10 +386,21 @@ function HUDBarterModal.Create(parent: Instance): HUDBarterModalInstance
         table.insert(tradeCardUpdaters, updateCard)
     end
 
+    local isOpen = false
+    local onOpenCallback: (() -> ())? = nil
+    local onCloseCallback: (() -> ())? = nil
+
     -- Close Button Interaction
     local function closeModal()
+        if not isOpen then return end
+        isOpen = false
         veil.Modal = false
         AudioManager.Play("InventoryClose")
+
+        if onCloseCallback then
+            onCloseCallback()
+        end
+
         TweenService:Create(modalFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
             Position = UDim2.new(0.5, 0, 0.5, 30),
             BackgroundTransparency = 1,
@@ -407,16 +418,20 @@ function HUDBarterModal.Create(parent: Instance): HUDBarterModalInstance
     local lastOpenedAt = 0
 
     local function openModal()
+        if isOpen then return end
+        isOpen = true
         lastOpenedAt = tick()
         veil.Visible = true
         veil.Modal = true
-        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-        UserInputService.MouseIconEnabled = true
         veil.BackgroundTransparency = 1
         modalFrame.Position = UDim2.new(0.5, 0, 0.5, 30)
         modalFrame.BackgroundTransparency = 1
 
         AudioManager.Play("InventoryOpen")
+
+        if onOpenCallback then
+            onOpenCallback()
+        end
 
         TweenService:Create(veil, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = 0.45,
@@ -432,7 +447,7 @@ function HUDBarterModal.Create(parent: Instance): HUDBarterModalInstance
 
     -- ESC / E Key to Close (with debounce so holding E on prompt doesn't instantly close)
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if veil.Visible then
+        if isOpen then
             if input.KeyCode == Enum.KeyCode.Escape then
                 closeModal()
             elseif input.KeyCode == Enum.KeyCode.E and not gameProcessed and (tick() - lastOpenedAt > 0.45) then
@@ -466,12 +481,18 @@ function HUDBarterModal.Create(parent: Instance): HUDBarterModalInstance
         Open = openModal,
         Close = closeModal,
         Toggle = function()
-            if veil.Visible then closeModal() else openModal() end
+            if isOpen then closeModal() else openModal() end
         end,
         IsOpen = function()
-            return veil.Visible
+            return isOpen
         end,
         UpdateInventory = updateInventoryState,
+        SetOnOpen = function(cb)
+            onOpenCallback = cb
+        end,
+        SetOnClose = function(cb)
+            onCloseCallback = cb
+        end,
         Destroy = function()
             veil:Destroy()
         end,

@@ -29,6 +29,12 @@
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "$ignoreUnknownInstances": true,
+      "$properties": {
+        "CameraMode": "Classic",
+        "CameraMaxZoomDistance": 128,
+        "CameraMinZoomDistance": 0.5,
+        "EnableMouseLockOption": false
+      },
       "StarterPlayerScripts": {
         "$className": "StarterPlayerScripts",
         "$ignoreUnknownInstances": true,

@@ -346,6 +346,7 @@ function CampfireSystem.BuildCampfire(): Model
     prompt.HoldDuration = 0.35
     prompt.MaxActivationDistance = 8.5
     prompt.RequiresLineOfSight = false
+    prompt.ClickablePrompt = false
     prompt.Parent = firePart
     campfireState.MainPrompt = prompt
 
@@ -514,6 +515,7 @@ function CampfireSystem.BuildSittingTrunks(): Folder
             sitPrompt.HoldDuration = 0
             sitPrompt.MaxActivationDistance = 5.5
             sitPrompt.RequiresLineOfSight = false
+            sitPrompt.ClickablePrompt = false
             sitPrompt.Parent = seat
 
             if RunService:IsRunning() then
@@ -744,6 +746,7 @@ local function wireExistingModels(): boolean
                 existingPrompt.HoldDuration = 0.35
                 existingPrompt.MaxActivationDistance = 8.5
                 existingPrompt.RequiresLineOfSight = false
+                existingPrompt.ClickablePrompt = false
                 existingPrompt.Parent = campfireState.FirePart
             end
             campfireState.MainPrompt = existingPrompt
@@ -784,6 +787,7 @@ local function wireExistingModels(): boolean
                         prompt.HoldDuration = 0
                         prompt.MaxActivationDistance = 5.5
                         prompt.RequiresLineOfSight = false
+                        prompt.ClickablePrompt = false
                         prompt.Parent = child
                     end
 

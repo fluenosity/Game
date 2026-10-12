@@ -750,12 +750,34 @@ export type SliderConfig = {
     Label: string,
     Description: string?,
     InitialValue: number,
+    MinValue: number?,
+    MaxValue: number?,
+    Step: number?,
+    ValueFormat: ((value: number) -> string)?,
     Parent: Instance,
     OnChanged: (value: number) -> (),
 }
 
 function UIComponents.CreateSlider(config: SliderConfig): Frame
-    local currentValue = math.clamp(config.InitialValue, 0, 1)
+    local minVal = config.MinValue or 0
+    local maxVal = config.MaxValue or 1
+    local step = config.Step or ((maxVal - minVal) * 0.05)
+    local currentValue = math.clamp(config.InitialValue, minVal, maxVal)
+
+    local function getNormalized(val: number): number
+        if maxVal <= minVal then return 0 end
+        return math.clamp((val - minVal) / (maxVal - minVal), 0, 1)
+    end
+
+    local function formatVal(val: number): string
+        if config.ValueFormat then
+            return config.ValueFormat(val)
+        elseif maxVal == 1 and minVal == 0 then
+            return string.format("%d%%", math.round(val * 100))
+        else
+            return string.format("%.1f", val)
+        end
+    end
 
     local container = Instance.new("Frame")
     container.Name = "Slider_" .. config.Label:gsub("%s+", "")
@@ -790,7 +812,7 @@ function UIComponents.CreateSlider(config: SliderConfig): Frame
     valuePill.AnchorPoint = Vector2.new(1, 0)
     valuePill.BackgroundTransparency = 1
     valuePill.Font = UITheme.Fonts.Tag
-    valuePill.Text = string.format("%d%%", math.round(currentValue * 100))
+    valuePill.Text = formatVal(currentValue)
     valuePill.TextColor3 = UITheme.Colors.EmberHot
     valuePill.TextSize = 13
     valuePill.TextXAlignment = Enum.TextXAlignment.Right
@@ -860,7 +882,7 @@ function UIComponents.CreateSlider(config: SliderConfig): Frame
 
     local fill = Instance.new("Frame")
     fill.Name = "Fill"
-    fill.Size = UDim2.fromScale(currentValue, 1)
+    fill.Size = UDim2.fromScale(getNormalized(currentValue), 1)
     fill.BackgroundColor3 = UITheme.Colors.EmberPrimary
     fill.BorderSizePixel = 0
     fill.ZIndex = 46
@@ -879,38 +901,39 @@ function UIComponents.CreateSlider(config: SliderConfig): Frame
     fillGrad.Parent = fill
 
     local function setValue(val: number)
-        currentValue = math.clamp(val, 0, 1)
-        fill.Size = UDim2.fromScale(currentValue, 1)
-        valuePill.Text = string.format("%d%%", math.round(currentValue * 100))
+        currentValue = math.clamp(val, minVal, maxVal)
+        fill.Size = UDim2.fromScale(getNormalized(currentValue), 1)
+        valuePill.Text = formatVal(currentValue)
         config.OnChanged(currentValue)
     end
 
     btnMinus.Activated:Connect(function()
-        setValue(currentValue - 0.05)
+        setValue(currentValue - step)
     end)
 
     btnPlus.Activated:Connect(function()
-        setValue(currentValue + 0.05)
+        setValue(currentValue + step)
     end)
 
     local isDragging = false
 
+    local function updateFromInput(input)
+        if track.AbsoluteSize.X > 0 then
+            local relative = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+            setValue(minVal + (relative * (maxVal - minVal)))
+        end
+    end
+
     track.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             isDragging = true
-            if track.AbsoluteSize.X > 0 then
-                local relative = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-                setValue(relative)
-            end
+            updateFromInput(input)
         end
     end)
 
     UserInputService.InputChanged:Connect(function(input)
         if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            if track.AbsoluteSize.X > 0 then
-                local relative = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-                setValue(relative)
-            end
+            updateFromInput(input)
         end
     end)
 
@@ -1731,252 +1754,19 @@ function UIComponents.CreateHUDClock(parent: Instance): HUDClockInstance
 end
 
 --------------------------------------------------------------------------------
--- 11. GENSHIN IMPACT STYLE STAMINA BAR (Smooth Crescent Half-Circle)
+-- 11. SPRINT STAMINA BAR (REMOVED / STUBBED)
 --------------------------------------------------------------------------------
 export type GenshinStaminaInstance = {
-    Billboard: BillboardGui,
     SetStamina: (current: number, max: number, isConsuming: boolean) -> (),
     UpdateCameraAlignment: (cameraRight: Vector3?, cameraUp: Vector3?) -> (),
     Destroy: () -> (),
 }
 
-function UIComponents.CreateGenshinStaminaBar(character: Model): GenshinStaminaInstance
-    local rootPart = character:WaitForChild("HumanoidRootPart", 5) :: BasePart?
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "GenshinStaminaBar"
-    billboard.Size = UDim2.fromOffset(70, 130)
-    billboard.AlwaysOnTop = true
-    billboard.ResetOnSpawn = false
-    billboard.Enabled = false
-    billboard.Parent = character
-
-    if rootPart then
-        billboard.Adornee = rootPart
-    end
-
-    -- Dynamic camera-relative alignment:
-    -- Guarantees the stamina bar stays strictly to the camera's right side of the character at all times,
-    -- preventing any left/right inversion or flipped curvature when rotating camera 360 degrees.
-    local function alignToCamera(customRight: Vector3?, customUp: Vector3?)
-        local camera = workspace.CurrentCamera
-        if not camera or not rootPart or not rootPart.Parent then return end
-
-        local camDist = (camera.CFrame.Position - rootPart.Position).Magnitude
-        -- If player is in 1st person zoom (< 1.2 studs), hide to avoid obstructing screen
-        if camDist < 1.2 then
-            billboard.Enabled = false
-            return
-        end
-
-        local rightVec = customRight or camera.CFrame.RightVector
-        local upVec = customUp or camera.CFrame.UpVector
-        billboard.StudsOffsetWorldSpace = (rightVec * 1.85) + (upVec * 0.15)
-    end
-
-    local renderConn: RBXScriptConnection? = RunService.RenderStepped:Connect(function()
-        alignToCamera()
-    end)
-    alignToCamera()
-
-    -- CanvasGroup for smooth group fading and anti-aliased presentation
-    local canvas = Instance.new("CanvasGroup")
-    canvas.Name = "ArcContainer"
-    canvas.Size = UDim2.fromScale(1, 1)
-    canvas.BackgroundTransparency = 1
-    canvas.GroupTransparency = 1
-    canvas.BorderSizePixel = 0
-    canvas.Parent = billboard
-
-    -- 36 micro-segments forming a seamless, continuous Genshin crescent arc ')'
-    local NUM_SEGMENTS = 36
-    local segments: { { Glow: Frame, Fill: Frame, Core: Frame } } = {}
-
-    local ARC_CENTER_X = 10
-    local ARC_CENTER_Y = 65
-    local ARC_RADIUS = 48
-    local ANGLE_SPAN = 92 -- degrees (-46 to +46)
-
-    for i = 1, NUM_SEGMENTS do
-        local t = (i - 1) / (NUM_SEGMENTS - 1) -- 0 at bottom, 1 at top
-        local angleDeg = (ANGLE_SPAN / 2) - (t * ANGLE_SPAN) -- +46 at bottom, -46 at top
-        local angleRad = math.rad(angleDeg)
-
-        local posX = ARC_CENTER_X + (ARC_RADIUS * math.cos(angleRad))
-        local posY = ARC_CENTER_Y + (ARC_RADIUS * math.sin(angleRad))
-
-        -- 1. Dark background track (solid overlapping ribbon)
-        local track = Instance.new("Frame")
-        track.Name = "Track_" .. i
-        track.Size = UDim2.fromOffset(8, 8)
-        track.AnchorPoint = Vector2.new(0.5, 0.5)
-        track.Position = UDim2.fromOffset(posX, posY)
-        track.BackgroundColor3 = Color3.fromRGB(24, 18, 14)
-        track.BackgroundTransparency = 0.35
-        track.BorderSizePixel = 0
-        track.ZIndex = 80
-        track.Parent = canvas
-
-        local trackCorner = Instance.new("UICorner")
-        trackCorner.CornerRadius = UDim.new(1, 0)
-        trackCorner.Parent = track
-
-        -- 2. Outer radiant glow
-        local glow = Instance.new("Frame")
-        glow.Name = "Glow_" .. i
-        glow.Size = UDim2.fromOffset(10, 10)
-        glow.AnchorPoint = Vector2.new(0.5, 0.5)
-        glow.Position = UDim2.fromOffset(posX, posY)
-        glow.BackgroundColor3 = UITheme.Colors.EmberGold
-        glow.BackgroundTransparency = 0.78
-        glow.BorderSizePixel = 0
-        glow.ZIndex = 82
-        glow.Visible = false
-        glow.Parent = canvas
-
-        local glowCorner = Instance.new("UICorner")
-        glowCorner.CornerRadius = UDim.new(1, 0)
-        glowCorner.Parent = glow
-
-        -- 3. Vibrant liquid fill
-        local fill = Instance.new("Frame")
-        fill.Name = "Fill_" .. i
-        fill.Size = UDim2.fromOffset(6, 6)
-        fill.AnchorPoint = Vector2.new(0.5, 0.5)
-        fill.Position = UDim2.fromOffset(posX, posY)
-        fill.BackgroundColor3 = UITheme.Colors.EmberGold
-        fill.BorderSizePixel = 0
-        fill.ZIndex = 84
-        fill.Visible = false
-        fill.Parent = canvas
-
-        local fillCorner = Instance.new("UICorner")
-        fillCorner.CornerRadius = UDim.new(1, 0)
-        fillCorner.Parent = fill
-
-        -- 4. Bright inner core line
-        local core = Instance.new("Frame")
-        core.Name = "Core_" .. i
-        core.Size = UDim2.fromOffset(3, 3)
-        core.AnchorPoint = Vector2.new(0.5, 0.5)
-        core.Position = UDim2.fromOffset(posX, posY)
-        core.BackgroundColor3 = Color3.fromRGB(255, 235, 170)
-        core.BorderSizePixel = 0
-        core.ZIndex = 86
-        core.Visible = false
-        core.Parent = canvas
-
-        local coreCorner = Instance.new("UICorner")
-        coreCorner.CornerRadius = UDim.new(1, 0)
-        coreCorner.Parent = core
-
-        table.insert(segments, { Glow = glow, Fill = fill, Core = core })
-    end
-
-    local isVisible = false
-    local hideTimer: thread? = nil
-    local fadeTween: Tween? = nil
-
-    local function setStamina(current: number, max: number, isConsuming: boolean)
-        local ratio = math.clamp(current / math.max(max, 1), 0, 1)
-
-        -- Visibility logic: show while sprinting/jumping or stamina depleted
-        if ratio < 0.999 or isConsuming then
-            if hideTimer then
-                task.cancel(hideTimer)
-                hideTimer = nil
-            end
-            if not isVisible then
-                isVisible = true
-                billboard.Enabled = true
-                if fadeTween then fadeTween:Cancel() end
-                fadeTween = TweenService:Create(canvas, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    GroupTransparency = 0,
-                })
-                fadeTween:Play()
-            end
-        else
-            -- Smooth fade out after full recovery
-            if isVisible and not hideTimer then
-                hideTimer = task.delay(0.6, function()
-                    if fadeTween then fadeTween:Cancel() end
-                    fadeTween = TweenService:Create(canvas, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                        GroupTransparency = 1,
-                    })
-                    fadeTween:Play()
-                    fadeTween.Completed:Connect(function()
-                        if canvas.GroupTransparency >= 0.95 then
-                            billboard.Enabled = false
-                            isVisible = false
-                        end
-                    end)
-                    hideTimer = nil
-                end)
-            end
-        end
-
-        local isCritical = (ratio < 0.22)
-        local fillColor = isCritical and UITheme.Colors.EmberCrimson or UITheme.Colors.EmberGold
-        local coreColor = isCritical and Color3.fromRGB(255, 180, 160) or Color3.fromRGB(255, 235, 170)
-        local glowColor = isCritical and UITheme.Colors.EmberCrimson or UITheme.Colors.EmberGold
-
-        local continuousVal = ratio * NUM_SEGMENTS
-        local fullThreshold = math.floor(continuousVal)
-        local partialFraction = continuousVal - fullThreshold
-
-        -- Drains from top (index 36) to bottom (index 1), refills bottom to top
-        for i = 1, NUM_SEGMENTS do
-            local seg = segments[i]
-            if i <= fullThreshold then
-                seg.Glow.Visible = true
-                seg.Glow.BackgroundColor3 = glowColor
-                seg.Glow.BackgroundTransparency = 0.78
-
-                seg.Fill.Visible = true
-                seg.Fill.BackgroundColor3 = fillColor
-                seg.Fill.BackgroundTransparency = 0
-
-                seg.Core.Visible = true
-                seg.Core.BackgroundColor3 = coreColor
-                seg.Core.BackgroundTransparency = 0
-            elseif i == fullThreshold + 1 and partialFraction > 0.02 then
-                seg.Glow.Visible = true
-                seg.Glow.BackgroundColor3 = glowColor
-                seg.Glow.BackgroundTransparency = 0.78 + (1 - partialFraction) * 0.22
-
-                seg.Fill.Visible = true
-                seg.Fill.BackgroundColor3 = fillColor
-                seg.Fill.BackgroundTransparency = 1 - partialFraction
-
-                seg.Core.Visible = true
-                seg.Core.BackgroundColor3 = coreColor
-                seg.Core.BackgroundTransparency = 1 - partialFraction
-            else
-                seg.Glow.Visible = false
-                seg.Fill.Visible = false
-                seg.Core.Visible = false
-            end
-        end
-    end
-
+function UIComponents.CreateGenshinStaminaBar(_character: Model?): any
     return {
-        Billboard = billboard,
-        SetStamina = setStamina,
-        UpdateCameraAlignment = function(camRight: Vector3?, camUp: Vector3?)
-            alignToCamera(camRight, camUp)
-        end,
-        Destroy = function()
-            if renderConn then
-                renderConn:Disconnect()
-                renderConn = nil
-            end
-            if hideTimer then
-                task.cancel(hideTimer)
-            end
-            if fadeTween then
-                fadeTween:Cancel()
-            end
-            billboard:Destroy()
-        end,
+        SetStamina = function() end,
+        UpdateCameraAlignment = function() end,
+        Destroy = function() end,
     }
 end
 
@@ -2178,11 +1968,12 @@ export type SystemMenuInstance = {
     Container: Frame,
     Open: () -> (),
     Close: () -> (),
+    IsOpen: () -> boolean,
     Destroy: () -> (),
 }
 function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCallbacks): SystemMenuInstance
     local container = Instance.new("Frame")
-    container.Name = "AAASystemMenu"
+    container.Name = "SettingsMenu"
     container.Size = UDim2.fromScale(1, 1)
     container.Position = UDim2.fromScale(0, 0)
     container.BackgroundColor3 = Color3.fromRGB(6, 6, 8)
@@ -2191,6 +1982,17 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     container.Visible = false
     container.ZIndex = 90
     container.Parent = parent
+
+    -- Invisible modal catch button to natively unlock cursor in Roblox engine
+    local modalVeil = Instance.new("TextButton")
+    modalVeil.Name = "ModalVeil"
+    modalVeil.Size = UDim2.fromScale(1, 1)
+    modalVeil.BackgroundTransparency = 1
+    modalVeil.Text = ""
+    modalVeil.AutoButtonColor = false
+    modalVeil.Modal = false
+    modalVeil.ZIndex = 89
+    modalVeil.Parent = container
 
     -- Atmospheric Dark Vignette Overlay
     local vignette = Instance.new("Frame")
@@ -2229,7 +2031,7 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     titleFrame.ZIndex = 93
     titleFrame.Parent = headerBar
 
-    local flameIcon = IconPack.CreateIcon("flame", 20, UITheme.Colors.EmberPrimary, 0)
+    local flameIcon = IconPack.CreateIcon("settings", 20, UITheme.Colors.EmberPrimary, 0)
     flameIcon.Position = UDim2.fromOffset(0, 4)
     flameIcon.ZIndex = 94
     flameIcon.Parent = titleFrame
@@ -2240,7 +2042,7 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     logoText.Position = UDim2.fromOffset(30, 2)
     logoText.BackgroundTransparency = 1
     logoText.Font = UITheme.Fonts.Heading
-    logoText.Text = "DON'T LET THE FIRE DIE"
+    logoText.Text = "SETTINGS MENU"
     logoText.TextColor3 = UITheme.Colors.TextPrimary
     logoText.TextSize = 16
     logoText.TextXAlignment = Enum.TextXAlignment.Left
@@ -2253,7 +2055,12 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     statusDot.Position = UDim2.fromOffset(30, 24)
     statusDot.BackgroundTransparency = 1
     statusDot.Font = UITheme.Fonts.Tag
-    statusDot.Text = "●  PAUSED // SURVIVAL SANCTUARY"
+    statusDot.Text = "●  GAME CONFIGURATION & AUDIO PREFERENCES"
+    statusDot.TextColor3 = UITheme.Colors.EmberHot
+    statusDot.TextSize = 10
+    statusDot.TextXAlignment = Enum.TextXAlignment.Left
+    statusDot.ZIndex = 94
+    statusDot.Parent = titleFrame
     statusDot.TextColor3 = UITheme.Colors.EmberHot
     statusDot.TextSize = 10
     statusDot.TextXAlignment = Enum.TextXAlignment.Left
@@ -2363,7 +2170,7 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     ----------------------------------------------------------------------------
     -- NAVIGATION SYSTEM & TAB VIEWS
     ----------------------------------------------------------------------------
-    local currentTab = "SURVIVAL"
+    local currentTab = "SETTINGS"
     local navButtons: { [string]: {
         Row: TextButton,
         AccentBar: Frame,
@@ -2373,9 +2180,9 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     local tabViews: { [string]: Frame } = {}
 
     local TAB_DEFS = {
-        { Id = "SURVIVAL", Name = "SURVIVAL", Sub = "Objectives & Campfire", Icon = "compass" },
-        { Id = "SETTINGS", Name = "SETTINGS", Sub = "Audio & Immersion", Icon = "settings" },
+        { Id = "SETTINGS", Name = "SETTINGS", Sub = "Audio, Sensitivity & Controls", Icon = "settings" },
         { Id = "CONTROLS", Name = "CONTROLS", Sub = "Keyboard & Shortcuts", Icon = "gamepad-2" },
+        { Id = "SURVIVAL", Name = "SURVIVAL", Sub = "Objectives & Campfire", Icon = "compass" },
         { Id = "INTEL",    Name = "INTEL",    Sub = "Survival Guide & Lore", Icon = "book-open" },
     }
 
@@ -2673,11 +2480,65 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
 
     UIComponents.CreateSlider({
         Label = "MASTER AUDIO VOLUME",
-        Description = "Controls game-wide ambience, blizzard winds & sound effects",
+        Description = "Master sound level for the entire game",
         InitialValue = UITheme.GetMasterVolume(),
         Parent = settView,
         OnChanged = function(val: number)
             UITheme.SetMasterVolume(val)
+        end,
+    })
+
+    UIComponents.CreateDivider(settView)
+
+    UIComponents.CreateSlider({
+        Label = "SFX VOLUME",
+        Description = "UI clicks, item interaction, wood gathering & equipment sounds",
+        InitialValue = UITheme.GetSFXVolume(),
+        Parent = settView,
+        OnChanged = function(val: number)
+            UITheme.SetSFXVolume(val)
+        end,
+    })
+
+    UIComponents.CreateDivider(settView)
+
+    UIComponents.CreateSlider({
+        Label = "MUSIC & SOUNDTRACK",
+        Description = "Melodic scores & atmospheric background soundtrack",
+        InitialValue = UITheme.GetMusicVolume(),
+        Parent = settView,
+        OnChanged = function(val: number)
+            UITheme.SetMusicVolume(val)
+        end,
+    })
+
+    UIComponents.CreateDivider(settView)
+
+    UIComponents.CreateSlider({
+        Label = "GAME NATIVE AUDIO",
+        Description = "Campfire crackles, wind blowing, crickets & 3D nature sounds",
+        InitialValue = UITheme.GetEnvironmentVolume(),
+        Parent = settView,
+        OnChanged = function(val: number)
+            UITheme.SetEnvironmentVolume(val)
+        end,
+    })
+
+    UIComponents.CreateDivider(settView)
+
+    UIComponents.CreateSlider({
+        Label = "LOOK SENSITIVITY",
+        Description = "First-person camera mouse sensitivity (0.2x to 3.0x)",
+        InitialValue = UITheme.GetMouseSensitivity(),
+        MinValue = 0.2,
+        MaxValue = 3.0,
+        Step = 0.1,
+        ValueFormat = function(v: number)
+            return string.format("%.1fx", v)
+        end,
+        Parent = settView,
+        OnChanged = function(val: number)
+            UITheme.SetMouseSensitivity(val)
         end,
     })
 
@@ -2780,6 +2641,7 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     addKeyRow("Interact / Pick Up / Stoke", "[ E ]")
     addKeyRow("Drop Carried Item", "[ Q ]")
     addKeyRow("Open Backpack Inventory", "[ B ] or [ Tab ]")
+    addKeyRow("Hold for Free Cursor / Mouse", "[ Left Alt ]")
     addKeyRow("In-Game Menu / Resume", "[ Esc ] or [ M ]")
 
     ----------------------------------------------------------------------------
@@ -2860,7 +2722,8 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
         if isTransitioning then return end
         isTransitioning = true
         container.Visible = true
-        switchTab("SURVIVAL")
+        modalVeil.Modal = true
+        switchTab("SETTINGS")
         AudioManager.Play("Click")
         TweenService:Create(container, UITheme.Tweens.Fast, { BackgroundTransparency = 0.35 }):Play()
         task.wait(0.18)
@@ -2870,10 +2733,12 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     local function closeMenu()
         if isTransitioning then return end
         isTransitioning = true
+        modalVeil.Modal = false
         AudioManager.Play("Click")
         local fadeTween = TweenService:Create(container, UITheme.Tweens.Fast, { BackgroundTransparency = 1 })
         fadeTween.Completed:Connect(function()
             container.Visible = false
+            modalVeil.Modal = false
             isTransitioning = false
         end)
         fadeTween:Play()
@@ -2888,6 +2753,9 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
         Container = container,
         Open = openMenu,
         Close = closeMenu,
+        IsOpen = function()
+            return container.Visible
+        end,
         Destroy = function()
             container:Destroy()
         end,

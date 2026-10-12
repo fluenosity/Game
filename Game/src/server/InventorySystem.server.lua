@@ -126,6 +126,7 @@ local function spawnDroppedItem(itemId: string, count: number, spawnCFrame: CFra
     prompt.HoldDuration = 0
     prompt.MaxActivationDistance = 9
     prompt.RequiresLineOfSight = false
+    prompt.ClickablePrompt = false
     prompt.Parent = part
 
     model.PrimaryPart = part
@@ -442,6 +443,7 @@ local function setupWoodPilePrompt(woodPile: Instance)
     prompt.MaxActivationDistance = 20.0
     prompt.RequiresLineOfSight = false
     prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton
+    prompt.ClickablePrompt = false
     prompt.Enabled = true
 
     if not prompt:GetAttribute("TriggerConnected") then
@@ -791,6 +793,7 @@ local function spawnCampMatchbox()
         prompt.HoldDuration = 0.15
         prompt.MaxActivationDistance = 4.8
         prompt.RequiresLineOfSight = true
+        prompt.ClickablePrompt = false
         prompt.Parent = sleeve
 
         matchboxModel.PrimaryPart = sleeve
@@ -814,7 +817,7 @@ local function spawnCampMatchbox()
         if added then
             sendNotification(
                 player,
-                "Acquired Safety Matchbox! Use with wood logs to light the campfire.",
+                "Acquire Matchbox! Used to light the campfire.",
                 "flame",
                 Color3.fromRGB(255, 190, 60)
             )

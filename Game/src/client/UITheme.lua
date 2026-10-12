@@ -92,6 +92,9 @@ UITheme.Tweens = {
 -- MASTER AUDIO & SOUND ROUTING
 --------------------------------------------------------------------------------
 local masterSoundGroup: SoundGroup? = nil
+local sfxSoundGroup: SoundGroup? = nil
+local musicSoundGroup: SoundGroup? = nil
+local environmentSoundGroup: SoundGroup? = nil
 local audioRoutingActive = false
 
 function UITheme.GetMasterSoundGroup(): SoundGroup
@@ -113,6 +116,66 @@ function UITheme.GetMasterSoundGroup(): SoundGroup
     return newGroup
 end
 
+function UITheme.GetSFXSoundGroup(): SoundGroup
+    if sfxSoundGroup and sfxSoundGroup.Parent then
+        return sfxSoundGroup
+    end
+
+    local master = UITheme.GetMasterSoundGroup()
+    local existing = master:FindFirstChild("SFXSoundGroup")
+    if existing and existing:IsA("SoundGroup") then
+        sfxSoundGroup = existing
+        return existing
+    end
+
+    local group = Instance.new("SoundGroup")
+    group.Name = "SFXSoundGroup"
+    group.Volume = 1.0
+    group.Parent = master
+    sfxSoundGroup = group
+    return group
+end
+
+function UITheme.GetMusicSoundGroup(): SoundGroup
+    if musicSoundGroup and musicSoundGroup.Parent then
+        return musicSoundGroup
+    end
+
+    local master = UITheme.GetMasterSoundGroup()
+    local existing = master:FindFirstChild("MusicSoundGroup")
+    if existing and existing:IsA("SoundGroup") then
+        musicSoundGroup = existing
+        return existing
+    end
+
+    local group = Instance.new("SoundGroup")
+    group.Name = "MusicSoundGroup"
+    group.Volume = 0.7
+    group.Parent = master
+    musicSoundGroup = group
+    return group
+end
+
+function UITheme.GetEnvironmentSoundGroup(): SoundGroup
+    if environmentSoundGroup and environmentSoundGroup.Parent then
+        return environmentSoundGroup
+    end
+
+    local master = UITheme.GetMasterSoundGroup()
+    local existing = master:FindFirstChild("EnvironmentSoundGroup")
+    if existing and existing:IsA("SoundGroup") then
+        environmentSoundGroup = existing
+        return existing
+    end
+
+    local group = Instance.new("SoundGroup")
+    group.Name = "EnvironmentSoundGroup"
+    group.Volume = 1.0
+    group.Parent = master
+    environmentSoundGroup = group
+    return group
+end
+
 function UITheme.SetMasterVolume(volume: number)
     local clamped = math.clamp(volume, 0, 1)
     local group = UITheme.GetMasterSoundGroup()
@@ -124,15 +187,72 @@ function UITheme.GetMasterVolume(): number
     return group.Volume
 end
 
+function UITheme.SetSFXVolume(volume: number)
+    local clamped = math.clamp(volume, 0, 1)
+    local group = UITheme.GetSFXSoundGroup()
+    group.Volume = clamped
+end
+
+function UITheme.GetSFXVolume(): number
+    return UITheme.GetSFXSoundGroup().Volume
+end
+
+function UITheme.SetMusicVolume(volume: number)
+    local clamped = math.clamp(volume, 0, 1)
+    local group = UITheme.GetMusicSoundGroup()
+    group.Volume = clamped
+end
+
+function UITheme.GetMusicVolume(): number
+    return UITheme.GetMusicSoundGroup().Volume
+end
+
+function UITheme.SetEnvironmentVolume(volume: number)
+    local clamped = math.clamp(volume, 0, 1)
+    local group = UITheme.GetEnvironmentSoundGroup()
+    group.Volume = clamped
+end
+
+function UITheme.GetEnvironmentVolume(): number
+    return UITheme.GetEnvironmentSoundGroup().Volume
+end
+
+-- Camera Mouse Look Sensitivity (0.2x to 3.0x, default 1.0x)
+local currentSensitivity = 1.0
+
+function UITheme.SetMouseSensitivity(sens: number)
+    local clamped = math.clamp(sens, 0.2, 3.0)
+    currentSensitivity = clamped
+    local uis = game:GetService("UserInputService")
+    pcall(function()
+        uis.MouseDeltaSensitivity = clamped
+    end)
+end
+
+function UITheme.GetMouseSensitivity(): number
+    local uis = game:GetService("UserInputService")
+    return uis.MouseDeltaSensitivity or currentSensitivity
+end
+
 function UITheme.InitAudioRouting()
     if audioRoutingActive then return end
     audioRoutingActive = true
 
     local master = UITheme.GetMasterSoundGroup()
+    local sfx = UITheme.GetSFXSoundGroup()
+    local music = UITheme.GetMusicSoundGroup()
+    local env = UITheme.GetEnvironmentSoundGroup()
 
     local function routeSound(sound: Instance)
-        if sound:IsA("Sound") and sound.SoundGroup == nil then
-            sound.SoundGroup = master
+        if sound:IsA("Sound") and (sound.SoundGroup == nil or sound.SoundGroup == master) then
+            local name = sound.Name:lower()
+            if name:find("music") or name:find("theme") or name:find("soundtrack") or name:find("song") then
+                sound.SoundGroup = music
+            elseif name:find("cricket") or name:find("fire") or name:find("wind") or name:find("ambient") or sound:IsDescendantOf(workspace) then
+                sound.SoundGroup = env
+            else
+                sound.SoundGroup = sfx
+            end
         end
     end
 

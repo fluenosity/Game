@@ -193,19 +193,9 @@ local function getUISoundGroup(): SoundGroup
         return uiSoundGroup
     end
 
-    local master = UITheme.GetMasterSoundGroup()
-    local existing = master:FindFirstChild("UIAudioGroup") :: SoundGroup?
-    if existing then
-        uiSoundGroup = existing
-        return existing
-    end
-
-    local group = Instance.new("SoundGroup")
-    group.Name = "UIAudioGroup"
-    group.Volume = 1.0
-    group.Parent = master
-    uiSoundGroup = group
-    return group
+    local sfxGroup = UITheme.GetSFXSoundGroup()
+    uiSoundGroup = sfxGroup
+    return sfxGroup
 end
 
 -- Retrieves or instantiates a pooled Sound instance for playback

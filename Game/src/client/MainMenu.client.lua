@@ -96,6 +96,7 @@ if GameConfig.ShouldSkipMainMenu() then
     LoadingManager.LoadGame(devLoading, function()
         devLoading.Destroy()
         devScreenGui:Destroy()
+        player:SetAttribute("IsInGameplay", true)
         setCharacterControlsEnabled(true)
         if camera then
             camera.CameraType = Enum.CameraType.Custom
@@ -106,10 +107,13 @@ if GameConfig.ShouldSkipMainMenu() then
     return
 end
 
+player:SetAttribute("IsInGameplay", false)
 if camera then
     camera.CameraType = Enum.CameraType.Scriptable
 end
 setCharacterControlsEnabled(false)
+UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+UserInputService.MouseIconEnabled = true
 
 
 --------------------------------------------------------------------------------
@@ -451,21 +455,22 @@ local loadingScreen = UIComponents.CreateLoadingScreen(screenGui)
 --------------------------------------------------------------------------------
 local settingsModal = UIComponents.CreateModal({
     Title = "SETTINGS",
-    CategoryTag = "[ CONFIGURATION ]",
-    Width = 440,
-    Height = 390,
+    CategoryTag = "[ AUDIO & CONTROLS ]",
+    Width = 460,
+    Height = 490,
     Parent = screenGui,
 })
 
 local settingsLayout = Instance.new("UIListLayout")
 settingsLayout.FillDirection = Enum.FillDirection.Vertical
 settingsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-settingsLayout.Padding = UDim.new(0, 18)
+settingsLayout.Padding = UDim.new(0, 14)
 settingsLayout.Parent = settingsModal.Content
 
+-- 1. Master Audio Volume
 UIComponents.CreateSlider({
     Label = "MASTER VOLUME",
-    Description = "Controls game-wide sound effects & ambience",
+    Description = "Master sound level for the entire game",
     InitialValue = UITheme.GetMasterVolume(),
     Parent = settingsModal.Content,
     OnChanged = function(val: number)
@@ -475,6 +480,65 @@ UIComponents.CreateSlider({
 
 UIComponents.CreateDivider(settingsModal.Content)
 
+-- 2. SFX Volume
+UIComponents.CreateSlider({
+    Label = "SFX VOLUME",
+    Description = "UI clicks, item interaction, wood gathering & clicks",
+    InitialValue = UITheme.GetSFXVolume(),
+    Parent = settingsModal.Content,
+    OnChanged = function(val: number)
+        UITheme.SetSFXVolume(val)
+    end,
+})
+
+UIComponents.CreateDivider(settingsModal.Content)
+
+-- 3. Music Volume
+UIComponents.CreateSlider({
+    Label = "MUSIC VOLUME",
+    Description = "Melodic scores & atmospheric background soundtrack",
+    InitialValue = UITheme.GetMusicVolume(),
+    Parent = settingsModal.Content,
+    OnChanged = function(val: number)
+        UITheme.SetMusicVolume(val)
+    end,
+})
+
+UIComponents.CreateDivider(settingsModal.Content)
+
+-- 4. Game Native Audio (Environment)
+UIComponents.CreateSlider({
+    Label = "GAME NATIVE AUDIO",
+    Description = "Campfire crackles, wind blowing, crickets & 3D nature sounds",
+    InitialValue = UITheme.GetEnvironmentVolume(),
+    Parent = settingsModal.Content,
+    OnChanged = function(val: number)
+        UITheme.SetEnvironmentVolume(val)
+    end,
+})
+
+UIComponents.CreateDivider(settingsModal.Content)
+
+-- 5. Look Sensitivity (0.2x to 3.0x)
+UIComponents.CreateSlider({
+    Label = "LOOK SENSITIVITY",
+    Description = "First-person camera mouse sensitivity (0.2x to 3.0x)",
+    InitialValue = UITheme.GetMouseSensitivity(),
+    MinValue = 0.2,
+    MaxValue = 3.0,
+    Step = 0.1,
+    ValueFormat = function(v: number)
+        return string.format("%.1fx", v)
+    end,
+    Parent = settingsModal.Content,
+    OnChanged = function(val: number)
+        UITheme.SetMouseSensitivity(val)
+    end,
+})
+
+UIComponents.CreateDivider(settingsModal.Content)
+
+-- 6. Reduced Motion
 UIComponents.CreateToggle({
     Label = "REDUCED MOTION",
     Description = "Disables background embers & breathing animations",
@@ -612,7 +676,11 @@ local navPlay = UIComponents.CreateNavAction({
             emberSystem:Destroy()
             emblem:Destroy()
             screenGui:Destroy()
+            player:SetAttribute("IsInGameplay", true)
             setCharacterControlsEnabled(true)
+            if camera then
+                camera.CameraType = Enum.CameraType.Custom
+            end
         end)
     end,
 })

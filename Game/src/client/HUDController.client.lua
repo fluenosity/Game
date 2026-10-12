@@ -10,7 +10,6 @@
     - hud/HUDHotbar: Bottom-center 3-slot quickbar with glowing amber selection
     - hud/HUDVitals: Bottom-right Health, Hunger (78), Stamina status pills
     - hud/HUDInventoryModal: Center survival backpack modal (Tabs, 4x3 Grid, Inspector)
-    - UIComponents.CreateGenshinStaminaBar: Smooth crescent arc attached to player
     - UIComponents.CreateSystemMenu: Fullscreen glassmorphic ESC / settings menu
 ]]
 
@@ -23,6 +22,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
 
+-- UI Theme & Components
 local UITheme = require(script.Parent:WaitForChild("UITheme"))
 local UIComponents = require(script.Parent:WaitForChild("UIComponents"))
 
@@ -32,10 +32,12 @@ UITheme.InitAudioRouting()
 local hudFolder = script.Parent:WaitForChild("hud")
 local HUDClock = require(hudFolder:WaitForChild("HUDClock"))
 local HUDTopRightWidget = require(hudFolder:WaitForChild("HUDTopRightWidget"))
+local HUDCompass = require(hudFolder:WaitForChild("HUDCompass"))
 local HUDHotbar = require(hudFolder:WaitForChild("HUDHotbar"))
 local HUDVitals = require(hudFolder:WaitForChild("HUDVitals"))
 local HUDInventoryModal = require(hudFolder:WaitForChild("HUDInventoryModal"))
 local HUDBarterModal = require(hudFolder:WaitForChild("HUDBarterModal"))
+local HUDCrosshair = require(hudFolder:WaitForChild("HUDCrosshair"))
 
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local InventoryConfig = require(sharedFolder:WaitForChild("InventoryConfig"))
@@ -45,6 +47,9 @@ local AudioManager = require(script.Parent:WaitForChild("AudioManager"))
 --------------------------------------------------------------------------------
 -- STATE
 --------------------------------------------------------------------------------
+-- Development Controls
+local UNLIMITED_STAMINA_DEV = true
+
 local maxStamina = 100.0
 local currentStamina = 100.0
 local isSprinting = false
@@ -101,6 +106,9 @@ local clockInstance = HUDClock.Create(hudGui)
 -- Top-Right Global Survival Component (Campfire Sanctuary, Day/Clock, Backpack [B], Settings [ESC])
 local topRightWidget = HUDTopRightWidget.Create(hudGui)
 
+-- Top-Left Survival Compass (Dial, Degrees, Cardinal Direction, Sliding Tape & Beacon)
+local compassInstance = HUDCompass.Create(hudGui)
+
 -- Bottom-Center 3-Slot Hotbar
 local hotbarInstance = HUDHotbar.Create(hudGui)
 
@@ -108,7 +116,7 @@ local hotbarInstance = HUDHotbar.Create(hudGui)
 local vitalsInstance = HUDVitals.Create(hudGui)
 
 vitalsInstance.OnSprintToggle(function()
-    if isFatigued or currentStamina <= 0 then return end
+    if not UNLIMITED_STAMINA_DEV and (isFatigued or currentStamina <= 0) then return end
     isSprinting = not isSprinting
     vitalsInstance.SetSprinting(isSprinting)
     if activeHumanoid then
@@ -122,13 +130,135 @@ local inventoryModal = HUDInventoryModal.Create(hudGui)
 -- Silas Barter Trading Modal (Recipe Exchanges)
 local barterModal = HUDBarterModal.Create(hudGui)
 
+-- GTA V Style Minimalist Center Dot Crosshair
+local crosshairInstance = HUDCrosshair.Create(hudGui)
+
 --------------------------------------------------------------------------------
--- 2. FULLSCREEN AAA SYSTEM / ESC MENU
+-- 2. CURSOR MANAGEMENT & FIRST-PERSON MOUSE LOCK SYSTEM
 --------------------------------------------------------------------------------
+local isAltHeld = false
+local isAltToggled = false
+local altPressTime = 0
+local savedCameraRotation: CFrame? = nil
+
+-- Invisible modal catch button to natively unlock cursor in Roblox engine
+local modalBypassBtn = Instance.new("TextButton")
+modalBypassBtn.Name = "ModalBypassHelper"
+modalBypassBtn.Size = UDim2.fromOffset(0, 0)
+modalBypassBtn.BackgroundTransparency = 1
+modalBypassBtn.Text = ""
+modalBypassBtn.AutoButtonColor = false
+modalBypassBtn.Modal = false
+modalBypassBtn.ZIndex = 999
+modalBypassBtn.Parent = hudGui
+
 local isSystemMenuOpen = false
-local systemMenuInstance = UIComponents.CreateSystemMenu(hudGui, {
+
+local function isAnyModalOpen(): boolean
+    local invOpen = (inventoryModal and inventoryModal.IsOpen and inventoryModal.IsOpen()) or false
+    local barterOpen = (barterModal and barterModal.IsOpen and barterModal.IsOpen()) or false
+    local sysOpen = isSystemMenuOpen or (systemMenuInstance and systemMenuInstance.IsOpen and systemMenuInstance.IsOpen()) or false
+    return sysOpen or invOpen or barterOpen
+end
+
+local function isCursorFree(): boolean
+    return isAltHeld or isAltToggled or isAnyModalOpen()
+end
+
+local function enforceFirstPerson()
+    if player:GetAttribute("IsInGameplay") ~= true then return end
+    if isCursorFree() then return end
+
+    player.CameraMode = Enum.CameraMode.LockFirstPerson
+    player.CameraMinZoomDistance = 0.5
+    player.CameraMaxZoomDistance = 0.5
+    local cam = workspace.CurrentCamera
+    if cam and cam.CameraType ~= Enum.CameraType.Custom then
+        cam.CameraType = Enum.CameraType.Custom
+    end
+end
+
+local function updateMouseBehavior()
+    local inGameplay = player:GetAttribute("IsInGameplay") == true
+    local cam = workspace.CurrentCamera
+
+    if not inGameplay then
+        hudGui.Enabled = false
+        modalBypassBtn.Modal = false
+        savedCameraRotation = nil
+        player.CameraMode = Enum.CameraMode.Classic
+        if cam and cam.CameraType ~= Enum.CameraType.Custom then
+            cam.CameraType = Enum.CameraType.Custom
+        end
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        UserInputService.MouseIconEnabled = true
+        if crosshairInstance then
+            crosshairInstance.SetVisible(false)
+        end
+        return
+    end
+
+    hudGui.Enabled = true
+
+    if isCursorFree() then
+        -- Freeze camera look completely so mouse movement does NOT rotate main camera
+        if cam then
+            if not savedCameraRotation then
+                savedCameraRotation = cam.CFrame.Rotation
+            end
+            if cam.CameraType ~= Enum.CameraType.Scriptable then
+                cam.CameraType = Enum.CameraType.Scriptable
+            end
+        end
+        player.CameraMode = Enum.CameraMode.Classic
+        modalBypassBtn.Modal = true
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        UserInputService.MouseIconEnabled = true
+        if crosshairInstance then
+            crosshairInstance.SetVisible(false)
+        end
+    else
+        -- Active first-person gameplay: lock mouse to center, hide OS cursor, show GTA V reticle
+        savedCameraRotation = nil
+        modalBypassBtn.Modal = false
+        player.CameraMode = Enum.CameraMode.LockFirstPerson
+        player.CameraMinZoomDistance = 0.5
+        player.CameraMaxZoomDistance = 0.5
+        if cam and cam.CameraType ~= Enum.CameraType.Custom then
+            cam.CameraType = Enum.CameraType.Custom
+        end
+        UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+        UserInputService.MouseIconEnabled = false
+        if crosshairInstance then
+            crosshairInstance.SetVisible(true)
+        end
+    end
+end
+
+-- Connect modal state change callbacks so closing via button/key instantly updates mouse
+inventoryModal.SetOnOpen(updateMouseBehavior)
+inventoryModal.SetOnClose(updateMouseBehavior)
+barterModal.SetOnOpen(updateMouseBehavior)
+barterModal.SetOnClose(updateMouseBehavior)
+
+-- Continuous guard for camera properties during active play
+local function onCameraPropChanged()
+    if player:GetAttribute("IsInGameplay") == true and not isCursorFree() then
+        enforceFirstPerson()
+    end
+end
+
+player:GetPropertyChangedSignal("CameraMode"):Connect(onCameraPropChanged)
+player:GetPropertyChangedSignal("CameraMaxZoomDistance"):Connect(onCameraPropChanged)
+player:GetPropertyChangedSignal("CameraMinZoomDistance"):Connect(onCameraPropChanged)
+
+--------------------------------------------------------------------------------
+-- FULLSCREEN SETTINGS / ESC MENU
+--------------------------------------------------------------------------------
+systemMenuInstance = UIComponents.CreateSystemMenu(hudGui, {
     OnResume = function()
         isSystemMenuOpen = false
+        updateMouseBehavior()
     end,
     OnQuit = function()
         isSystemMenuOpen = false
@@ -136,10 +266,14 @@ local systemMenuInstance = UIComponents.CreateSystemMenu(hudGui, {
             activeHumanoid.Health = 0
         end
         hudGui.Enabled = false
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        updateMouseBehavior()
     end,
 })
 
 local function toggleSystemMenu()
+    isAltToggled = false
+    isAltHeld = false
     if isSystemMenuOpen then
         systemMenuInstance.Close()
         isSystemMenuOpen = false
@@ -153,6 +287,7 @@ local function toggleSystemMenu()
         systemMenuInstance.Open()
         isSystemMenuOpen = true
     end
+    updateMouseBehavior()
 end
 
 topRightWidget.SetOnSettingsClick(function()
@@ -164,6 +299,7 @@ topRightWidget.SetOnBackpackClick(function()
         barterModal.Close()
     end
     inventoryModal.Toggle()
+    updateMouseBehavior()
 end)
 
 --------------------------------------------------------------------------------
@@ -321,12 +457,30 @@ end
 
 local ProximityPromptService = game:GetService("ProximityPromptService")
 
+-- Ensure ALL ProximityPrompts never sink mouse clicks or trap the FPS camera
+local function sanitizePrompt(prompt: ProximityPrompt)
+    prompt.ClickablePrompt = false
+end
+
+ProximityPromptService.PromptShown:Connect(sanitizePrompt)
+for _, p in ipairs(workspace:GetDescendants()) do
+    if p:IsA("ProximityPrompt") then
+        sanitizePrompt(p)
+    end
+end
+workspace.DescendantAdded:Connect(function(desc)
+    if desc:IsA("ProximityPrompt") then
+        sanitizePrompt(desc)
+    end
+end)
+
 local function openBarterUI()
     if inventoryModal.IsOpen() then
         inventoryModal.Close()
     end
     barterModal.UpdateInventory(currentInventory)
     barterModal.Open()
+    updateMouseBehavior()
 end
 
 -- 1. Direct Instant Client Prompt Hook (0ms latency, guaranteed trigger)
@@ -442,6 +596,9 @@ local function syncCampfireStatus()
         local isLit = campfire:GetAttribute("IsLit")
         if isLit == nil then isLit = true end
         topRightWidget.SetCampfireLit(isLit)
+        if campfire.PrimaryPart then
+            compassInstance.SetCampfirePosition(campfire.PrimaryPart.Position)
+        end
     else
         topRightWidget.SetCampfireLit(true)
     end
@@ -460,18 +617,17 @@ if existingCampfire then
 end
 
 --------------------------------------------------------------------------------
--- 5. GENSHIN IMPACT STAMINA BAR & CHARACTER INTEGRATION
+-- 5. CHARACTER INTEGRATION & VITALS
 --------------------------------------------------------------------------------
-local currentStaminaBar: any = nil
-
 local function setupCharacter(character: Model)
     activeCharacter = character
     activeHumanoid = character:WaitForChild("Humanoid", 10) :: Humanoid?
     if not activeHumanoid then return end
 
-    if currentStaminaBar then
-        currentStaminaBar.Destroy()
-        currentStaminaBar = nil
+    -- Clean up any lingering GenshinStaminaBar on character
+    local oldGenshin = character:FindFirstChild("GenshinStaminaBar")
+    if oldGenshin then
+        oldGenshin:Destroy()
     end
 
     if characterJumpConn then
@@ -484,13 +640,13 @@ local function setupCharacter(character: Model)
         characterHealthConn = nil
     end
 
-    currentStaminaBar = UIComponents.CreateGenshinStaminaBar(character)
     currentStamina = maxStamina
     isSprinting = false
     isFatigued = false
     activeHumanoid.WalkSpeed = normalWalkSpeed
     activeHumanoid.UseJumpPower = true
     activeHumanoid.JumpPower = normalJumpPower
+    enforceFirstPerson()
 
     -- Initial vitals sync
     vitalsInstance.SetHealth(activeHumanoid.Health, activeHumanoid.MaxHealth)
@@ -506,23 +662,31 @@ local function setupCharacter(character: Model)
 
     -- Jump stamina consumption & feedback (tracks player jump smoothly)
     characterJumpConn = activeHumanoid.Jumping:Connect(function(isActive: boolean)
-        if isActive and not isFatigued and activeHumanoid.Health > 0 then
-            currentStamina = math.max(0, currentStamina - 8)
-            lastSprintTime = os.clock()
-            vitalsInstance.SetStamina(currentStamina, maxStamina)
-            if currentStaminaBar then
-                currentStaminaBar.SetStamina(currentStamina, maxStamina, true)
-            end
-            if currentStamina <= 0 then
-                isFatigued = true
-                isSprinting = false
-                activeHumanoid.WalkSpeed = fatiguedWalkSpeed
-                activeHumanoid.JumpPower = fatiguedJumpPower
+        if isActive and activeHumanoid.Health > 0 then
+            if not UNLIMITED_STAMINA_DEV then
+                if not isFatigued then
+                    currentStamina = math.max(0, currentStamina - 8)
+                    lastSprintTime = os.clock()
+                    vitalsInstance.SetStamina(currentStamina, maxStamina)
+                    if currentStamina <= 0 then
+                        isFatigued = true
+                        isSprinting = false
+                        activeHumanoid.WalkSpeed = fatiguedWalkSpeed
+                        activeHumanoid.JumpPower = fatiguedJumpPower
+                    end
+                end
+            else
+                currentStamina = maxStamina
+                vitalsInstance.SetStamina(maxStamina, maxStamina)
             end
         end
     end)
 
-    hudGui.Enabled = true
+    if player:GetAttribute("IsInGameplay") == true then
+        updateMouseBehavior()
+    else
+        hudGui.Enabled = false
+    end
 end
 
 if player.Character then
@@ -530,8 +694,17 @@ if player.Character then
 end
 player.CharacterAdded:Connect(setupCharacter)
 
+player:GetAttributeChangedSignal("IsInGameplay"):Connect(function()
+    updateMouseBehavior()
+end)
+
+-- Initial check if already in gameplay (e.g. dev mode skip main menu)
+if player:GetAttribute("IsInGameplay") == true then
+    updateMouseBehavior()
+end
+
 --------------------------------------------------------------------------------
--- 6. RUNTIME LOOPS (Stamina, Hunger, Camera Alignment)
+-- 6. RUNTIME LOOPS (Stamina, Hunger)
 --------------------------------------------------------------------------------
 local hungerTimer = 0.0
 
@@ -563,54 +736,114 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
     end
 
     -- Sprint stamina drain / recovery
-    if isSprinting and isMoving and not isFatigued then
-        currentStamina = math.max(0, currentStamina - (20 * deltaTime))
-        lastSprintTime = os.clock()
-
-        if currentStamina <= 0 then
-            isFatigued = true
-            isSprinting = false
-            vitalsInstance.SetSprinting(false)
-            activeHumanoid.WalkSpeed = fatiguedWalkSpeed
-            activeHumanoid.JumpPower = fatiguedJumpPower
-
-            task.delay(1.2, function()
-                if activeHumanoid and not isSprinting and not isFatigued then
-                    activeHumanoid.WalkSpeed = normalWalkSpeed
-                end
-            end)
+    if UNLIMITED_STAMINA_DEV then
+        currentStamina = maxStamina
+        isFatigued = false
+        if activeHumanoid then
+            activeHumanoid.WalkSpeed = isSprinting and sprintWalkSpeed or normalWalkSpeed
+            activeHumanoid.JumpPower = normalJumpPower
         end
+        vitalsInstance.SetStamina(maxStamina, maxStamina)
     else
-        -- Recovery after 0.4s cooldown
-        local timeSinceSprint = os.clock() - lastSprintTime
-        if timeSinceSprint > 0.4 then
-            currentStamina = math.min(maxStamina, currentStamina + (30 * deltaTime))
+        if isSprinting and isMoving and not isFatigued then
+            currentStamina = math.max(0, currentStamina - (20 * deltaTime))
+            lastSprintTime = os.clock()
 
-            -- Recover from fatigue once stamina reaches 25%
-            if isFatigued and currentStamina >= 25 then
-                isFatigued = false
-                if activeHumanoid and not isSprinting then
-                    activeHumanoid.WalkSpeed = normalWalkSpeed
-                    activeHumanoid.JumpPower = normalJumpPower
+            if currentStamina <= 0 then
+                isFatigued = true
+                isSprinting = false
+                vitalsInstance.SetSprinting(false)
+                activeHumanoid.WalkSpeed = fatiguedWalkSpeed
+                activeHumanoid.JumpPower = fatiguedJumpPower
+
+                task.delay(1.2, function()
+                    if activeHumanoid and not isSprinting and not isFatigued then
+                        activeHumanoid.WalkSpeed = normalWalkSpeed
+                    end
+                end)
+            end
+        else
+            -- Recovery after 0.4s cooldown
+            local timeSinceSprint = os.clock() - lastSprintTime
+            if timeSinceSprint > 0.4 then
+                currentStamina = math.min(maxStamina, currentStamina + (30 * deltaTime))
+
+                -- Recover from fatigue once stamina reaches 25%
+                if isFatigued and currentStamina >= 25 then
+                    isFatigued = false
+                    if activeHumanoid and not isSprinting then
+                        activeHumanoid.WalkSpeed = normalWalkSpeed
+                        activeHumanoid.JumpPower = normalJumpPower
+                    end
                 end
             end
         end
+
+        -- Update vitals
+        vitalsInstance.SetStamina(currentStamina, maxStamina)
     end
 
-    -- Update vitals & Genshin meter
-    vitalsInstance.SetStamina(currentStamina, maxStamina)
-    local isConsuming = (isSprinting and isMoving) or (os.clock() - lastSprintTime < 0.45)
-    if currentStaminaBar then
-        currentStaminaBar.SetStamina(currentStamina, maxStamina, isConsuming)
+    -- Continuously maintain LockCenter during gameplay (prevents mouse escaping on interaction prompts)
+    if player:GetAttribute("IsInGameplay") == true then
+        if not isAnyModalOpen() and not isAltHeld then
+            if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+            end
+        end
     end
 end)
 
--- Camera-relative tracking alignment on RenderStepped (ensures zero-jitter camera responsiveness)
 RunService.RenderStepped:Connect(function()
-    if currentStaminaBar and activeCharacter then
+    if player:GetAttribute("IsInGameplay") == true then
         local cam = workspace.CurrentCamera
-        if cam then
-            currentStaminaBar.UpdateCameraAlignment(cam.CFrame.RightVector, cam.CFrame.UpVector)
+        if isCursorFree() then
+            -- Cursor is free: keep camera Scriptable and freeze camera orientation
+            if cam then
+                if cam.CameraType ~= Enum.CameraType.Scriptable then
+                    cam.CameraType = Enum.CameraType.Scriptable
+                end
+                if savedCameraRotation and activeCharacter and activeCharacter:FindFirstChild("Head") then
+                    cam.CFrame = CFrame.new(activeCharacter.Head.Position) * savedCameraRotation
+                end
+            end
+            if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
+                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+            end
+            if UserInputService.MouseIconEnabled ~= true then
+                UserInputService.MouseIconEnabled = true
+            end
+        else
+            -- Normal gameplay: ensure Custom camera and LockCenter
+            if cam and cam.CameraType ~= Enum.CameraType.Custom then
+                cam.CameraType = Enum.CameraType.Custom
+            end
+            if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+            end
+            if UserInputService.MouseIconEnabled ~= false then
+                UserInputService.MouseIconEnabled = false
+            end
+
+            -- Aim detection for GTA V dot interaction cue
+            if cam and crosshairInstance then
+                local centerRay = cam:ViewportPointToRay(cam.ViewportSize.X * 0.5, cam.ViewportSize.Y * 0.5)
+                local rayParams = RaycastParams.new()
+                rayParams.FilterType = Enum.RaycastFilterType.Exclude
+                if activeCharacter then
+                    rayParams.FilterDescendantsInstances = {activeCharacter}
+                end
+                local result = workspace:Raycast(centerRay.Origin, centerRay.Direction * 14, rayParams)
+                local isHovering = false
+                if result and result.Instance then
+                    local hitPart = result.Instance
+                    local prompt = hitPart:FindFirstChildOfClass("ProximityPrompt")
+                        or (hitPart.Parent and hitPart.Parent:FindFirstChildOfClass("ProximityPrompt"))
+                    if prompt and prompt.Enabled then
+                        isHovering = true
+                    end
+                end
+                crosshairInstance.SetHovering(isHovering)
+            end
         end
     end
 end)
@@ -619,17 +852,58 @@ end)
 -- 7. KEYBOARD & INPUT BINDINGS
 --------------------------------------------------------------------------------
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
+    -- Ignore keystrokes if user is typing inside a text input (e.g. Chat, search)
+    if UserInputService:GetFocusedTextBox() ~= nil then
+        return
+    end
 
-    if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
-        if not isFatigued and currentStamina > 0 then
-            isSprinting = true
-            vitalsInstance.SetSprinting(true)
-            if activeHumanoid then
-                activeHumanoid.WalkSpeed = sprintWalkSpeed
+    -- Alt cursor unlock & Shift sprint must NEVER be blocked by gameProcessed
+    if input.KeyCode == Enum.KeyCode.LeftAlt or input.KeyCode == Enum.KeyCode.RightAlt then
+        if player:GetAttribute("IsInGameplay") == true then
+            altPressTime = os.clock()
+            isAltHeld = true
+            updateMouseBehavior()
+        end
+        return
+    elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+        if player:GetAttribute("IsInGameplay") == true then
+            if UNLIMITED_STAMINA_DEV or (not isFatigued and currentStamina > 0) then
+                isSprinting = true
+                vitalsInstance.SetSprinting(true)
+                if activeHumanoid then
+                    activeHumanoid.WalkSpeed = sprintWalkSpeed
+                end
             end
         end
-    elseif input.KeyCode == Enum.KeyCode.One then
+        return
+    end
+
+    -- Escape key handles closing open modals or toggling Settings Menu (processed even if gameProcessed)
+    if input.KeyCode == Enum.KeyCode.Escape then
+        if player:GetAttribute("IsInGameplay") == true then
+            if isSystemMenuOpen then
+                toggleSystemMenu()
+            elseif inventoryModal.IsOpen() then
+                inventoryModal.Close()
+                updateMouseBehavior()
+            elseif barterModal.IsOpen() then
+                barterModal.Close()
+                updateMouseBehavior()
+            else
+                toggleSystemMenu()
+            end
+        end
+        return
+    end
+
+    -- If not yet in active gameplay (e.g. Main Menu), ignore in-game bindings
+    if player:GetAttribute("IsInGameplay") ~= true then
+        return
+    end
+
+    if gameProcessed then return end
+
+    if input.KeyCode == Enum.KeyCode.One then
         hotbarInstance.SelectSlot(1)
     elseif input.KeyCode == Enum.KeyCode.Two then
         hotbarInstance.SelectSlot(2)
@@ -640,14 +914,44 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             dropActiveItem()
         end
     elseif input.KeyCode == Enum.KeyCode.B or input.KeyCode == Enum.KeyCode.Tab then
+        if isSystemMenuOpen then
+            systemMenuInstance.Close()
+            isSystemMenuOpen = false
+        end
+        if barterModal.IsOpen() then
+            barterModal.Close()
+        end
+        isAltToggled = false
+        isAltHeld = false
         inventoryModal.Toggle()
-    elseif input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.M or input.KeyCode == Enum.KeyCode.P then
+        updateMouseBehavior()
+    elseif input.KeyCode == Enum.KeyCode.M or input.KeyCode == Enum.KeyCode.P then
         toggleSystemMenu()
+    elseif input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 then
+        -- Clicking into the world cancels Alt free-look toggle if no modal is open
+        if isAltToggled and not isAnyModalOpen() then
+            isAltToggled = false
+            updateMouseBehavior()
+        elseif not isCursorFree() and player:GetAttribute("IsInGameplay") == true then
+            updateMouseBehavior()
+        end
     end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+    if input.KeyCode == Enum.KeyCode.LeftAlt or input.KeyCode == Enum.KeyCode.RightAlt then
+        if player:GetAttribute("IsInGameplay") == true then
+            local heldDuration = os.clock() - altPressTime
+            isAltHeld = false
+            if heldDuration < 0.25 then
+                isAltToggled = not isAltToggled
+            else
+                isAltToggled = false
+            end
+            updateMouseBehavior()
+        end
+        return
+    elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
         isSprinting = false
         vitalsInstance.SetSprinting(false)
         if activeHumanoid and not isFatigued then

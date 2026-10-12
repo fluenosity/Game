@@ -172,6 +172,7 @@ function TraderNPCSpawner.WireNPC(npc: Model)
         newPrompt.HoldDuration = 0.2
         newPrompt.MaxActivationDistance = 11.0
         newPrompt.RequiresLineOfSight = false
+        newPrompt.ClickablePrompt = false
         newPrompt.Parent = torso
         prompt = newPrompt
     end

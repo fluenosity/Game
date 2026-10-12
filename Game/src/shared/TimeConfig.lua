@@ -20,17 +20,23 @@ TimeConfig.Phases = {
 }
 
 -- Duration of each phase in real seconds
--- Nights are longer than days for survival horror tension
+-- Tuned for realistic survival gameplay pacing
 TimeConfig.PhaseDurations = {
-	Dawn  = 25,
-	Day   = 120,
-	Dusk  = 25,
-	Night = 180,
+	Dawn  = 60,
+	Day   = 480,  -- 8 minutes daytime
+	Dusk  = 60,
+	Night = 480,  -- 8 minutes nighttime
 }
 
 -- Starting state
 TimeConfig.StartDay = 0
 TimeConfig.StartHour = 14.0
+
+-- Development / Testing Controls
+-- Set FreezeTime to true to freeze time at FreezeHour for development & building
+TimeConfig.FreezeTime = true
+TimeConfig.FreezeHour = 14.0  -- 14.0 = midday clear daylight
+TimeConfig.TimeSpeedMultiplier = 1.0  -- Multiplier for clock speed when not frozen
 
 -- Maximum day (game ends after surviving night 5)
 TimeConfig.MaxDay = 5

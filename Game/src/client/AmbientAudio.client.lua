@@ -13,9 +13,9 @@
 local SoundService = game:GetService("SoundService")
 local UITheme = require(script.Parent:WaitForChild("UITheme"))
 
--- 1. Initialize Master Sound Group & Audio Routing
+-- 1. Initialize Sound Groups & Audio Routing
 UITheme.InitAudioRouting()
-local masterGroup = UITheme.GetMasterSoundGroup()
+local envGroup = UITheme.GetEnvironmentSoundGroup()
 
 -- 2. Create / Get Forest Crickets Ambient Sound
 local CRICKETS_ASSET_ID = "rbxassetid://9112764546" -- Official Roblox Licenced Crickets Night SFX
@@ -23,7 +23,7 @@ local CRICKETS_ASSET_ID = "rbxassetid://9112764546" -- Official Roblox Licenced 
 local function setupCricketsSound(): Sound
     local existing = SoundService:FindFirstChild("ForestNightCrickets") :: Sound?
     if existing and existing:IsA("Sound") then
-        existing.SoundGroup = masterGroup
+        existing.SoundGroup = envGroup
         if not existing.IsPlaying then
             existing:Play()
         end
@@ -35,7 +35,7 @@ local function setupCricketsSound(): Sound
     crickets.SoundId = CRICKETS_ASSET_ID
     crickets.Volume = 0.32 -- Gentle, relaxing background audio
     crickets.Looped = true
-    crickets.SoundGroup = masterGroup
+    crickets.SoundGroup = envGroup
     crickets.Parent = SoundService
     
     task.spawn(function()

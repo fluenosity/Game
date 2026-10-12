@@ -1057,7 +1057,8 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
     local isTransitioning = false
     local isOpen = false
 
-    local inputConn: RBXScriptConnection? = nil
+    local onOpenCallback: (() -> ())? = nil
+    local onCloseCallback: (() -> ())? = nil
 
     local function openModal()
         if isTransitioning or isOpen then return end
@@ -1067,8 +1068,13 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
         AudioManager.Play("InventoryOpen")
 
         veil.Visible = true
+        veil.Modal = true
         veil.BackgroundTransparency = 1
         card.Position = UDim2.fromScale(0.5, 0.52)
+
+        if onOpenCallback then
+            onOpenCallback()
+        end
 
         TweenService:Create(veil, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = 0.45,
@@ -1103,8 +1109,13 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
         if isTransitioning or not isOpen then return end
         isTransitioning = true
         isOpen = false
+        veil.Modal = false
 
         AudioManager.Play("InventoryClose")
+
+        if onCloseCallback then
+            onCloseCallback()
+        end
 
         if inputConn then
             inputConn:Disconnect()
@@ -1120,6 +1131,7 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
         })
         cardTween.Completed:Connect(function()
             veil.Visible = false
+            veil.Modal = false
             isTransitioning = false
         end)
         cardTween:Play()
@@ -1154,6 +1166,12 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
         end,
         SetOnSplit = function(cb)
             onSplitCallback = cb
+        end,
+        SetOnOpen = function(cb)
+            onOpenCallback = cb
+        end,
+        SetOnClose = function(cb)
+            onCloseCallback = cb
         end,
         Destroy = function()
             if inputConn then
