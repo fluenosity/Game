@@ -1,22 +1,34 @@
 --!strict
 --[[
     RockPlacer.lua
-    Algorithmic rock outcrop and scattered boulder generator.
+    Asset-Driven Boulder & Outcrop Placement Engine (World Gen V4).
     Developed for "Don't Let the Fire Die" (Fluenosity Studio).
     
-    Features:
-    - Multi-scale rock distribution (small stones, medium mossy rocks, massive ridge boulders)
-    - Preferential placement on sloping terrain and woodland margins
-    - Surface embedding (rocks seat naturally 20-30% into terrain rather than sitting on top)
-    - Full template support with procedural geometric fallback
+    V4 Architecture:
+    - Full-Map Distribution: Spreads across the entire 820x860 world extent (X: -415..415, Z: -455..410)
+    - 100% Authored Mesh Models from Tree-Pack:
+      * Large: LargeBoulder_Var01, LargeBoulder_Var02
+      * Medium: MediumBoulderVar01, MediumMossBoulder01
+      * Small: SmallRock01, SmallRockGroupVar02, SmallRockGroupVar03, SmallRockVar04
+    - Biome-Aware Natural Geology:
+      * Highlands & Slopes: Heavy concentration of large boulders & rocky ridges
+      * Damp Lowlands & Lake Shore: Moss-covered boulders (MediumMossBoulder01) & river stones
+      * Open Woodland: Scattered weathered stones & low outcrops
+    - Surface Embedding:
+      * Large/Medium boulders embedded 18-22% into terrain (never floating on top)
+    - Full Safeguards: Zero rocks on walking trails, South camp, Watchtower, or inside Village.
 ]]
 
 local Workspace = game:GetService("Workspace")
+local ServerStorage = game:GetService("ServerStorage")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local envConfigScript = ReplicatedStorage:WaitForChild("FluenosityShared"):WaitForChild("EnvironmentConfig")
+local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
+local envConfigScript = sharedFolder:WaitForChild("EnvironmentConfig")
 local okConfig, freshConfig = pcall(function() return require(envConfigScript:Clone()) end)
 local EnvironmentConfig = (okConfig and freshConfig) or require(envConfigScript)
+
+local BiomeConfig = require(sharedFolder:WaitForChild("BiomeConfig"))
 
 local envFolder = script.Parent or game:GetService("ServerScriptService"):WaitForChild("FluenosityServer"):WaitForChild("Environment")
 local PathSystem = require(envFolder:WaitForChild("PathSystem"))
@@ -37,9 +49,46 @@ local function createRng(seed: number)
     end
 end
 
-local function findGroundPosition(x: number, z: number): (Vector3?, Vector3?)
-    local rayOrigin = Vector3.new(x, 150, z)
-    local rayDir = Vector3.new(0, -250, 0)
+-- Find asset library in ServerStorage or ReplicatedStorage
+local function getAssetLibrary(): Folder?
+    local ssAssets = ServerStorage:FindFirstChild("DontLetTheFireDieAssets")
+    if ssAssets then
+        local env = ssAssets:FindFirstChild("Environment")
+        if env and env:IsA("Folder") then
+            return env
+        end
+    end
+    local rsAssets = ReplicatedStorage:FindFirstChild("DontLetTheFireDieAssets")
+    if rsAssets then
+        local env = rsAssets:FindFirstChild("Environment")
+        if env and env:IsA("Folder") then
+            return env
+        end
+    end
+    return nil
+end
+
+-- Cache rock templates
+local function loadRockTemplates(assetLib: Folder): { [string]: Model }
+    local templates: { [string]: Model } = {}
+    local cats = { "Rocks_Large", "Rocks_Medium", "Rocks_Small" }
+    for _, catName in ipairs(cats) do
+        local catFolder = assetLib:FindFirstChild(catName)
+        if catFolder then
+            for _, child in ipairs(catFolder:GetChildren()) do
+                if child:IsA("Model") then
+                    templates[child.Name] = child
+                end
+            end
+        end
+    end
+    return templates
+end
+
+-- Raycast down to find ground surface
+local function findGroundPosition(x: number, z: number): (Vector3?, Vector3?, Enum.Material?)
+    local rayOrigin = Vector3.new(x, 220, z)
+    local rayDir = Vector3.new(0, -350, 0)
     
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Include
@@ -47,117 +96,141 @@ local function findGroundPosition(x: number, z: number): (Vector3?, Vector3?)
     
     local hit = Workspace:Raycast(rayOrigin, rayDir, rayParams)
     if hit then
-        return hit.Position, hit.Normal
+        return hit.Position, hit.Normal, hit.Material
     end
-    return nil, nil
+    return nil, nil, nil
 end
 
-local function buildProceduralRock(
-    sizeTier: string,
-    rockSeed: number,
-    parentFolder: Instance
-): Model
-    local rng = createRng(rockSeed)
-    local cfg = EnvironmentConfig.ROCKS
-    local sizeCfg = cfg.Sizes[sizeTier] or cfg.Sizes.Medium
-    
-    local rockModel = Instance.new("Model")
-    rockModel.Name = "Rock_" .. sizeTier .. "_" .. tostring(rockSeed)
-    
-    -- Pick material & natural weathered tint
-    local mat = cfg.Materials[math.floor(rng(1, #cfg.Materials + 0.99))]
-    local baseColor = cfg.Colors[math.floor(rng(1, #cfg.Colors + 0.99))]
-    local color = Color3.new(
-        math.clamp(baseColor.R + rng(-0.03, 0.03), 0, 1),
-        math.clamp(baseColor.G + rng(-0.03, 0.03), 0, 1),
-        math.clamp(baseColor.B + rng(-0.03, 0.03), 0, 1)
-    )
-    
-    -- Main core boulder part
-    local scale = Vector3.new(
-        rng(sizeCfg.ScaleMin.X, sizeCfg.ScaleMax.X),
-        rng(sizeCfg.ScaleMin.Y, sizeCfg.ScaleMax.Y),
-        rng(sizeCfg.ScaleMin.Z, sizeCfg.ScaleMax.Z)
-    )
-    
-    local corePart = Instance.new("Part")
-    corePart.Name = "RockCore"
-    corePart.Material = mat
-    corePart.Color = color
-    corePart.Size = scale
-    corePart.Anchored = true
-    corePart.CanCollide = true
-    corePart.CastShadow = true
-    corePart.Parent = rockModel
-    rockModel.PrimaryPart = corePart
-    
-    -- Add 1-2 faceted secondary lobes to avoid simple rectangular boxes
-    if sizeTier ~= "Small" then
-        local subLobe = Instance.new("Part")
-        subLobe.Name = "RockFacet"
-        subLobe.Material = mat
-        subLobe.Color = color
-        subLobe.Size = scale * rng(0.6, 0.85)
-        subLobe.Anchored = true
-        subLobe.CanCollide = true
-        subLobe.CastShadow = true
-        
-        local offset = Vector3.new(rng(-scale.X * 0.25, scale.X * 0.25), rng(-scale.Y * 0.15, scale.Y * 0.1), rng(-scale.Z * 0.25, scale.Z * 0.25))
-        local rot = CFrame.Angles(rng(-0.4, 0.4), rng(-1.5, 1.5), rng(-0.4, 0.4))
-        subLobe.CFrame = CFrame.new(offset) * rot
-        subLobe.Parent = rockModel
+local function getModelBottomY(model: Model): number
+    local minY = math.huge
+    for _, part in ipairs(model:GetDescendants()) do
+        if part:IsA("BasePart") then
+            local cf = part.CFrame
+            local size = part.Size
+            local hx, hy, hz = size.X * 0.5, size.Y * 0.5, size.Z * 0.5
+            for sx = -1, 1, 2 do
+                for sy = -1, 1, 2 do
+                    for sz = -1, 1, 2 do
+                        local cornerY = cf:PointToWorldSpace(Vector3.new(sx * hx, sy * hy, sz * hz)).Y
+                        if cornerY < minY then
+                            minY = cornerY
+                        end
+                    end
+                end
+            end
+        end
     end
+    return minY
+end
+
+-- Embed model with specific depth into terrain
+local function placeRockPrecisely(model: Model, groundPos: Vector3, yawAngle: number, pitchAngle: number, rollAngle: number, embedDepth: number)
+    local _, sz = model:GetBoundingBox()
+    local r = math.max(sz.X, sz.Z) * 0.4
+    local rp = RaycastParams.new()
+    rp.FilterType = Enum.RaycastFilterType.Include
+    rp.FilterDescendantsInstances = { Workspace.Terrain }
     
-    rockModel.Parent = parentFolder
-    return rockModel
+    local minY = groundPos.Y
+    for _, off in ipairs({ Vector2.new(r, 0), Vector2.new(-r, 0), Vector2.new(0, r), Vector2.new(0, -r) }) do
+        local h = Workspace:Raycast(Vector3.new(groundPos.X + off.X, 220, groundPos.Z + off.Y), Vector3.new(0, -350, 0), rp)
+        if h and h.Position.Y < minY then
+            minY = h.Position.Y
+        end
+    end
+    local safeY = math.min(groundPos.Y, (groundPos.Y * 0.4) + (minY * 0.6))
+    
+    model:PivotTo(CFrame.new(Vector3.new(groundPos.X, safeY, groundPos.Z)) * CFrame.Angles(pitchAngle, yawAngle, rollAngle))
+    local lowestY = getModelBottomY(model)
+    if lowestY == math.huge then return end
+    local deltaY = (safeY - embedDepth) - lowestY
+    model:PivotTo(model:GetPivot() + Vector3.new(0, deltaY, 0))
 end
 
 function RockPlacer.Populate(rocksFolder: Folder, injectedCfg: any?, injectedPathSystem: any?)
     local startTime = os.clock()
-    print("[RockPlacer] Placing boulders and natural rock outcrops...")
+    print("[RockPlacer V4] Populating authored mesh boulders across entire map...")
+    
+    local assetLib = getAssetLibrary()
+    if not assetLib then
+        warn("[RockPlacer V4] ERROR: DontLetTheFireDieAssets.Environment not found!")
+        return
+    end
+    
+    local templates = loadRockTemplates(assetLib)
     
     if injectedPathSystem then
         PathSystem = injectedPathSystem
     end
     
     local activeCfg = injectedCfg or EnvironmentConfig
-    local cfg = (activeCfg and activeCfg.ROCKS) or {}
-    local rng = createRng(((activeCfg and activeCfg.SEED) or 133742) + 999)
-    
-    local worldSize = (activeCfg and activeCfg.WORLD_SIZE) or Vector2.new(500, 500)
-    local halfX = worldSize.X / 2 - 25
-    local halfZ = worldSize.Y / 2 - 25
-    local campRadius = (activeCfg and activeCfg.CAMP_EXCLUSION_RADIUS) or 76.0
-    local totalBudget = cfg.TotalRockBudget or 55
-    local minRockDist = cfg.MinRockDistance or 14.0
+    local rng = createRng((activeCfg and activeCfg.SEED) or 133742 + 999)
     
     local placedPositions: { Vector3 } = {}
     local rockCount = 0
-    local maxAttempts = totalBudget * 12
+    
+    -- Targets distributed across full map (Realistic spacing)
+    local targetLarge = 14
+    local targetMedium = 32
+    local targetSmall = 50
+    local targetTotal = targetLarge + targetMedium + targetSmall
+    
+    local minX, maxX = -415.0, 415.0
+    local minZ, maxZ = -455.0, 410.0
+    
+    local maxAttempts = targetTotal * 30
     local attempts = 0
     
-    while rockCount < totalBudget and attempts < maxAttempts do
+    while rockCount < targetTotal and attempts < maxAttempts do
         attempts = attempts + 1
         
-        local candX = rng(-halfX, halfX)
-        local candZ = rng(-halfZ, halfZ)
-        local distFromCenter = math.sqrt(candX * candX + candZ * candZ)
+        local tier = "Small"
+        if rockCount < targetLarge then
+            tier = "Large"
+        elseif rockCount < (targetLarge + targetMedium) then
+            tier = "Medium"
+        else
+            tier = "Small"
+        end
         
-        if distFromCenter < campRadius or distFromCenter > 200.0 then
+        local candX = rng(minX, maxX)
+        local candZ = rng(minZ, maxZ)
+        
+        local groundPos, groundNormal, groundMat = findGroundPosition(candX, candZ)
+        if not groundPos or not groundNormal or not groundMat then
             continue
         end
         
-        local rockClearance = (activeCfg.PATHS and activeCfg.PATHS.RockClearance) or 1.5
+        if groundPos.Y > 28.0 then
+            continue
+        end
+        
+        local slopeAngleDeg = math.deg(math.acos(math.clamp(groundNormal.Y, -1, 1)))
+        
+        -- Query Biome
+        local biomeKey = BiomeConfig.GetBiome(candX, candZ, groundPos.Y, slopeAngleDeg)
+        if biomeKey == "CampsiteSanctuary" 
+            or biomeKey == "WatchtowerClearing" 
+            or biomeKey == "VillageTerrace" 
+            or biomeKey == "TraderOutpost" 
+            or biomeKey == "GasStationSalvage" 
+            or biomeKey == "LakeWater" then
+            continue
+        end
+        
+        -- Trail corridor check: keep walking trails clear
+        local rockClearance = (activeCfg.PATHS and activeCfg.PATHS.RockClearance) or 5.0
         if PathSystem.IsOnPath(candX, candZ, rockClearance, activeCfg) then
             continue
         end
         
-        -- Spacing check
+        -- Minimum spacing
+        local minDist = (tier == "Large") and 30.0 or ((tier == "Medium") and 18.0 or 10.0)
         local tooClose = false
         for _, pos in ipairs(placedPositions) do
             local dx = pos.X - candX
             local dz = pos.Z - candZ
-            if (dx * dx + dz * dz) < (minRockDist * minRockDist) then
+            if (dx * dx + dz * dz) < (minDist * minDist) then
                 tooClose = true
                 break
             end
@@ -166,60 +239,70 @@ function RockPlacer.Populate(rocksFolder: Folder, injectedCfg: any?, injectedPat
             continue
         end
         
-        local groundPos, groundNormal = findGroundPosition(candX, candZ)
-        if not groundPos or not groundNormal or groundPos.Y > 16.0 or groundNormal.Y < 0.85 then
-            continue
+        local biomeDef = BiomeConfig.BIOMES[biomeKey]
+        local rockList: { string } = {}
+        if biomeDef and biomeDef.Rocks then
+            rockList = biomeDef.Rocks[tier] or {}
         end
         
-        -- Size distribution (Small 50%, Medium 35%, Large 15%)
-        local roll = rng(1, 100)
-        local sizeTier = "Small"
-        if roll > 85 then
-            sizeTier = "LargeBoulder"
-        elseif roll > 50 then
-            sizeTier = "Medium"
-        end
-        
-        -- Check for template model in ReplicatedStorage
-        local templatesFolder = ReplicatedStorage:FindFirstChild("EnvironmentTemplates")
-        local rockInstance: Model? = nil
-        
-        if templatesFolder then
-            local meshTemplate = templatesFolder:FindFirstChild("Rock_" .. sizeTier)
-                or templatesFolder:FindFirstChild("Rock")
-                or templatesFolder:FindFirstChild("Boulder")
-                
-            if meshTemplate and meshTemplate:IsA("Model") then
-                rockInstance = meshTemplate:Clone()
-                local scaleFactor = rng(0.8, 1.3)
-                rockInstance:ScaleTo(scaleFactor)
-                rockInstance.Parent = rocksFolder
+        if #rockList == 0 then
+            if tier == "Large" then
+                rockList = { "LargeBoulder_Var01", "LargeBoulder_Var02" }
+            elseif tier == "Medium" then
+                rockList = { "MediumBoulderVar01", "MediumMossBoulder01" }
+            else
+                rockList = { "SmallRock01", "SmallRockGroupVar02", "SmallRockGroupVar03", "SmallRockVar04" }
             end
         end
         
-        if not rockInstance then
-            local rockSeed = math.floor(candX * 500 + candZ + attempts)
-            rockInstance = buildProceduralRock(sizeTier, rockSeed, rocksFolder)
+        local chosenName = rockList[math.floor(rng(1, #rockList + 0.99))]
+        local template = templates[chosenName]
+        if not template then continue end
+        
+        local rockInstance = template:Clone()
+        rockInstance.Name = chosenName
+        
+        local scaleFactor = (tier == "Large") and rng(0.35, 0.49) or ((tier == "Medium") and rng(0.42, 0.60) or rng(0.56, 0.80))
+        pcall(function()
+            rockInstance:ScaleTo(rockInstance:GetScale() * scaleFactor)
+        end)
+        
+        for _, desc in ipairs(rockInstance:GetDescendants()) do
+            if desc:IsA("BasePart") then
+                desc.Anchored = true
+                desc.CastShadow = true
+                if tier == "Small" then
+                    desc.CanCollide = false
+                    desc.CanTouch = false
+                    desc.CanQuery = false
+                else
+                    desc.CanCollide = true
+                    desc.CanTouch = true
+                    desc.CanQuery = true
+                end
+            end
         end
         
-        if rockInstance and rockInstance.PrimaryPart then
-            -- Embed partially into terrain (seat by 25% of height)
-            local embedDepth = rockInstance.PrimaryPart.Size.Y * 0.28
-            local yawAngle = rng(-math.pi, math.pi)
-            local pitchAngle = rng(-0.2, 0.2)
-            local rollAngle = rng(-0.2, 0.2)
-            
-            local targetCFrame = CFrame.new(groundPos - Vector3.new(0, embedDepth, 0))
-                * CFrame.Angles(pitchAngle, yawAngle, rollAngle)
-                
-            rockInstance:PivotTo(targetCFrame)
-            table.insert(placedPositions, groundPos)
-            rockCount = rockCount + 1
+        local cf, sz = rockInstance:GetBoundingBox()
+        local embedDepth = (tier == "Large") and (sz.Y * 0.20) or ((tier == "Medium") and (sz.Y * 0.18) or 0.08)
+        
+        local yawAngle = rng(-math.pi, math.pi)
+        local pitchAngle = (tier == "Small") and 0 or rng(-0.12, 0.12)
+        local rollAngle = (tier == "Small") and 0 or rng(-0.12, 0.12)
+        
+        placeRockPrecisely(rockInstance, groundPos, yawAngle, pitchAngle, rollAngle, embedDepth)
+        
+        rockInstance.Parent = rocksFolder
+        table.insert(placedPositions, groundPos)
+        rockCount = rockCount + 1
+        
+        if rockCount % 25 == 0 then
+            task.wait()
         end
     end
     
     local elapsed = math.round((os.clock() - startTime) * 100) / 100
-    print(string.format("[RockPlacer] Successfully placed %d rocks in %.2f seconds.", rockCount, elapsed))
+    print(string.format("[RockPlacer V4] Successfully placed %d authored boulders across entire map in %.2f seconds.", rockCount, elapsed))
 end
 
 return RockPlacer

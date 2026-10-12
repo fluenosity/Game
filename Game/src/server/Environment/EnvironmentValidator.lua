@@ -87,15 +87,28 @@ function EnvironmentValidator.Validate(injectedCfg: any?, injectedPathSystem: an
             report.Passed = false
         end
         
+        local campCenter = (activeCfg and activeCfg.CAMP_CENTER) or Vector3.new(0, 0, -430)
+        local campRadius = (activeCfg and activeCfg.CAMP_EXCLUSION_RADIUS) or 50.0
+        local towerCenter = (activeCfg and activeCfg.WATCHTOWER_CENTER) or Vector3.new(0, 0, 0)
+        local towerRadius = (activeCfg and activeCfg.WATCHTOWER_EXCLUSION_RADIUS) or 35.0
+
         for _, treeModel in ipairs(trees) do
             if treeModel:IsA("Model") then
                 local pivot = treeModel:GetPivot().Position
-                local distFromCenter = math.sqrt(pivot.X * pivot.X + pivot.Z * pivot.Z)
                 
-                -- Camp exclusion check
-                if distFromCenter < campRadius then
+                -- South Camp exclusion check
+                local distFromCamp = math.sqrt((pivot.X - campCenter.X)^2 + (pivot.Z - campCenter.Z)^2)
+                if distFromCamp < campRadius then
                     report.CampInvasions = report.CampInvasions + 1
-                    table.insert(report.Errors, string.format("Tree '%s' at (%.1f, %.1f) invaded camp exclusion zone (radius %.1f)", treeModel.Name, pivot.X, pivot.Z, campRadius))
+                    table.insert(report.Errors, string.format("Tree '%s' at (%.1f, %.1f) invaded South Camp exclusion zone", treeModel.Name, pivot.X, pivot.Z))
+                    report.Passed = false
+                end
+
+                -- Watchtower clearing check
+                local distFromTower = math.sqrt((pivot.X - towerCenter.X)^2 + (pivot.Z - towerCenter.Z)^2)
+                if distFromTower < towerRadius then
+                    report.CampInvasions = report.CampInvasions + 1
+                    table.insert(report.Errors, string.format("Tree '%s' at (%.1f, %.1f) invaded Watchtower clearing", treeModel.Name, pivot.X, pivot.Z))
                     report.Passed = false
                 end
                 
@@ -107,10 +120,13 @@ function EnvironmentValidator.Validate(injectedCfg: any?, injectedPathSystem: an
                 end
                 
                 -- Foliage collision check
-                for _, part in ipairs(treeModel:GetChildren()) do
-                    if part:IsA("BasePart") and part.Name:find("Foliage") and part.CanCollide then
-                        report.CollidableFoliageErrors = report.CollidableFoliageErrors + 1
-                        part.CanCollide = false
+                for _, part in ipairs(treeModel:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        local n = part.Name:lower()
+                        if (n:find("leaf") or n:find("leaves") or n:find("fern") or n:find("needle")) and part.CanCollide then
+                            report.CollidableFoliageErrors = report.CollidableFoliageErrors + 1
+                            part.CanCollide = false
+                        end
                     end
                 end
             end
@@ -121,14 +137,16 @@ function EnvironmentValidator.Validate(injectedCfg: any?, injectedPathSystem: an
     if rocksFolder then
         local rocks = rocksFolder:GetChildren()
         report.RockCount = #rocks
+        local campCenter = (activeCfg and activeCfg.CAMP_CENTER) or Vector3.new(0, 0, -430)
+        local campRadius = (activeCfg and activeCfg.CAMP_EXCLUSION_RADIUS) or 50.0
         
         for _, rockModel in ipairs(rocks) do
             if rockModel:IsA("Model") then
                 local pivot = rockModel:GetPivot().Position
-                local distFromCenter = math.sqrt(pivot.X * pivot.X + pivot.Z * pivot.Z)
-                if distFromCenter < campRadius then
+                local distFromCamp = math.sqrt((pivot.X - campCenter.X)^2 + (pivot.Z - campCenter.Z)^2)
+                if distFromCamp < campRadius then
                     report.CampInvasions = report.CampInvasions + 1
-                    table.insert(report.Errors, string.format("Rock '%s' invaded camp exclusion zone", rockModel.Name))
+                    table.insert(report.Errors, string.format("Rock '%s' invaded South Camp zone", rockModel.Name))
                     report.Passed = false
                 end
                 if PathSystem.IsOnPath(pivot.X, pivot.Z, 0, activeCfg) then

@@ -33,40 +33,83 @@ function AtmosphereSetup.Apply()
         Lighting.Technology = Enum.Technology.Future
     end)
     
-    Lighting.Brightness = lightCfg.Brightness or 2.2
-    Lighting.Ambient = lightCfg.Ambient or Color3.fromRGB(115, 118, 128)
-    Lighting.OutdoorAmbient = lightCfg.OutdoorAmbient or Color3.fromRGB(118, 122, 132)
-    Lighting.ShadowSoftness = lightCfg.ShadowSoftness or 0.35
-    Lighting.ClockTime = lightCfg.ClockTime or 10.5
+    Lighting.Brightness = lightCfg.Brightness or 2.8
+    Lighting.Ambient = lightCfg.Ambient or Color3.fromRGB(75, 90, 110)
+    Lighting.OutdoorAmbient = lightCfg.OutdoorAmbient or Color3.fromRGB(115, 132, 150)
+    Lighting.ShadowSoftness = lightCfg.ShadowSoftness or 0.15
+    Lighting.ClockTime = lightCfg.ClockTime or 14.5
     Lighting.GeographicLatitude = lightCfg.GeographicLatitude or 48.0
     Lighting.ExposureCompensation = lightCfg.ExposureCompensation or 0.02
+    Lighting.EnvironmentDiffuseScale = lightCfg.EnvironmentDiffuseScale or 1.0
+    Lighting.EnvironmentSpecularScale = lightCfg.EnvironmentSpecularScale or 0.85
+    Lighting.FogEnd = lightCfg.FogEnd or 2400.0 -- High FogEnd so terrain is never washed out
     
-    -- 2. Volumetric Atmosphere (Conceals map edges with realistic horizon mountain mist)
+    -- 2. Volumetric Atmosphere (Reduced haze: hills & vegetation are vividly clear!)
     local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
     if not atmosphere then
         atmosphere = Instance.new("Atmosphere")
         atmosphere.Name = "ForestAtmosphere"
         atmosphere.Parent = Lighting
     end
-    atmosphere.Density = atmoCfg.Density or 0.25
-    atmosphere.Offset = atmoCfg.Offset or 0.12
-    atmosphere.Color = atmoCfg.Color or Color3.fromRGB(175, 195, 220)
-    atmosphere.Decay = atmoCfg.Decay or Color3.fromRGB(100, 120, 145)
-    atmosphere.Glare = atmoCfg.Glare or 0.15
-    atmosphere.Haze = atmoCfg.Haze or 2.0
+    atmosphere.Density = atmoCfg.Density or 0.34
+    atmosphere.Offset = atmoCfg.Offset or 0.18
+    atmosphere.Color = atmoCfg.Color or Color3.fromRGB(175, 200, 225)
+    atmosphere.Decay = atmoCfg.Decay or Color3.fromRGB(95, 120, 145)
+    atmosphere.Glare = atmoCfg.Glare or 0.25
+    atmosphere.Haze = atmoCfg.Haze or 1.80 -- Soft mountain horizon mist matching Editor view!
     
-    -- 3. ColorCorrectionEffect (Restrained contrast so tree bark & needles stay readable)
+    -- 3. ColorCorrectionEffect (Rich alpine depth, lush conifer greens, warm amber firelight)
     local cc = Lighting:FindFirstChild("ForestColorCorrection") :: ColorCorrectionEffect?
     if not cc then
         cc = Instance.new("ColorCorrectionEffect")
         cc.Name = "ForestColorCorrection"
         cc.Parent = Lighting
     end
-    cc.Brightness = ccCfg.Brightness or 0.01
-    cc.Contrast = ccCfg.Contrast or 0.03
-    cc.Saturation = ccCfg.Saturation or 0.02
-    cc.TintColor = ccCfg.TintColor or Color3.fromRGB(248, 246, 242)
+    cc.Brightness = ccCfg.Brightness or 0.02
+    cc.Contrast = ccCfg.Contrast or 0.06
+    cc.Saturation = ccCfg.Saturation or 0.15
+    cc.TintColor = ccCfg.TintColor or Color3.fromRGB(255, 252, 246)
     cc.Enabled = true
+
+    -- 3B. Production High-Res Celestial Skybox & Stars
+    local skyCfg = (EnvironmentConfig and EnvironmentConfig.SKY and EnvironmentConfig.SKY.Day) or {}
+    local sky = Lighting:FindFirstChildOfClass("Sky")
+    if not sky then
+        sky = Instance.new("Sky")
+        sky.Name = "Sky"
+        sky.Parent = Lighting
+    end
+    sky.SkyboxBk = skyCfg.SkyboxBk or "http://www.roblox.com/asset/?id=91458024"
+    sky.SkyboxDn = skyCfg.SkyboxDn or "http://www.roblox.com/asset/?id=91457980"
+    sky.SkyboxFt = skyCfg.SkyboxFt or "http://www.roblox.com/asset/?id=91458024"
+    sky.SkyboxLf = skyCfg.SkyboxLf or "http://www.roblox.com/asset/?id=91458024"
+    sky.SkyboxRt = skyCfg.SkyboxRt or "http://www.roblox.com/asset/?id=91458024"
+    sky.SkyboxUp = skyCfg.SkyboxUp or "http://www.roblox.com/asset/?id=91458002"
+    sky.SunTextureId = "rbxassetid://6281397916"
+    sky.MoonTextureId = "rbxassetid://2626744426"
+    sky.SunAngularSize = 21
+    sky.MoonAngularSize = 12
+    sky.CelestialBodiesShown = true
+    
+    -- 3C. Animated Volumetric Clouds (Parented under Workspace.Terrain for engine visibility!)
+    -- Purge any duplicate clouds under Lighting
+    for _, ch in ipairs(Lighting:GetChildren()) do
+        if ch:IsA("Clouds") then
+            ch:Destroy()
+        end
+    end
+    local terrain = workspace.Terrain
+    local clouds = terrain:FindFirstChildOfClass("Clouds")
+    if not clouds then
+        clouds = Instance.new("Clouds")
+        clouds.Name = "VolumetricClouds"
+        clouds.Parent = terrain
+    end
+    clouds.Cover = 0.32
+    clouds.Density = 0.55
+    clouds.Color = Color3.fromRGB(245, 248, 255)
+    -- GlobalWind physically animates realistic continuous cloud drift across the sky!
+    workspace.GlobalWind = Vector3.new(16, 0, 10)
     
     -- 4. BloomEffect (Soft gentle highlight bleed, high threshold so props don't shine like neon)
     local bloom = Lighting:FindFirstChild("ForestBloom") :: BloomEffect?
@@ -91,16 +134,16 @@ function AtmosphereSetup.Apply()
     sunRays.Spread = raysCfg.Spread or 0.70
     sunRays.Enabled = true
     
-    -- 6. DepthOfFieldEffect (Foreground clarity, distant mountain depth)
+    -- 6. DepthOfFieldEffect (Pin-sharp valley interior, softly blends distant jagged mountains)
     local dof = Lighting:FindFirstChild("ForestDepthOfField") :: DepthOfFieldEffect?
     if not dof then
         dof = Instance.new("DepthOfFieldEffect")
         dof.Name = "ForestDepthOfField"
         dof.Parent = Lighting
     end
-    dof.FarIntensity = dofCfg.FarIntensity or 0.28
-    dof.FocusDistance = dofCfg.FocusDistance or 50.0
-    dof.InFocusRadius = dofCfg.InFocusRadius or 75.0
+    dof.FarIntensity = dofCfg.FarIntensity or 0.20 -- Softens distant low-poly mountain polygon silhouette
+    dof.FocusDistance = dofCfg.FocusDistance or 280.0 -- Full interior basin in crisp focus
+    dof.InFocusRadius = dofCfg.InFocusRadius or 240.0 -- 0 to 520 studs is crystal clear
     dof.NearIntensity = dofCfg.NearIntensity or 0.0
     dof.Enabled = true
     
@@ -135,10 +178,10 @@ function AtmosphereSetup.Apply()
         if primaryFirePart then
             local light = Instance.new("PointLight")
             light.Name = "CampfireGlow"
-            light.Color = Color3.fromRGB(255, 138, 48) -- Rich warm amber flame
-            light.Range = 34.0                        -- Cozy circle around fire pit
-            light.Brightness = 1.15                   -- Soft natural flicker brightness
-            light.Shadows = true
+            light.Color = Color3.fromRGB(255, 142, 42) -- Rich warm amber flame (Matching Reference Image 2)
+            light.Range = 55.0                        -- Full campsite illumination
+            light.Brightness = 3.5                    -- Warm radiant glow
+            light.Shadows = true                      -- Real-time contact shadows on rocks & fence
             light.Parent = primaryFirePart
         end
     end)

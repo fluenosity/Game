@@ -16,8 +16,21 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local envConfigScript = sharedFolder:WaitForChild("EnvironmentConfig")
-local okConfig, freshConfig = pcall(function() return require(envConfigScript:Clone()) end)
-local EnvironmentConfig = (okConfig and freshConfig) or require(envConfigScript)
+local function getFreshModule(moduleScript: ModuleScript): any
+    local clone = moduleScript:Clone()
+    clone.Name = "__Fresh_" .. moduleScript.Name
+    clone.Parent = moduleScript.Parent
+    local ok, res = pcall(function()
+        return require(clone)
+    end)
+    clone:Destroy()
+    if ok and res then
+        return res
+    end
+    return require(moduleScript)
+end
+
+local EnvironmentConfig = getFreshModule(envConfigScript)
 
 local EnvironmentGenerator = {}
 
@@ -49,12 +62,12 @@ local function applySafeLighting()
         atmosphere.Name = "ForestAtmosphere"
         atmosphere.Parent = Lighting
     end
-    atmosphere.Density = 0.36
-    atmosphere.Offset = 0.12
-    atmosphere.Color = Color3.fromRGB(160, 185, 205)
+    atmosphere.Density = 0.34
+    atmosphere.Offset = 0.18
+    atmosphere.Color = Color3.fromRGB(175, 200, 225)
     atmosphere.Decay = Color3.fromRGB(95, 120, 145)
-    atmosphere.Glare = 0.15
-    atmosphere.Haze = 2.4
+    atmosphere.Glare = 0.25
+    atmosphere.Haze = 1.80
     
     local cc = Lighting:FindFirstChild("ForestColorCorrection") :: ColorCorrectionEffect?
     if not cc then
@@ -138,16 +151,7 @@ function EnvironmentGenerator.Generate(): boolean
     
     -- 2. Clean up ALL old/duplicate generated containers so only ONE forest exists!
     local function getActiveConfig(): any
-        local ok, fresh = pcall(function()
-            local clone = envConfigScript:Clone()
-            local res = require(clone)
-            clone:Destroy()
-            return res
-        end)
-        if ok and fresh then
-            return fresh
-        end
-        return EnvironmentConfig
+        return getFreshModule(envConfigScript)
     end
     
     local activeConfig = getActiveConfig()
@@ -185,13 +189,17 @@ function EnvironmentGenerator.Generate(): boolean
     local rocksFolder = getOrCreateFolder(envRoot, folderRocksName)
     local groundFolder = getOrCreateFolder(envRoot, folderGroundName)
     
-    -- 4. Sculpt Organic Terrain & Non-Circular Ridges
-    local okTerrain, errTerrain = pcall(function()
-        local TerrainGenerator = loadFreshModule("TerrainGenerator")
-        TerrainGenerator.Generate(activeConfig, activePathSystem)
-    end)
-    if not okTerrain then
-        warn("[EnvironmentGenerator] Terrain step notice:", errTerrain)
+    -- 4. Sculpt Organic Terrain & Non-Circular Ridges (Only if explicitly enabled)
+    if activeConfig.RESHAPE_ELEVATION ~= false then
+        local okTerrain, errTerrain = pcall(function()
+            local TerrainGenerator = loadFreshModule("TerrainGenerator")
+            TerrainGenerator.Generate(activeConfig, activePathSystem)
+        end)
+        if not okTerrain then
+            warn("[EnvironmentGenerator] Terrain step notice:", errTerrain)
+        end
+    else
+        print("[EnvironmentGenerator] Preserving existing sculpted terrain elevation, leveled village terraces & roads (RESHAPE_ELEVATION = false).")
     end
     
     -- 5. Populate Varied Conifers & Backdrop Silhouette Ridges

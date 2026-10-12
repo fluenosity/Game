@@ -11,7 +11,7 @@ local CollectionService = game:GetService("CollectionService")
 
 local WoodPileBuilder = {}
 
-local TARGET_ORIGIN = Vector3.new(188.3, 33.8, -39.7)
+local TARGET_ORIGIN = Vector3.new(-23.0, 8.5, -180.5)
 
 -- Raycast down to find exact forest ground surface
 local function getGroundHeight(x: number, z: number, defaultY: number): number

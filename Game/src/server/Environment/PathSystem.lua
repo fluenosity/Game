@@ -86,8 +86,8 @@ local function generateDenseSegments(def: PathDefinition, activeCfg: any, stepDi
     if totalLength <= 0.001 then return segments end
 
     -- 3. Serpentine Meander & Curvature Calculation
-    local meanderAmp = (activeCfg.PATHS and activeCfg.PATHS.MeanderAmplitude) or 16.0
-    local wavelength = (activeCfg.PATHS and activeCfg.PATHS.MeanderWavelength) or 50.0
+    local meanderAmp = (def.MeanderAmplitude ~= nil and def.MeanderAmplitude) or (activeCfg.PATHS and activeCfg.PATHS.MeanderAmplitude) or 16.0
+    local wavelength = (def.MeanderWavelength) or (activeCfg.PATHS and activeCfg.PATHS.MeanderWavelength) or 50.0
     local phase = def.MeanderPhase or 0.0
     local seedOffset = def.SeedOffset or 100
 

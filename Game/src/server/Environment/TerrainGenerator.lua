@@ -1,15 +1,28 @@
 --!strict
 --[[
     TerrainGenerator.lua
-    Procedural organic elevation and realistic multi-material earth terrain generation.
+    Procedural organic elevation and realistic multi-scale earth terrain generation.
     Developed for "Don't Let the Fire Die" (Fluenosity Studio).
     
-    Features:
-    - Non-Circular Mountain Ridges (No artificial circular ring walls)
-    - Natural Rolling Basin: Gentle knolls, swales, and shallow forest depressions
-    - Realistic Earth Surface Blending: Shatters the "carpet" look by organically blending
-      LeafyGrass (pine needle mulch), Ground (rich soil), Grass (3D blades), and Mud
-    - Protected Camp Compound: 58-stud flat sanctuary preserving bus, campfire, and fence
+    TERRAIN SCULPTING V3:
+    1. Multi-Scale Elevation Hierarchy:
+       - Scale A: Small ground bumps (0.95 studs micro-relief across clearings)
+       - Scale B: Small rolling hills (2.8 studs low rounded hills & undulating slopes)
+       - Scale C: Medium raised areas (5.4 studs broad elevated woodland rises & ridges)
+       - Scale D: Lowlands & shallow valleys (3.0 studs meandering drainage swales)
+       - Scale E: Landscape rhythm modulation (0.60 calm glades to 1.30 rolling ridges)
+       - Domain Warping: Organically curved contours, zero grid artifacts.
+    2. Protected Landmark Safeguards:
+       - Campsite Sanctuary: Strictly flat at Y=3.85 (r <= 30), smooth S-curve blend to r=65
+       - Alpine East Lake: Bed & water preserved 100%, seamless shoreline blend (d_lake = 0.90 to 1.35)
+       - Mountain Foothills: Seamless blend into existing perimeter barrier (r >= 400 to 500)
+    3. Realistic Earth Vegetation Clustering Engine (Eliminates Camouflage Look):
+       - Zero artificial circle cutoffs or threshold steps: continuous S-curve blend
+       - Continuous vegetation density function with natural cluster dithering
+       - Dense grass on sunny knolls, sparse grass & clusters over needle mulch,
+         exposed earth on trails & clearings, dark loam in moist hollows
+       - Harmonized earth shader color palette
+    4. Deterministic Chunked Voxel Writing with SDF continuous dual-contouring occupancies
 ]]
 
 local Workspace = game:GetService("Workspace")
@@ -19,13 +32,14 @@ local envConfigScript = game:GetService("ReplicatedStorage"):WaitForChild("Fluen
 local okConfig, freshConfig = pcall(function() return require(envConfigScript:Clone()) end)
 local activeCfg = (okConfig and freshConfig) or require(envConfigScript)
 
-local envFolder = script.Parent or game:GetService("ServerScriptService"):WaitForChild("FluenosityServer"):WaitForChild("Environment")
+local envFolder = (script.Parent and script.Parent.Name == "Environment" and script.Parent)
+    or game:GetService("ServerScriptService"):WaitForChild("FluenosityServer"):WaitForChild("Environment")
 local PathSystem = require(envFolder:WaitForChild("PathSystem"))
 
 local TerrainGenerator = {}
 
 -- ---------------------------------------------------------------------------
--- ORGANIC ELEVATION & PERIMETER RIDGES
+-- MULTI-SCALE ORGANIC ELEVATION HIERARCHY
 -- ---------------------------------------------------------------------------
 
 local function sampleElevation(x: number, z: number): (number, number, number)
@@ -33,46 +47,125 @@ local function sampleElevation(x: number, z: number): (number, number, number)
     local seed = activeCfg.SEED or 133742
     
     local distFromCenter = math.sqrt(x * x + z * z)
-    local angle = math.atan2(z, x)
     
-    -- 1. Multi-scale Perlin Noise for natural rolling mounds & hollows
-    local nLarge = math.noise(x * (cfg.LargeScale and cfg.LargeScale.Frequency or 0.007), z * (cfg.LargeScale and cfg.LargeScale.Frequency or 0.007), seed * 0.1)
-    local nMed = math.noise(x * (cfg.MediumScale and cfg.MediumScale.Frequency or 0.022), z * (cfg.MediumScale and cfg.MediumScale.Frequency or 0.022), (seed + 101) * 0.1)
-    local nSmall = math.noise(x * (cfg.SmallScale and cfg.SmallScale.Frequency or 0.065), z * (cfg.SmallScale and cfg.SmallScale.Frequency or 0.065), (seed + 202) * 0.1)
+    -- 0. Organic Domain Warping (Curves and meanders landforms organically)
+    local warpCfg = cfg.DomainWarp or { Frequency = 0.004, Strength = 32.0 }
+    local wFreq = warpCfg.Frequency or 0.004
+    local wStr = warpCfg.Strength or 32.0
+    local warpX = math.noise(x * wFreq, z * wFreq, (seed + 77) * 0.1) * wStr
+    local warpZ = math.noise((x + 123) * wFreq, (z - 231) * wFreq, (seed + 88) * 0.1) * wStr
+    local wx = x + warpX
+    local wz = z + warpZ
     
-    local baseHeight = cfg.BaseHeight or 0.0
-    local basinElevation = baseHeight
-        + (nLarge * (cfg.LargeScale and cfg.LargeScale.Amplitude or 7.0))
-        + (nMed * (cfg.MediumScale and cfg.MediumScale.Amplitude or 3.5))
-        + (nSmall * (cfg.SmallScale and cfg.SmallScale.Amplitude or 1.0))
-        
-    -- 2. Camp Exclusion Zone Smoothing (S-curve blend)
-    local campExclusion = activeCfg.CAMP_EXCLUSION_RADIUS or 76.0
-    local campBlend = activeCfg.CAMP_BLEND_RADIUS or 96.0
+    -- 1. Multi-Scale Elevation Hierarchy
+    -- A. Small Ground Bumps (Noticeable rounded micro-relief across open ground)
+    local bumpCfg = cfg.SmallBumps or { Frequency = 0.065, Amplitude = 1.6 }
+    local bFreq = bumpCfg.Frequency or 0.065
+    local bAmp = bumpCfg.Amplitude or 1.6
+    local nBump1 = math.noise(wx * bFreq, wz * bFreq, (seed + 11) * 0.1) / 0.45
+    local nBump2 = math.noise(wx * (bFreq * 1.6) + 33, wz * (bFreq * 1.6) - 44, (seed + 22) * 0.1) / 0.45
+    local hBumps = math.clamp((nBump1 * 0.7 + nBump2 * 0.3), -1, 1) * bAmp
     
-    local campWeight = 1.0
-    if distFromCenter < campExclusion then
-        campWeight = 0.0
-    elseif distFromCenter < campBlend then
-        local t = (distFromCenter - campExclusion) / (campBlend - campExclusion)
-        campWeight = t * t * (3 - 2 * t) -- Smooth cubic hermite curve
+    -- B. Small Rolling Hills (Local knolls, undulating slopes & shoulders)
+    local hillCfg = cfg.RollingHills or { Frequency = 0.018, Amplitude = 4.2, ShoulderFrequency = 0.028, ShoulderAmplitude = 2.4 }
+    local hFreq = hillCfg.Frequency or 0.018
+    local hAmp = hillCfg.Amplitude or 4.2
+    local sFreq = hillCfg.ShoulderFrequency or 0.028
+    local sAmp = hillCfg.ShoulderAmplitude or 2.4
+    local nHill = math.noise(wx * hFreq, wz * hFreq, (seed + 33) * 0.1) / 0.45
+    local nShoulder = math.noise((wx + 45) * sFreq, (wz - 67) * sFreq, (seed + 44) * 0.1) / 0.45
+    local hRolling = (math.clamp(nHill, -1, 1) * hAmp) + (math.clamp(nShoulder, -1, 1) * sAmp)
+    
+    -- C. Medium Raised Areas (Elevated conifer ridges & prominent woodland mounds: Y reaching 17-20)
+    local riseCfg = cfg.MediumRises or { Frequency = 0.009, Amplitude = 9.0 }
+    local rFreq = riseCfg.Frequency or 0.009
+    local rAmp = riseCfg.Amplitude or 9.0
+    local nRise = math.noise(wx * rFreq, wz * rFreq, (seed + 55) * 0.1) / 0.45
+    local hMedium = 0
+    if nRise > 0 then
+        local tRise = math.clamp(nRise, 0, 1)
+        hMedium = (tRise * tRise * (3 - 2 * tRise)) * rAmp
     end
     
-    local blendedElevation = baseHeight + ((basinElevation - baseHeight) * campWeight)
+    -- D. Lowlands and Shallow Valleys (Natural meandering drainage swales)
+    local lowCfg = cfg.Lowlands or { Frequency = 0.007, Depth = 2.8 }
+    local lFreq = lowCfg.Frequency or 0.007
+    local lDepth = lowCfg.Depth or 2.8
+    local nLow = math.noise(wx * lFreq, wz * lFreq, (seed + 66) * 0.1) / 0.45
+    local hLowland = 0
+    if nLow < 0 then
+        local tLow = math.clamp(-nLow, 0, 1)
+        hLowland = -(tLow * tLow * (3 - 2 * tLow)) * lDepth
+    end
     
-    -- 3. Non-Circular Organic Perimeter Mountain Barrier
-    local bCfg = cfg.Boundary
-    local radialNoise = math.noise(math.cos(angle) * 1.6, math.sin(angle) * 1.6, seed * 0.3)
-    local effectiveInnerRadius = bCfg.BaseRadius + (radialNoise * bCfg.RadialNoiseAmp)
-    local effectiveOuterRadius = effectiveInnerRadius + bCfg.TransitionWidth
+    -- E. Landscape Rhythm Modulation (Alternates between calm clearings & rolling woodland)
+    local modCfg = cfg.ReliefModulation or { Frequency = 0.0035, MinFactor = 0.75, MaxFactor = 1.25 }
+    local mFreq = modCfg.Frequency or 0.0035
+    local minF = modCfg.MinFactor or 0.75
+    local maxF = modCfg.MaxFactor or 1.25
+    local nMod = math.clamp((math.noise(wx * mFreq, wz * mFreq, (seed + 99) * 0.1) / 0.45 + 1) * 0.5, 0, 1)
+    local reliefFactor = minF + (maxF - minF) * nMod
     
+    -- Perimeter Foothills Transition: gently blend interior relief into existing perimeter base
+    local distInteriorEnd = 390.0
+    local distPerimeterStart = 490.0
+    local interiorReliefWeight = 1.0
+    if distFromCenter > distInteriorEnd then
+        local tPeri = math.clamp((distFromCenter - distInteriorEnd) / (distPerimeterStart - distInteriorEnd), 0, 1)
+        interiorReliefWeight = 1.0 - (tPeri * tPeri * (3 - 2 * tPeri))
+    end
+    
+    local reshapeStrength = cfg.ReshapingStrength or 1.0
+    local baseHeight = cfg.BaseHeight or 5.5
+    local totalBasinRelief = (hBumps + hRolling + hMedium + hLowland) * reliefFactor * reshapeStrength * interiorReliefWeight
+    local naturalElevation = math.max(1.8, baseHeight + totalBasinRelief)
+    
+    -- 2. PROTECTED REGIONS SAFEGUARDS
+    local prot = cfg.ProtectedRegions or {}
+    
+    -- Campsite Sanctuary (Core strictly preserved at Y=3.85, smooth S-curve blend to r=45)
+    local campProt = prot.Camp or { Center = Vector3.new(0, 3.85, 0), CoreRadius = 28.0, BlendRadius = 45.0, SurfaceRoughness = 0.08 }
+    local campFloor = (campProt.Center and campProt.Center.Y) or 3.85
+    local coreR = campProt.CoreRadius or 28.0
+    local blendR = campProt.BlendRadius or 45.0
+    local campWeight = 1.0
+    if distFromCenter < coreR then
+        campWeight = 0.0
+    elseif distFromCenter < blendR then
+        local t = (distFromCenter - coreR) / (blendR - coreR)
+        campWeight = t * t * (3 - 2 * t)
+    end
+    
+    local campRoughness = 0
+    if campWeight < 1.0 then
+        campRoughness = math.noise(x * 0.18, z * 0.18, (seed + 15) * 0.1) * (campProt.SurfaceRoughness or 0.08)
+    end
+    
+    local blendedElevation = (campFloor + campRoughness) + ((naturalElevation - (campFloor + campRoughness)) * campWeight)
+    
+    -- East Lake Shoreline Protection
+    local lakeProt = prot.Lake or { Center = Vector2.new(416, -48), RadiusX = 136.0, RadiusZ = 104.0, WaterLevel = 1.02, ShoreBlendStart = 0.90, ShoreBlendEnd = 1.35 }
+    local dxLake = (x - lakeProt.Center.X) / lakeProt.RadiusX
+    local dzLake = (z - lakeProt.Center.Y) / lakeProt.RadiusZ
+    local dLake = math.sqrt(dxLake * dxLake + dzLake * dzLake)
+    
+    if dLake < lakeProt.ShoreBlendStart then
+        blendedElevation = lakeProt.WaterLevel - 14.0
+    elseif dLake < lakeProt.ShoreBlendEnd then
+        local tShore = (dLake - lakeProt.ShoreBlendStart) / (lakeProt.ShoreBlendEnd - lakeProt.ShoreBlendStart)
+        local wShore = tShore * tShore * (3 - 2 * tShore)
+        local shoreElevation = lakeProt.WaterLevel + 0.35
+        blendedElevation = shoreElevation + ((blendedElevation - shoreElevation) * wShore)
+    end
+    
+    -- Perimeter Mountain Foothills Transition
+    local footProt = prot.Foothills or { InnerRadius = 400.0, OuterRadius = 660.0, PeakRise = 48.0, CragNoiseAmp = 14.0 }
     local mountainFactor = 0.0
-    if distFromCenter > effectiveInnerRadius then
-        local tWall = math.clamp((distFromCenter - effectiveInnerRadius) / (effectiveOuterRadius - effectiveInnerRadius), 0, 1)
+    if distFromCenter > footProt.InnerRadius then
+        local tWall = math.clamp((distFromCenter - footProt.InnerRadius) / (footProt.OuterRadius - footProt.InnerRadius), 0, 1)
         mountainFactor = tWall * tWall
-        
-        local cragNoise = math.noise(x * 0.016, z * 0.016, (seed + 333) * 0.1) * 10.0
-        blendedElevation = blendedElevation + (mountainFactor * bCfg.PeakHeight) + (cragNoise * mountainFactor)
+        local cragNoise = math.noise(wx * 0.016, wz * 0.016, (seed + 333) * 0.1) * (footProt.CragNoiseAmp or 14.0)
+        blendedElevation = blendedElevation + (mountainFactor * (footProt.PeakRise or 48.0)) + (cragNoise * mountainFactor)
     end
     
     return blendedElevation, distFromCenter, mountainFactor
@@ -93,10 +186,7 @@ local function sampleSlopeAngle(x: number, z: number, step: number): number
 end
 
 -- ---------------------------------------------------------------------------
--- REALISTIC EARTH MATERIAL MAPPING (Breaks the "carpet" look!)
--- ---------------------------------------------------------------------------
--- ---------------------------------------------------------------------------
--- REALISTIC EARTH MATERIAL MAPPING V3 (Eliminates carpet & grey perimeter!)
+-- REALISTIC EARTH MATERIAL MAPPING V3 (Zero Camouflage Cow Spots!)
 -- ---------------------------------------------------------------------------
 local function determineMaterial(
     x: number,
@@ -107,169 +197,123 @@ local function determineMaterial(
     mountainFactor: number
 ): Enum.Material
     local mats = (activeCfg.TERRAIN and activeCfg.TERRAIN.Materials) or {}
-    local blendCfg = (activeCfg.TERRAIN and activeCfg.TERRAIN.Blending) or {}
     local seed = activeCfg.SEED or 133742
+    local baseH = (activeCfg.TERRAIN and activeCfg.TERRAIN.BaseHeight) or 5.5
     
-    local campCore = blendCfg.CampCoreRadius or 46.0
-    local campVerge = blendCfg.CampVergeRadius or 66.0
-    local campOuter = blendCfg.CampOuterBlend or 80.0
+    local warpCfg = (activeCfg.TERRAIN and activeCfg.TERRAIN.DomainWarp) or { Frequency = 0.004, Strength = 28.0 }
+    local wFreq = warpCfg.Frequency or 0.004
+    local wStr = warpCfg.Strength or 28.0
+    local wx = x + math.noise(x * wFreq, z * wFreq, (seed + 77) * 0.1) * wStr
+    local wz = z + math.noise((x + 123) * wFreq, (z - 231) * wFreq, (seed + 88) * 0.1) * wStr
     
-    -- 1. CAMPSITE INTERIOR: Worn, compacted sanctuary earth
-    if distCenter < campCore then
-        return mats.Camp or Enum.Material.Ground
-    end
-    
-    -- 1B. CAMPSITE PERIMETER TRANSITION (Areas A, B, C, D, E)
-    -- Naturally feathers worn soil into the forest floor; no sharp circular cutoffs!
-    if distCenter < campOuter then
-        local angle = math.atan2(z, x)
-        local vergeNoise = math.noise(x * 0.055, z * 0.055, seed * 0.1 + 808)
-        local radialWobble = vergeNoise * 8.0
-        local effectiveVerge = campVerge + radialWobble
-        
-        -- Area B: Broken Gate Approach (North/Northwest towards paths - Circled Top Right)
-        -- Intense foot traffic extends worn earth and path gravel outwards
-        local isGateSector = (angle > -2.4 and angle < -1.0)
-        if isGateSector and distCenter < (campVerge + 10.0) then
-            local gatePebbleNoise = math.noise(x * 0.12, z * 0.12, 112)
-            if gatePebbleNoise > 0.35 then
-                return mats.Cobblestone or mats.Rock or Enum.Material.Rock
-            else
-                return mats.Ground or Enum.Material.Ground
-            end
-        end
-        
-        -- Area E: Foreground Outside Front Fence (South Exterior - Circled Bottom)
-        -- Rich multi-material mix: real 3D grass clumps, dark exposed earth, embedded stones, needle mulch
-        local isForegroundSector = (z > 28.0)
-        if isForegroundSector and distCenter < (campOuter - 2.0) then
-            local fgStoneNoise = math.noise(x * 0.11, z * 0.11, seed * 0.1 + 101)
-            local fgGrassNoise = math.noise(x * 0.055, z * 0.055, seed * 0.1 + 202)
-            if fgStoneNoise > 0.42 then
-                return mats.Rock or mats.Cobblestone or Enum.Material.Rock -- Embedded stones along ledge
-            elseif fgGrassNoise > 0.05 then
-                return mats.Grass or Enum.Material.Grass -- Real 3D wild grass tufts
-            elseif fgGrassNoise < -0.18 then
-                return mats.Ground or Enum.Material.Ground -- Rich dark exposed soil
-            else
-                return mats.LeafyGrass or Enum.Material.LeafyGrass -- Pine needle mulch
-            end
-        end
-        
-        -- Area A: Behind Rear Fence (North Exterior - Circled Top Center)
-        -- Deep shadowed forest undergrowth: real 3D grass, dark needle mulch, damp earth, rich soil
-        local isRearSector = (z < -30.0)
-        if isRearSector and distCenter < effectiveVerge then
-            local rearNoise = math.noise(x * 0.045, z * 0.045, seed * 0.1 + 303)
-            if rearNoise > 0.02 then
-                return mats.Grass or Enum.Material.Grass -- Real 3D wild grass along rear fence
-            elseif rearNoise < -0.22 then
-                return mats.Mud or Enum.Material.Mud -- Damp shaded depression
-            else
-                return mats.LeafyGrass or Enum.Material.LeafyGrass -- Dark pine needle mulch
-            end
-        end
-        
-        -- Area D & General Verge: Feathered soil, mulch, and damp earth around fence lines
-        if distCenter < effectiveVerge then
-            local vergeBlendNoise = math.noise(x * 0.04, z * 0.04, seed * 0.1 + 909)
-            if vergeBlendNoise > 0.15 then
-                return mats.LeafyGrass or Enum.Material.LeafyGrass
-            elseif vergeBlendNoise < -0.25 then
-                return mats.Mud or Enum.Material.Mud
-            else
-                return mats.Ground or Enum.Material.Ground
-            end
-        end
-    end
-    
-    -- 2. WOODLAND TRAILS & CORRIDORS (Dirt trail way with organic edges)
-    local pathWeight = PathSystem.GetPathTerrainWeight(x, z, activeCfg)
-    if pathWeight > 0.25 then
-        local trailNoise = math.noise(x * 0.08, z * 0.08, 444)
-        if pathWeight > 0.65 then
-            -- Trail core: Compacted worn walking dirt with embedded pebbles or damp ruts
-            if trailNoise > 0.38 then
-                return mats.Cobblestone or mats.Rock or Enum.Material.Rock
-            elseif trailNoise < -0.36 then
-                return mats.Mud or Enum.Material.Mud
-            else
-                return mats.Ground or Enum.Material.Ground
-            end
+    -- 1. CAMPSITE INTERIOR & SURROUNDING WORN VERGE
+    -- Bare earth is STRICTLY confined to the trodden camp sanctuary!
+    if distCenter < 28.0 then
+        return mats.Ground or Enum.Material.Ground
+    elseif distCenter < 40.0 then
+        local tCamp = (distCenter - 28.0) / (40.0 - 28.0)
+        local campDither = math.noise(wx * 0.08, wz * 0.08, (seed + 15) * 0.1)
+        if tCamp + campDither * 0.25 < 0.35 then
+            return mats.Ground or Enum.Material.Ground
         else
-            -- Trail verge: Feathered transition between path soil and forest floor
-            if trailNoise > 0.10 then
-                return mats.Ground or Enum.Material.Ground
+            return mats.LeafyGrass or Enum.Material.LeafyGrass
+        end
+    end
+    
+    -- 2. EAST LAKE SHORELINE
+    local lakeProt = (activeCfg.TERRAIN and activeCfg.TERRAIN.ProtectedRegions and activeCfg.TERRAIN.ProtectedRegions.Lake)
+    if lakeProt then
+        local dxLake = (x - lakeProt.Center.X) / lakeProt.RadiusX
+        local dzLake = (z - lakeProt.Center.Y) / lakeProt.RadiusZ
+        local dLake = math.sqrt(dxLake * dxLake + dzLake * dzLake)
+        if dLake < 0.98 then
+            return mats.Sand or Enum.Material.Sand
+        elseif dLake < 1.12 then
+            local sandNoise = math.noise(wx * 0.09, wz * 0.09, (seed + 19) * 0.1)
+            if sandNoise > 0.25 then
+                return mats.Cobblestone or mats.Rock or Enum.Material.Rock
+            else
+                return mats.Sand or Enum.Material.Sand
+            end
+        elseif dLake < 1.28 then
+            local shoreTurfNoise = math.noise(wx * 0.06, wz * 0.06, (seed + 29) * 0.1)
+            if shoreTurfNoise > 0.10 then
+                return mats.Grass or Enum.Material.Grass
+            elseif shoreTurfNoise < -0.20 then
+                return mats.Sand or Enum.Material.Sand
             else
                 return mats.LeafyGrass or Enum.Material.LeafyGrass
             end
         end
     end
     
-    -- 3. SLOPE & MOUNTAIN RIDGE MATERIAL MAPPING
-    -- Solves the "stark grey perimeter ring" by anchoring rock to actual slope & crag noise,
-    -- allowing gentle mountain slopes to retain pine mulch and alpine soil!
-    local steepThreshold = mats.SteepSlopeThreshold or 34.0
-    local moderateThreshold = mats.ModerateSlopeThreshold or 22.0
-    local cliffThreshold = mats.RockCliffThreshold or 42.0
+    -- 3. WOODLAND TRAILS (Only narrow beaten center is dirt, edges are mossy duff)
+    local pathWeight = PathSystem.GetPathTerrainWeight(x, z, activeCfg)
+    if pathWeight > 0.85 then
+        local trailNoise = math.noise(wx * 0.09, wz * 0.09, (seed + 444) * 0.1)
+        if trailNoise > 0.35 then
+            return mats.Cobblestone or mats.Rock or Enum.Material.Rock
+        else
+            return mats.Ground or Enum.Material.Ground
+        end
+    elseif pathWeight > 0.50 then
+        return mats.LeafyGrass or Enum.Material.LeafyGrass
+    end
     
-    if slopeDeg >= cliffThreshold then
-        -- Sheer vertical rock faces
-        if elevation > 28.0 then
+    -- 4. SLOPE & MOUNTAIN RIDGE MAPPING (Only real cliffs & mountain crags show rock)
+    local cliffThreshold = mats.RockCliffThreshold or 36.0
+    local steepThreshold = mats.SteepSlopeThreshold or 28.0
+    
+    if slopeDeg >= cliffThreshold or (mountainFactor > 0.5 and slopeDeg >= steepThreshold) then
+        if elevation > 30.0 then
             return mats.Slate or Enum.Material.Slate
         end
         return mats.Rock or Enum.Material.Rock
     elseif slopeDeg >= steepThreshold then
-        -- Steep slopes: exposed weathered rock and crags
-        local cragNoise = math.noise(x * 0.03, z * 0.03, seed * 0.1 + 333)
-        if cragNoise > -0.15 or mountainFactor > 0.4 then
+        local cragNoise = math.noise(wx * 0.03, wz * 0.03, (seed + 333) * 0.1)
+        if cragNoise > 0.15 or mountainFactor > 0.4 then
             return mats.Rock or Enum.Material.Rock
         else
-            return mats.Ground or Enum.Material.Ground
-        end
-    elseif slopeDeg >= moderateThreshold and mountainFactor > 0.55 then
-        -- Moderate mountain slopes: blend between rocky ground and exposed rock
-        local slopeNoise = math.noise(x * 0.045, z * 0.045, seed * 0.1 + 444)
-        if slopeNoise > 0.18 then
-            return mats.Rock or Enum.Material.Rock
-        else
-            return mats.Ground or Enum.Material.Ground
+            return mats.LeafyGrass or Enum.Material.LeafyGrass
         end
     end
     
-    -- 4. DAMP DEPRESSIONS & SHADED HOLLOWS
-    local baseH = (activeCfg.TERRAIN and activeCfg.TERRAIN.BaseHeight) or 0.0
-    if elevation < (baseH - 2.2) then
-        return mats.Mud or Enum.Material.Mud
+    -- 5. DEEP DAMP WATER MARGINS ONLY (Restricted right to water line so no dark mud blotches in hollows)
+    if elevation < 1.35 then
+        local waterMarginNoise = math.noise(wx * 0.08, wz * 0.08, (seed + 888) * 0.1)
+        if waterMarginNoise < -0.20 then
+            return mats.Mud or Enum.Material.Mud
+        else
+            return mats.LeafyGrass or Enum.Material.LeafyGrass
+        end
     end
     
-    -- 5. NATURAL FOREST FLOOR MULTI-MATERIAL PATCHWORK (AAA Image 3 standard)
-    -- Balanced mixture: LeafyGrass (~42%), Ground (~36%), Grass (~14%), Mud (~5%), Rock (~3%)
-    local macroNoise = math.noise(x * 0.012, z * 0.012, seed * 0.1 + 555)  -- Broad soil vs mulch biomes
-    local patchNoise = math.noise(x * 0.038, z * 0.038, seed * 0.1 + 666)  -- 10-25 stud organic patches
-    local microNoise = math.noise(x * 0.09, z * 0.09, seed * 0.1 + 777)    -- Micro stones / damp spots
+    -- 6. CONTINUOUS NATURAL VEGETATION ENGINE (Irregular, Feathered, Low-Contrast Transitions)
+    -- Multi-scale noise with high-frequency fractal breakup eliminates large rounded blotches!
+    local vegMacro = math.noise(wx * 0.018, wz * 0.018, (seed + 512) * 0.1) / 0.45
+    local vegCluster = math.noise(wx * 0.045, wz * 0.045, (seed + 613) * 0.1) / 0.45
+    local vegDither = math.noise(wx * 0.10, wz * 0.10, (seed + 714) * 0.1) / 0.45
+    local vegMicro = math.noise(wx * 0.22, wz * 0.22, (seed + 725) * 0.1) / 0.45
+    local vegFractal = math.noise(wx * 0.48, wz * 0.48, (seed + 836) * 0.1) / 0.45
     
-    local composite = (patchNoise * 0.65) + (macroNoise * 0.35)
+    -- Subtle knoll bonus (sunny knolls lean towards lush 3D grass, hollows lean toward mossy duff)
+    local knollBonus = math.clamp((elevation - baseH) * 0.06, -0.25, 0.30)
+    local V = (vegMacro * 0.30) + (vegCluster * 0.35) + (vegDither * 0.15) + knollBonus
     
-    -- Micro damp earth pockets in low ground
-    if microNoise < -0.38 and elevation < (baseH + 1.2) then
-        return mats.Mud or Enum.Material.Mud
-    end
-    
-    -- Micro gravel and embedded forest pebbles on terrain swells
-    if microNoise > 0.42 and elevation > (baseH + 1.0) then
+    -- Rare weathered stone outcroppings on prominent ridges
+    local pebbleNoise = math.noise(wx * 0.14, wz * 0.14, (seed + 921) * 0.1) / 0.45
+    if pebbleNoise > 0.88 and elevation > (baseH + 7.0) then
         return mats.Rock or Enum.Material.Rock
     end
     
-    -- Natural patchwork between real 3D grass, rich exposed earth, and pine needle mulch
-    if composite > 0.12 and elevation >= (baseH - 0.5) then
-        -- Natural clusters of real 3D grass blades
+    -- High-frequency irregular fractal dithering:
+    -- Feathered transitions seamlessly interweave lush 3D Grass and soft mossy LeafyGrass
+    local fractalDither = (vegDither * 0.35) + (vegMicro * 0.40) + (vegFractal * 0.25)
+    local blendThreshold = V + (fractalDither * 0.32)
+    
+    if blendThreshold > -0.08 then
         return mats.Grass or Enum.Material.Grass
-    elseif composite < -0.08 then
-        -- Rich exposed forest loam & trodden clearings (Shuts down the green carpet!)
-        return mats.Ground or Enum.Material.Ground
     else
-        -- Deep forest floor pine needle mulch (Authentic decomposing wilderness base)
         return mats.LeafyGrass or Enum.Material.LeafyGrass
     end
 end
@@ -279,7 +323,7 @@ end
 -- ---------------------------------------------------------------------------
 function TerrainGenerator.Generate(injectedCfg: any?, injectedPathSystem: any?)
     local startTime = os.clock()
-    print("[TerrainGenerator] Sculpting organic rolling terrain with multi-material earth...")
+    print("[TerrainGenerator] Sculpting natural rolling hills, bumps & lowlands (V3)...")
     
     if injectedPathSystem then
         PathSystem = injectedPathSystem
@@ -296,7 +340,7 @@ function TerrainGenerator.Generate(injectedCfg: any?, injectedPathSystem: any?)
         (Terrain :: any).Decoration = true
     end)
     
-    -- Apply authentic AAA forest earth palette to terrain shaders (Removes bright lime lawn!)
+    -- Apply harmonized earth palette to terrain shaders (Removes camouflage & high contrast)
     local matColors = (activeCfg.TERRAIN and activeCfg.TERRAIN.MaterialColors)
     if matColors then
         for matEnum, color in pairs(matColors) do
@@ -311,30 +355,123 @@ function TerrainGenerator.Generate(injectedCfg: any?, injectedPathSystem: any?)
         return
     end
     
-    local worldSize = activeCfg.WORLD_SIZE or Vector2.new(500, 500)
-    local halfX = worldSize.X / 2
-    local halfZ = worldSize.Y / 2
-    local step = (activeCfg.TERRAIN and activeCfg.TERRAIN.VoxelResolution) or 4
-    local depthBelow = 28.0
+    local VR = (activeCfg.TERRAIN and activeCfg.TERRAIN.VoxelResolution) or 4
+    local chunkSize = 64
+    local chunkVoxels = chunkSize / VR -- 16 voxels per chunk dimension
     
-    for x = -halfX, halfX, step do
-        for z = -halfZ, halfZ, step do
-            local elevation, distCenter, mountainFactor = sampleElevation(x, z)
-            local slope = sampleSlopeAngle(x, z, step)
-            local mat = determineMaterial(x, z, elevation, slope, distCenter, mountainFactor)
+    local minCoord = -512
+    local maxCoord = 512
+    local bottomY = -24.0
+    local topY = 64.0
+    local voxY = math.floor((topY - bottomY) / VR) -- 22 voxels
+    
+    local lakeProt = activeCfg.TERRAIN and activeCfg.TERRAIN.ProtectedRegions and activeCfg.TERRAIN.ProtectedRegions.Lake
+    local lakeCenterX = lakeProt and lakeProt.Center.X or 416
+    local lakeCenterZ = lakeProt and lakeProt.Center.Y or -48
+    local lakeRadX = lakeProt and lakeProt.RadiusX or 136
+    local lakeRadZ = lakeProt and lakeProt.RadiusZ or 104
+    local waterLevel = lakeProt and lakeProt.WaterLevel or 1.02
+    local bedLevel = -14.0
+    
+    local chunksProcessed = 0
+    
+    for cx = minCoord, maxCoord - chunkSize, chunkSize do
+        for cz = minCoord, maxCoord - chunkSize, chunkSize do
+            local region = Region3.new(
+                Vector3.new(cx, bottomY, cz),
+                Vector3.new(cx + chunkSize, topY, cz + chunkSize)
+            )
             
-            local totalHeight = elevation - (-depthBelow)
-            if totalHeight > 0.5 then
-                local centerPos = Vector3.new(x, (-depthBelow + elevation) / 2, z)
-                local size = Vector3.new(step, totalHeight, step)
-                
-                Terrain:FillBlock(CFrame.new(centerPos), size, mat)
+            -- Pre-allocate 3D voxel arrays [x][y][z]
+            local matArr = table.create(chunkVoxels)
+            local occArr = table.create(chunkVoxels)
+            for vx = 1, chunkVoxels do
+                matArr[vx] = table.create(voxY)
+                occArr[vx] = table.create(voxY)
+                for vy = 1, voxY do
+                    matArr[vx][vy] = table.create(chunkVoxels)
+                    occArr[vx][vy] = table.create(chunkVoxels)
+                end
+            end
+            
+            for vx = 1, chunkVoxels do
+                local worldX = cx + (vx - 1) * VR + (VR / 2)
+                for vz = 1, chunkVoxels do
+                    local worldZ = cz + (vz - 1) * VR + (VR / 2)
+                    
+                    local dxLake = (worldX - lakeCenterX) / lakeRadX
+                    local dzLake = (worldZ - lakeCenterZ) / lakeRadZ
+                    local dLake = math.sqrt(dxLake * dxLake + dzLake * dzLake)
+                    
+                    if dLake < 0.98 then
+                        local bedY = bedLevel
+                        if dLake > 0.78 then
+                            local t = (dLake - 0.78) / (0.98 - 0.78)
+                            local w = t * t * (3 - 2 * t)
+                            bedY = bedLevel + (waterLevel - bedLevel) * w
+                        end
+                        
+                        for vy = 1, voxY do
+                            local worldY = bottomY + (vy - 1) * VR + (VR / 2)
+                            if worldY < (bedY - 2.0) then
+                                matArr[vx][vy][vz] = Enum.Material.Sand
+                                occArr[vx][vy][vz] = 1.0
+                            elseif worldY < bedY + 2.0 then
+                                local diff = worldY - bedY
+                                matArr[vx][vy][vz] = Enum.Material.Sand
+                                occArr[vx][vy][vz] = math.clamp(0.5 - (diff / 4.0), 0.01, 0.99)
+                            elseif worldY < (waterLevel - 2.0) then
+                                matArr[vx][vy][vz] = Enum.Material.Water
+                                occArr[vx][vy][vz] = 1.0
+                            elseif worldY < (waterLevel + 2.0) then
+                                local diff = worldY - waterLevel
+                                matArr[vx][vy][vz] = Enum.Material.Water
+                                occArr[vx][vy][vz] = math.clamp(0.5 - (diff / 4.0), 0.01, 0.99)
+                            else
+                                matArr[vx][vy][vz] = Enum.Material.Air
+                                occArr[vx][vy][vz] = 0.0
+                            end
+                        end
+                    else
+                        local hSurf, distC, mFactor = sampleElevation(worldX, worldZ)
+                        local slope = sampleSlopeAngle(worldX, worldZ, VR)
+                        local surfMat = determineMaterial(worldX, worldZ, hSurf, slope, distC, mFactor)
+                        
+                        for vy = 1, voxY do
+                            local worldY = bottomY + (vy - 1) * VR + (VR / 2)
+                            local diff = worldY - hSurf
+                            if diff <= -2.0 then
+                                if worldY < (hSurf - 8.0) then
+                                    matArr[vx][vy][vz] = Enum.Material.Rock
+                                else
+                                    matArr[vx][vy][vz] = surfMat
+                                end
+                                occArr[vx][vy][vz] = 1.0
+                            elseif diff >= 2.0 then
+                                matArr[vx][vy][vz] = Enum.Material.Air
+                                occArr[vx][vy][vz] = 0.0
+                            else
+                                matArr[vx][vy][vz] = surfMat
+                                occArr[vx][vy][vz] = math.clamp(0.5 - (diff / 4.0), 0.01, 0.99)
+                            end
+                        end
+                    end
+                end
+            end
+            
+            pcall(function()
+                Terrain:WriteVoxels(region, VR, matArr, occArr)
+            end)
+            
+            chunksProcessed = chunksProcessed + 1
+            if chunksProcessed % 16 == 0 then
+                task.wait()
             end
         end
     end
     
     local elapsed = math.round((os.clock() - startTime) * 100) / 100
-    print(string.format("[TerrainGenerator] Completed organic earth terrain generation in %.2f seconds.", elapsed))
+    print(string.format("[TerrainGenerator] Completed terrain sculpting V3 in %.2f seconds (%d chunks).", elapsed, chunksProcessed))
 end
 
 function TerrainGenerator.GetElevationAt(x: number, z: number): (number, number, number)
@@ -343,6 +480,12 @@ end
 
 function TerrainGenerator.GetSlopeAt(x: number, z: number): number
     return sampleSlopeAngle(x, z, 4.0)
+end
+
+function TerrainGenerator.GetMaterialAt(x: number, z: number): Enum.Material
+    local elev, distC, mFactor = sampleElevation(x, z)
+    local slope = sampleSlopeAngle(x, z, 4.0)
+    return determineMaterial(x, z, elev, slope, distC, mFactor)
 end
 
 return TerrainGenerator

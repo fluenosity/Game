@@ -329,7 +329,7 @@ local function isCandidateWoodPile(inst: Instance): boolean
                 if cName:find("log") or cName:find("timber") or cName:find("cord") or cName:find("firewood") or cName:find("wood") then
                     logNameCount += 1
                 end
-                if child.Material == Enum.Material.Wood or child.Material == Enum.Material.WoodPlanks or child.Shape == Enum.PartType.Cylinder then
+                if child.Material == Enum.Material.Wood or child.Material == Enum.Material.WoodPlanks or (child:IsA("Part") and child.Shape == Enum.PartType.Cylinder) then
                     woodPartCount += 1
                 end
             end
@@ -339,9 +339,9 @@ local function isCandidateWoodPile(inst: Instance): boolean
             return true
         end
 
-        -- Check if near the woodland forest clearing at (188.3, 33.8, -39.7)
+        -- Check if near the woodland forest clearing at (-23.0, 8.5, -180.5)
         local pivot = inst:GetPivot()
-        local dist = (pivot.Position - Vector3.new(188.3, 33.8, -39.7)).Magnitude
+        local dist = (pivot.Position - Vector3.new(-23.0, 8.5, -180.5)).Magnitude
         if dist < 45.0 and woodPartCount >= 1 then
             return true
         end
@@ -490,10 +490,23 @@ end
 
 -- Helper to locate and register the Trader House for upcoming objectives
 local function locateTraderHouse(): Model?
+    -- Prioritize explicit TraderSilas or TraderHouse models
+    local silas = workspace:FindFirstChild("TraderSilas")
+    if silas and silas:IsA("Model") then
+        local pivot = silas:GetPivot()
+        print(string.format("[TraderHouseLocator] Found Trader House '%s' at Vector3.new(%.1f, %.1f, %.1f)", silas.Name, pivot.Position.X, pivot.Position.Y, pivot.Position.Z))
+        CollectionService:AddTag(silas, "TraderHouse")
+        for _, part in ipairs(silas:GetDescendants()) do
+            if part:IsA("BasePart") then part.Anchored = true end
+        end
+        return silas
+    end
+
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("Model") then
             local lName = obj.Name:lower()
-            if lName:find("trader") or lName:find("merchant") or lName:find("shop") or lName:find("cabin") then
+            if (lName:find("tradersilas") or lName:find("traderhouse") or lName == "trader" or lName:find("merchant") or lName:find("cabin")) 
+               and not lName:find("boulder") and not lName:find("trail") and not lName:find("rock") then
                 local pivot = obj:GetPivot()
                 print(string.format("[TraderHouseLocator] Found Trader House '%s' at Vector3.new(%.1f, %.1f, %.1f)", obj.Name, pivot.Position.X, pivot.Position.Y, pivot.Position.Z))
                 CollectionService:AddTag(obj, "TraderHouse")

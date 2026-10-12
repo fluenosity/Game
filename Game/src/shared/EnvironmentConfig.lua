@@ -39,7 +39,7 @@ EnvironmentConfig.SEED = 133742
 
 EnvironmentConfig.AUTO_GENERATE_ON_SERVER_START = false -- Only generate on manual trigger (prevents generating again and again)
 EnvironmentConfig.REGENERATE_IF_EXISTS = false         -- Keep existing forest permanent
-EnvironmentConfig.RESHAPE_ELEVATION = true
+EnvironmentConfig.RESHAPE_ELEVATION = false            -- Preserves existing sculpted terrain, leveled village terraces & roads
 
 EnvironmentConfig.CONTAINER_NAME = "ForestEnvironment"
 EnvironmentConfig.FOLDER_TREES = "Trees"
@@ -47,10 +47,18 @@ EnvironmentConfig.FOLDER_ROCKS = "Rocks"
 EnvironmentConfig.FOLDER_GROUND_COVER = "GroundCover"
 
 -- ---------------------------------------------------------------------------
--- 2. PROTECTED CAMPSITE EXCLUSION ZONE (School Bus, Fence, Fire, Watchtower)
 -- ---------------------------------------------------------------------------
-EnvironmentConfig.CAMP_EXCLUSION_RADIUS = 50.0  -- Protected campsite perimeter
+-- 2. PROTECTED HUB EXCLUSION ZONES (Camp, Watchtower, Village)
+-- ---------------------------------------------------------------------------
+EnvironmentConfig.CAMP_CENTER = Vector3.new(0, 0, -430)
+EnvironmentConfig.CAMP_EXCLUSION_RADIUS = 50.0  -- Protected South campsite perimeter
 EnvironmentConfig.CAMP_BLEND_RADIUS = 56.0      -- Smooth rolling elevation transition into deep forest
+
+EnvironmentConfig.WATCHTOWER_CENTER = Vector3.new(0, 0, 0)
+EnvironmentConfig.WATCHTOWER_EXCLUSION_RADIUS = 35.0 -- Center Watch Tower clearing
+
+EnvironmentConfig.VILLAGE_BOUNDS_MIN = Vector2.new(-230, 410)
+EnvironmentConfig.VILLAGE_BOUNDS_MAX = Vector2.new(40, 590)
 
 -- ---------------------------------------------------------------------------
 -- 2B. WOODLAND TRAILS & EXPLORATION PATHWAYS (Production-Grade & Reversible)
@@ -61,111 +69,110 @@ EnvironmentConfig.ENABLE_PATHS = true
 EnvironmentConfig.PATHS = {
     DefaultPathWidth = 10.0,    -- 10 studs wide: ample space for 2 players sprinting side-by-side
     BlendMargin = 3.5,         -- Feathered natural earth blending at trail edges
-    TreeClearance = 2.5,       -- Distance from path edge where tree trunks can spawn
-    RockClearance = 1.5,       -- Keeps boulders from obstructing running corridors
-    GroundCoverClearance = 0.5,-- Keeps logs and snags off the trail
+    TreeClearance = 6.5,       -- Clear corridor keeping tree canopies off trail running corridors
+    RockClearance = 2.0,       -- Keeps boulders from obstructing running corridors
+    GroundCoverClearance = 1.0,-- Keeps logs and snags off the trail
     
     -- Organic Meander Settings (Transforms straight lines into natural winding trails)
-    MeanderAmplitude = 18.0,   -- Lateral curve deflection (studs)
-    MeanderWavelength = 46.0,  -- Distance along path for a full serpentine S-curve
-    BuildClearingRadius = 15.0,-- Building space radius at the end of every trail (30-stud open circle)
+    MeanderAmplitude = 12.0,   -- Gentle lateral curve deflection (curvy without being shaky)
+    MeanderWavelength = 55.0,  -- Distance along path for smooth serpentine S-curves
+    BuildClearingRadius = 18.0,-- Open clearing at trail junctions
     
     Definitions = {
-        -- 1. North Path -> Watchtower Outpost ("Items")
+        -- 1. Center Watch Tower <-> North Village (Red route W -> V)
         {
-            Id = "WatchtowerNorth",
-            Name = "Watchtower Outpost Trail",
+            Id = "WatchtowerToVillage",
+            Name = "Watchtower to North Village Trail",
             Waypoints = {
-                Vector2.new(0, -45),
-                Vector2.new(38, -80),
-                Vector2.new(-32, -125),
-                Vector2.new(-15, -165),
+                Vector2.new(0, 25),     -- Watch Tower North exit
+                Vector2.new(-22, 110),  -- Curving West through pine grove
+                Vector2.new(16, 200),   -- Sweeping East across rolling knoll
+                Vector2.new(-28, 285),  -- Glade bend
+                Vector2.new(-68, 365),  -- Village approach corridor
+                Vector2.new(-100, 435), -- Village South Gate Plaza
             },
-            ClearingCenter = Vector2.new(-15, -165),
-            ClearingRadius = 16.0,
-            MeanderPhase = 0.0,
-            SeedOffset = 101,
-        },
-        
-        -- 2. Northwest Path -> Wilderness Cache ("Items")
-        {
-            Id = "NorthwestItems",
-            Name = "Northwest Cache Trail",
-            Waypoints = {
-                Vector2.new(-38, -35),
-                Vector2.new(-92, -48),
-                Vector2.new(-68, -112),
-                Vector2.new(-138, -115),
-                Vector2.new(-160, -155),
-            },
-            ClearingCenter = Vector2.new(-160, -155),
-            ClearingRadius = 15.0,
-            MeanderPhase = 1.2,
+            ClearingCenter = Vector2.new(-100, 435),
+            ClearingRadius = 22.0,
+            MeanderPhase = 1.1,
             SeedOffset = 202,
         },
         
-        -- 3. West Path -> Mountain Wall ("Nothing")
+        -- 2. Center Watch Tower <-> Northwest Gas Station (Red route W -> GS)
         {
-            Id = "WestTrail",
-            Name = "West Exploration Trail",
+            Id = "WatchtowerToGasStation",
+            Name = "Watchtower to Gas Station Trail",
             Waypoints = {
-                Vector2.new(-48, 5),
-                Vector2.new(-88, 42),
-                Vector2.new(-135, -22),
-                Vector2.new(-180, 15),
+                Vector2.new(20, 20),    -- Watch Tower Northwest exit
+                Vector2.new(105, 80),   -- Gentle sweep toward northwest ridge
+                Vector2.new(195, 135),  -- Pine valley bend
+                Vector2.new(290, 185),  -- Foothill road curve
+                Vector2.new(355, 220),  -- Approach straightaway
+                Vector2.new(398, 250),  -- Rusty Gas Station forecourt
             },
-            ClearingCenter = Vector2.new(-180, 15),
-            ClearingRadius = 15.0,
-            MeanderPhase = 2.4,
-            SeedOffset = 303,
-        },
-        
-        -- 4. South-Southwest Path -> Day 1 Wood Glade ("Day 1 / Wood")
-        {
-            Id = "Day1Wood",
-            Name = "Day 1 Wood Gathering Trail",
-            Waypoints = {
-                Vector2.new(-18, 52),
-                Vector2.new(-68, 85),
-                Vector2.new(-25, 135),
-                Vector2.new(-75, 185),
-            },
-            ClearingCenter = Vector2.new(-75, 185),
-            ClearingRadius = 18.0, -- Wood gathering clearing
-            MeanderPhase = 0.7,
-            SeedOffset = 404,
-        },
-        
-        -- 5. Southeast Path -> Trader Compound ("Trader")
-        {
-            Id = "TraderTrail",
-            Name = "Southeast Trader Trail",
-            Waypoints = {
-                Vector2.new(38, 38),
-                Vector2.new(95, 48),
-                Vector2.new(100, 108),
-                Vector2.new(145, 138),
-            },
-            ClearingCenter = Vector2.new(145, 138),
-            ClearingRadius = 18.0, -- Trader campsite clearing
-            MeanderPhase = 1.9,
+            ClearingCenter = Vector2.new(398, 250),
+            ClearingRadius = 22.0,
+            MeanderPhase = 0.8,
             SeedOffset = 505,
         },
         
-        -- 6. Northeast Path -> Outer Ridge ("Nothing")
+        -- 3. North Village <-> East Trader Silas (Purple route V -> T)
         {
-            Id = "NortheastTrail",
-            Name = "Northeast Ridge Trail",
+            Id = "VillageToTrader",
+            Name = "Village to Silas East Foothills Trail",
             Waypoints = {
-                Vector2.new(42, -28),
-                Vector2.new(75, -78),
-                Vector2.new(138, -68),
-                Vector2.new(165, -135),
+                Vector2.new(-160, 440), -- Village West/South Terrace exit
+                Vector2.new(-220, 415), -- Mountain foothill traverse
+                Vector2.new(-285, 365), -- Sweeping outer curve past boulders
+                Vector2.new(-340, 290), -- Eastern ridge descent
+                Vector2.new(-370, 210), -- Approaching Silas canyon
+                Vector2.new(-398, 140), -- Trader Silas Trading Post
             },
-            ClearingCenter = Vector2.new(165, -135),
-            ClearingRadius = 15.0,
-            MeanderPhase = 3.1,
+            ClearingCenter = Vector2.new(-398, 140),
+            ClearingRadius = 20.0,
+            MeanderPhase = 0.6,
+            SeedOffset = 808,
+        },
+        
+        -- 4. South Camp <-> East Trader Silas (User hand-drawn winding route)
+        {
+            Id = "CampToTrader",
+            Name = "Camp to Silas Winding Route",
+            Waypoints = {
+                Vector2.new(-20, -410), -- Camp East Gate
+                Vector2.new(-60, -330), -- Sweep North-East into basin
+                Vector2.new(-160, -290),-- Curving East across basin
+                Vector2.new(-210, -225),-- Turning North
+                Vector2.new(-140, -145),-- Inward S-curve loop toward basin
+                Vector2.new(-250, -65), -- Sweeping Eastward S-loop
+                Vector2.new(-330, 25),  -- Ascending North toward Silas canyon
+                Vector2.new(-398, 125), -- Silas Trading Post
+            },
+            ClearingCenter = Vector2.new(-398, 125),
+            ClearingRadius = 20.0,
+            MeanderAmplitude = 2.0, -- Preserves exact hand-drawn Catmull-Rom spline curves
+            MeanderPhase = 0.0,
             SeedOffset = 606,
+        },
+        
+        -- 5. South Camp <-> West Lake Shore (User hand-drawn winding route)
+        {
+            Id = "CampToLake",
+            Name = "Camp to Lake Shore Winding Route",
+            Waypoints = {
+                Vector2.new(25, -410),  -- Camp West Gate
+                Vector2.new(75, -400),  -- Curving West-Northwest
+                Vector2.new(85, -340),  -- Heading North
+                Vector2.new(65, -275),  -- Inward S-curve bend
+                Vector2.new(135, -205), -- Outward bend to the West
+                Vector2.new(180, -140), -- Heading North past knolls
+                Vector2.new(235, -85),  -- Curving along south rim of lake
+                Vector2.new(285, -45),  -- Rustic Lake Pier Shoreline
+            },
+            ClearingCenter = Vector2.new(285, -45),
+            ClearingRadius = 20.0,
+            MeanderAmplitude = 2.0, -- Preserves exact hand-drawn Catmull-Rom spline curves
+            MeanderPhase = 0.0,
+            SeedOffset = 707,
         },
     },
 }
@@ -174,80 +181,193 @@ EnvironmentConfig.PATHS = {
 -- 3. VOXEL TERRAIN CONFIGURATION (Organic Elevation & Realistic Earth Blending)
 -- ---------------------------------------------------------------------------
 EnvironmentConfig.TERRAIN = {
-    BaseHeight = 0.0,
+    BaseHeight = 5.5,
     VoxelResolution = 4,
+    ReshapingStrength = 1.0, -- Overall terrain sculpting intensity
     
-    -- Basin Undulation: Rolling mounds & shallow hollows
-    LargeScale = {
-        Frequency = 0.007,
-        Amplitude = 7.0,       -- Rolling terrain swales
-    },
-    MediumScale = {
-        Frequency = 0.022,
-        Amplitude = 3.5,       -- Natural mounds and knolls
-    },
-    SmallScale = {
+    -- Multi-Scale Elevation Hierarchy (Natural Woodland Sculpting V3 - Visible Rolling Hills)
+    -- A. Small Ground Bumps (Noticeable rounded micro-relief across open ground)
+    SmallBumps = {
         Frequency = 0.065,
-        Amplitude = 1.0,       -- Surface micro-variation
+        Amplitude = 1.6,       -- Distinct rounded micro-mounds & depressions underfoot
     },
     
-    -- Organic Non-Circular Perimeter Mountain Barrier
-    Boundary = {
-        BaseRadius = 195.0,
-        RadialNoiseAmp = 38.0, -- Warps mountain ridges organically
-        TransitionWidth = 45.0,
-        PeakHeight = 44.0,
+    -- B. Small Rolling Hills (Local knolls, undulating slopes & shoulders)
+    RollingHills = {
+        Frequency = 0.018,
+        Amplitude = 4.2,       -- Rolling woodland hills & crests
+        ShoulderFrequency = 0.028,
+        ShoulderAmplitude = 2.4,
     },
     
-    -- Multi-Material Wilderness Blending (Shuts down the uniform carpet look!)
+    -- C. Medium Raised Areas (Elevated conifer ridges & prominent woodland mounds)
+    MediumRises = {
+        Frequency = 0.009,
+        Amplitude = 9.0,       -- Broad prominent woodland ridges (Y reaching 17-20)
+    },
+    
+    -- D. Lowlands and Shallow Valleys (Natural meandering drainage swales)
+    Lowlands = {
+        Frequency = 0.007,
+        Depth = 2.8,           -- Shallow swales flowing naturally
+    },
+    
+    -- E. Landscape Rhythm Modulation (Alternates between calm clearings & rolling woodland)
+    ReliefModulation = {
+        Frequency = 0.0035,    -- Macro wavelength (~280 studs)
+        MinFactor = 0.75,      -- Calm glades
+        MaxFactor = 1.25,      -- Rolling ridges
+    },
+    
+    -- Organic Domain Warping (Curves and meanders landforms organically)
+    DomainWarp = {
+        Frequency = 0.004,
+        Strength = 28.0,
+    },
+    
+    -- Protected Regions & Landmark Safeguards
+    ProtectedRegions = {
+        Camp = {
+            Center = Vector3.new(0, 3.85, 0),
+            CoreRadius = 28.0,       -- Strictly preserved flat sanctuary floor at Y=3.85
+            BlendRadius = 45.0,      -- Tight, smooth transition so terrain rolls right outside fence
+            SurfaceRoughness = 0.08, -- Subtle trodden dirt roughness
+        },
+        Lake = {
+            Center = Vector2.new(416, -48),
+            RadiusX = 136.0,
+            RadiusZ = 104.0,
+            WaterLevel = 1.02,
+            ShoreBlendStart = 0.90,  -- Water line
+            ShoreBlendEnd = 1.35,    -- Full merge into rolling valley
+        },
+        Foothills = {
+            InnerRadius = 400.0,
+            OuterRadius = 660.0,
+            PeakRise = 48.0,
+            CragNoiseAmp = 14.0,
+        },
+    },
+    
+    -- Multi-Material Wilderness Blending
     Materials = {
-        Camp = Enum.Material.Ground,             -- Worn packed soil inside camp
-        CampVerge = Enum.Material.Ground,        -- Worn transition soil outside camp
-        LeafyGrass = Enum.Material.LeafyGrass,   -- Dark pine needle mulch & decomposing forest litter
-        Ground = Enum.Material.Ground,           -- Rich dark exposed forest soil
-        Grass = Enum.Material.Grass,             -- 3D blade grass in sunny glades & knoll tops
-        Mud = Enum.Material.Mud,                 -- Damp hollows, shaded ruts & moist depressions
-        Rock = Enum.Material.Rock,               -- Steep rocky faces, embedded boulders
-        Slate = Enum.Material.Slate,             -- High mountain crags & sheer cliff faces
-        Basalt = Enum.Material.Basalt,           -- Dark weathered volcanic stone
-        Cobblestone = Enum.Material.Cobblestone, -- Trodden trail gravel & embedded stones
+        Camp = Enum.Material.Ground,
+        CampVerge = Enum.Material.Ground,
+        LeafyGrass = Enum.Material.LeafyGrass,
+        Ground = Enum.Material.Ground,
+        Grass = Enum.Material.Grass,
+        Mud = Enum.Material.Mud,
+        Rock = Enum.Material.Rock,
+        Slate = Enum.Material.Slate,
+        Basalt = Enum.Material.Basalt,
+        Cobblestone = Enum.Material.Cobblestone,
+        Sand = Enum.Material.Sand,
         
-        SteepSlopeThreshold = 34.0,              -- Slopes >= 34° transition to rock
-        ModerateSlopeThreshold = 22.0,           -- Slopes >= 22° show rocky soil
-        RockCliffThreshold = 42.0,               -- Slopes >= 42° become sheer slate/rock
-        AlpineSoilMaxSlope = 24.0,               -- Mountain ridges below 24° retain alpine pine/soil
+        SteepSlopeThreshold = 30.0,
+        ModerateSlopeThreshold = 22.0,
+        RockCliffThreshold = 42.0,
     },
     
-    -- Organic Forest Floor Material Blending Parameters
-    Blending = {
-        MacroFrequency = 0.012,                  -- Broad ecological soil vs mulch biomes
-        PatchFrequency = 0.038,                  -- Organic 10-25 stud material patches
-        MicroFrequency = 0.088,                  -- Pebbles, moss margins & damp depression noise
-        
-        -- Target base material distribution in forest floor:
-        -- LeafyGrass: ~42%, Ground: ~36%, Grass: ~14%, Mud: ~5%, Rock: ~3%
-        LeafyGrassMulchBias = 0.06,
-        ExposedSoilBias = -0.08,
-        SunlitGrassThreshold = 0.30,
-        DampMudThreshold = -0.32,
-        GravelThreshold = 0.38,
-        
-        -- Campsite perimeter transition zone (Areas A, B, C, D, E)
-        CampCoreRadius = 48.0,                   -- Flat sanctuary core
-        CampVergeRadius = 66.0,                  -- Feathered transition radius
-        CampOuterBlend = 80.0,                   -- Full merge into deep forest
-    },
-    
-    -- Authentic AAA Forest Earth Palette Shaders (Banishes the neon/lime lawn look!)
+    -- Harmonized Earth Shaders (Low Contrast, Organic Natural Forest Palette)
+    -- Curated with minimal contrast delta so transitions look like organic needle duff fading into wild grass
     MaterialColors = {
-        [Enum.Material.Grass] = Color3.fromRGB(64, 82, 52),       -- Muted deep conifer green
-        [Enum.Material.LeafyGrass] = Color3.fromRGB(56, 62, 42),  -- Dark needle mulch & decaying pine litter
-        [Enum.Material.Ground] = Color3.fromRGB(76, 58, 44),      -- Rich dark damp earth & trodden path loam
-        [Enum.Material.Mud] = Color3.fromRGB(52, 42, 34),         -- Dark moist woodland hollows
-        [Enum.Material.Rock] = Color3.fromRGB(86, 84, 82),        -- Weathered granite grey
-        [Enum.Material.Slate] = Color3.fromRGB(68, 70, 72),       -- Mountain cliff face slate
+        [Enum.Material.Grass] = Color3.fromRGB(86, 114, 60),       -- Vibrant alpine conifer meadow green
+        [Enum.Material.LeafyGrass] = Color3.fromRGB(80, 98, 56),  -- Soft mossy needle duff (harmonized near grass)
+        [Enum.Material.Ground] = Color3.fromRGB(82, 78, 62),      -- Natural trodden campsite earth (low contrast)
+        [Enum.Material.Mud] = Color3.fromRGB(68, 66, 54),         -- Subtle damp swale loam (no dark black spots)
+        [Enum.Material.Rock] = Color3.fromRGB(92, 90, 86),        -- Granite crag grey
+        [Enum.Material.Slate] = Color3.fromRGB(72, 70, 68),       -- Slate cliff face grey
         [Enum.Material.Basalt] = Color3.fromRGB(54, 52, 50),      -- Volcanic dark stone
-        [Enum.Material.Cobblestone] = Color3.fromRGB(82, 78, 72), -- Worn trail stones
+        [Enum.Material.Cobblestone] = Color3.fromRGB(88, 84, 76), -- Weathered trail stones
+        [Enum.Material.Sand] = Color3.fromRGB(158, 142, 112),     -- Natural alpine lakeshore sand
+    },
+}
+
+-- ---------------------------------------------------------------------------
+-- 3B. POST-PROCESSING & ATMOSPHERE (Editor & Game Balanced Horizon Aerial Fog)
+-- ---------------------------------------------------------------------------
+EnvironmentConfig.POST_PROCESSING = {
+    EnableFutureLighting = true,
+    EnableTerrainDecoration = true,
+    
+    Lighting = {
+        Brightness = 2.8,
+        Ambient = Color3.fromRGB(75, 90, 110),
+        OutdoorAmbient = Color3.fromRGB(115, 132, 150),
+        ShadowSoftness = 0.15,
+        ClockTime = 14.5,
+        GeographicLatitude = 48.0,
+        ExposureCompensation = 0.02,
+        EnvironmentDiffuseScale = 1.0,
+        EnvironmentSpecularScale = 0.85,
+        FogEnd = 2400, -- High FogEnd so foreground/midground terrain is crisp
+    },
+    Atmosphere = {
+        Density = 0.34,                           -- Balanced aerial perspective
+        Offset = 0.18,                            -- Keeps valley floor clear while veiling distant mountain base
+        Haze = 1.80,                              -- Soft atmospheric mountain horizon mist matching Editor view!
+        Color = Color3.fromRGB(175, 200, 225),
+        Decay = Color3.fromRGB(95, 120, 145),
+        Glare = 0.25,
+    },
+    DepthOfField = {
+        FarIntensity = 0.20,    -- Subtly softens distant low-poly mountain polygon silhouettes
+        FocusDistance = 280.0,  -- Full interior basin (0 to 520 studs) in crisp focus
+        InFocusRadius = 240.0,
+        NearIntensity = 0.0,
+    },
+    ColorCorrection = {
+        Brightness = 0.02,
+        Contrast = 0.05,
+        Saturation = 0.12,
+        TintColor = Color3.fromRGB(255, 252, 246),
+    },
+    Bloom = {
+        Intensity = 0.25,
+        Size = 14,
+        Threshold = 1.25,
+    },
+    SunRays = {
+        Intensity = 0.18,
+        Spread = 0.82,
+    },
+}
+
+-- ---------------------------------------------------------------------------
+-- 3C. DYNAMIC SKY & VOLUMETRIC DRIFTING CLOUDS (Day & 4K Milky Way Galaxy Night)
+-- ---------------------------------------------------------------------------
+EnvironmentConfig.SKY = {
+    -- Day: Crisp, realistic alpine daytime skybox
+    Day = {
+        SkyboxBk = "http://www.roblox.com/asset/?id=91458024",
+        SkyboxDn = "http://www.roblox.com/asset/?id=91457980",
+        SkyboxFt = "http://www.roblox.com/asset/?id=91458024",
+        SkyboxLf = "http://www.roblox.com/asset/?id=91458024",
+        SkyboxRt = "http://www.roblox.com/asset/?id=91458024",
+        SkyboxUp = "http://www.roblox.com/asset/?id=91458002",
+        SunAngularSize = 21,
+        MoonAngularSize = 12,
+        CelestialBodiesShown = true,
+    },
+    -- Night: NASA 4K Deep Star Map & Luminous Milky Way Galaxy
+    Night = {
+        SkyboxBk = "rbxassetid://15146674442",
+        SkyboxDn = "rbxassetid://15146673704",
+        SkyboxFt = "rbxassetid://15146672849",
+        SkyboxLf = "rbxassetid://15146672013",
+        SkyboxRt = "rbxassetid://15146671172",
+        SkyboxUp = "rbxassetid://15146670489",
+        SunAngularSize = 21,
+        MoonAngularSize = 14,
+        CelestialBodiesShown = false, -- Skybox has its own high-res starfield and lunar glow
+        StarCount = 3000,
+    },
+    -- Animated Volumetric Clouds
+    Clouds = {
+        DayCover = 0.32,
+        NightCover = 0.16,      -- Opens up at night to showcase the Milky Way Galaxy
+        Density = 0.55,         -- Volumetric thickness
+        GlobalWind = Vector3.new(16, 0, 10), -- Continuously animates cloud drift across the sky
     },
 }
 
@@ -544,55 +664,9 @@ EnvironmentConfig.GROUND_COVER = {
 }
 
 -- ---------------------------------------------------------------------------
--- 7. LIGHTING & ATMOSPHERE
+-- 7. BACKWARD-COMPATIBLE ALIASES
 -- ---------------------------------------------------------------------------
-EnvironmentConfig.POST_PROCESSING = {
-    EnableFutureLighting = true,
-    EnableTerrainDecoration = true,
-    
-    Lighting = {
-        Brightness = 2.4,
-        Ambient = Color3.fromRGB(82, 86, 94),
-        OutdoorAmbient = Color3.fromRGB(96, 102, 110),
-        ShadowSoftness = 0.35,
-        ClockTime = 10.5,
-        GeographicLatitude = 48.0,
-    },
-    
-    Atmosphere = {
-        Density = 0.36,
-        Offset = 0.12,
-        Color = Color3.fromRGB(160, 185, 205),
-        Decay = Color3.fromRGB(95, 120, 145),
-        Glare = 0.15,
-        Haze = 2.4,
-    },
-    
-    ColorCorrection = {
-        Brightness = 0.03,
-        Contrast = 0.05,
-        Saturation = 0.02,
-        TintColor = Color3.fromRGB(246, 244, 240),
-    },
-    
-    Bloom = {
-        Intensity = 0.55,
-        Size = 16,
-        Threshold = 0.90,
-    },
-    
-    SunRays = {
-        Intensity = 0.18,
-        Spread = 0.76,
-    },
-    
-    DepthOfField = {
-        FarIntensity = 0.28,
-        FocusDistance = 50.0,
-        InFocusRadius = 75.0,
-        NearIntensity = 0.0,
-    },
-}
+-- Top-level backward-compatible aliases (prevents attempt to index nil with 'Brightness' on older script versions)
 
 -- Top-level backward-compatible aliases (prevents attempt to index nil with 'Brightness' on older script versions)
 EnvironmentConfig.Lighting = EnvironmentConfig.POST_PROCESSING.Lighting

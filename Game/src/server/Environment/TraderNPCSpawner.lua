@@ -179,7 +179,8 @@ function TraderNPCSpawner.WireNPC(npc: Model)
     -- Connect Triggered event once
     if not prompt:GetAttribute("IsWired") then
         prompt:SetAttribute("IsWired", true)
-        (prompt :: ProximityPrompt).Triggered:Connect(function(player: Player)
+        local proxPrompt = prompt :: ProximityPrompt
+        proxPrompt.Triggered:Connect(function(player: Player)
             openBarterMenuEvent:FireClient(player)
         end)
     end

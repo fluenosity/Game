@@ -1,39 +1,24 @@
 --!strict
 --[[
     DayNightCycle.server.lua
-    Custom day/night cycle, time progression, and cloud system driver
-    for "Don't Let the Fire Die". Developed for Fluenosity Studio.
+    Custom day/night cycle & time progression driver
+    for "Don't Let the Fire Die" (Fluenosity Studio).
     
-    Advances a custom game clock through phases (Dawn -> Day -> Dusk -> Night),
-    interpolating Lighting, Clouds, and Atmosphere properties between keyframes.
-    Each successive night gets darker and more oppressive via DayModifiers.
-    
-    Exposes current state via attributes on ReplicatedStorage.FluenosityShared.TimeState
-    and fires BindableEvents on phase and day changes for other server systems.
+    Production Architecture:
+    - Server maintains authoritative game clock progression across phases (Dawn -> Day -> Dusk -> Night)
+    - Replicates current time & day state via ReplicatedStorage.FluenosityShared.TimeState attributes
+    - Fires BindableEvents on phase and day changes for server systems (Survival, Wildlife, Audio)
+    - Delegates visual rendering to shared TimeVisuals engine (with per-frame smoothing handled
+      on the client via DayNightClient.client.lua on RunService.RenderStepped).
 ]]
 
 local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Load configuration
+-- Load configuration & visual engine
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local TimeConfig = require(sharedFolder:WaitForChild("TimeConfig"))
-
--- Get references to visual instances (with bootstrap auto-creation if running on fresh place)
-local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-if not atmosphere then
-	atmosphere = Instance.new("Atmosphere")
-	atmosphere.Name = "Atmosphere"
-	atmosphere.Parent = Lighting
-end
-
-local clouds = Lighting:FindFirstChildOfClass("Clouds")
-if not clouds then
-	clouds = Instance.new("Clouds")
-	clouds.Name = "Clouds"
-	clouds.Parent = Lighting
-end
+local TimeVisuals = require(sharedFolder:WaitForChild("TimeVisuals"))
 
 -- Get or initialize TimeState folder and events
 local timeState = sharedFolder:FindFirstChild("TimeState") :: Folder?
@@ -68,14 +53,11 @@ local phaseProgress: number = 0.0
 
 local lastPhase: string = ""
 local lastDay: number = -1
+local visualSyncTimer: number = 0.0
 
 -- ---------------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------------
-
-local function lerp(a: number, b: number, t: number): number
-	return a + (b - a) * t
-end
 
 local function getPhaseFromHour(hour: number): string
 	for _, phase in ipairs(TimeConfig.Phases) do
@@ -91,163 +73,6 @@ local function getPhaseFromHour(hour: number): string
 	end
 	return "Day"
 end
-
-type Keyframe = {
-	Hour: number,
-	Brightness: number,
-	Ambient: Color3,
-	OutdoorAmbient: Color3,
-	FogEnd: number,
-	FogColor: Color3,
-	ExposureCompensation: number,
-	CloudCover: number,
-	CloudColor: Color3,
-	CloudDensity: number,
-	AtmosphereDensity: number,
-	AtmosphereColor: Color3,
-	AtmosphereDecay: Color3,
-	AtmosphereGlare: number,
-	AtmosphereHaze: number,
-}
-
-local function getSurroundingKeyframes(hour: number): (Keyframe, Keyframe)
-	local keyframes = TimeConfig.Keyframes
-	local count = #keyframes
-
-	if hour >= keyframes[count].Hour then
-		return keyframes[count] :: Keyframe, keyframes[1] :: Keyframe
-	end
-
-	for i = 1, count - 1 do
-		if hour >= keyframes[i].Hour and hour < keyframes[i + 1].Hour then
-			return keyframes[i] :: Keyframe, keyframes[i + 1] :: Keyframe
-		end
-	end
-
-	-- Before first keyframe: wrap from last to first
-	return keyframes[count] :: Keyframe, keyframes[1] :: Keyframe
-end
-
-local function getKeyframeT(hour: number, k1: Keyframe, k2: Keyframe): number
-	local span = k2.Hour - k1.Hour
-	if span < 0 then
-		span = (24 - k1.Hour) + k2.Hour
-	end
-	if span == 0 then return 0 end
-
-	local diff = hour - k1.Hour
-	if diff < 0 then
-		diff = (24 - k1.Hour) + hour
-	end
-	return math.clamp(diff / span, 0, 1)
-end
-
-type DayModifier = { Darkness: number, FogMul: number, CloudMul: number, ExposureOffset: number }
-
-local function getDayModifier(day: number): DayModifier
-	local mod = TimeConfig.DayModifiers[day] or TimeConfig.DayModifiers[TimeConfig.MaxDay]
-	if mod then
-		return mod :: DayModifier
-	end
-	return { Darkness = 0, FogMul = 1, CloudMul = 1, ExposureOffset = 0 } :: DayModifier
-end
-
--- Returns 0 during full day, 1 during full night, fading during dawn/dusk
-local function getDarknessWeight(hour: number): number
-	if hour >= 19 or hour < 5 then
-		return 1.0
-	elseif hour >= 5 and hour < 7 then
-		return 1.0 - ((hour - 5) / 2)
-	elseif hour >= 17 and hour < 19 then
-		return (hour - 17) / 2
-	end
-	return 0.0
-end
-
--- ---------------------------------------------------------------------------
--- Visual state application
--- ---------------------------------------------------------------------------
-
-local function applyVisualState(hour: number, day: number)
-	local k1, k2 = getSurroundingKeyframes(hour)
-	local t = getKeyframeT(hour, k1, k2)
-	local modifier = getDayModifier(day)
-	local darknessWeight = getDarknessWeight(hour)
-
-	-- Interpolate base properties
-	local brightness = lerp(k1.Brightness, k2.Brightness, t)
-	local ambient = k1.Ambient:lerp(k2.Ambient, t)
-	local outdoorAmbient = k1.OutdoorAmbient:lerp(k2.OutdoorAmbient, t)
-	local fogEnd = lerp(k1.FogEnd, k2.FogEnd, t)
-	local fogColor = k1.FogColor:lerp(k2.FogColor, t)
-	local exposure = lerp(k1.ExposureCompensation, k2.ExposureCompensation, t)
-
-	local cloudCover = lerp(k1.CloudCover, k2.CloudCover, t)
-	local cloudColor = k1.CloudColor:lerp(k2.CloudColor, t)
-	local cloudDensity = lerp(k1.CloudDensity, k2.CloudDensity, t)
-
-	local atmoDensity = lerp(k1.AtmosphereDensity, k2.AtmosphereDensity, t)
-	local atmoColor = k1.AtmosphereColor:lerp(k2.AtmosphereColor, t)
-	local atmoDecay = k1.AtmosphereDecay:lerp(k2.AtmosphereDecay, t)
-	local atmoGlare = lerp(k1.AtmosphereGlare, k2.AtmosphereGlare, t)
-	local atmoHaze = lerp(k1.AtmosphereHaze, k2.AtmosphereHaze, t)
-
-	-- Apply day modifiers (weighted by how dark it currently is)
-	local darkness = modifier.Darkness * darknessWeight
-	local fogMul = lerp(1.0, modifier.FogMul, darknessWeight)
-	local cloudMul = lerp(1.0, modifier.CloudMul, darknessWeight)
-
-	-- Darken brightness
-	brightness = brightness * (1.0 - darkness * 0.85)
-
-	-- Darken ambient colors
-	ambient = ambient:lerp(Color3.new(0, 0, 0), darkness * 0.5)
-	outdoorAmbient = outdoorAmbient:lerp(Color3.new(0, 0, 0), darkness * 0.6)
-
-	-- Thicken fog (reduce visibility distance)
-	fogEnd = fogEnd / fogMul
-	fogColor = fogColor:lerp(Color3.fromRGB(12, 12, 20), darkness * 0.4)
-
-	-- Heavier, darker clouds at night
-	cloudCover = math.clamp(cloudCover * cloudMul, 0, 1)
-	cloudDensity = cloudDensity * cloudMul
-	cloudColor = cloudColor:lerp(Color3.fromRGB(8, 8, 14), darkness * 0.5)
-
-	-- Reduce exposure and atmosphere glare at night
-	exposure = exposure + (modifier.ExposureOffset * darknessWeight)
-	atmoGlare = atmoGlare * (1.0 - darknessWeight * 0.8)
-	atmoHaze = atmoHaze * (1.0 - darknessWeight * 0.3)
-	atmoDensity = atmoDensity * fogMul
-
-	-- Apply to Lighting
-	Lighting.ClockTime = hour
-	Lighting.Brightness = brightness
-	Lighting.Ambient = ambient
-	Lighting.OutdoorAmbient = outdoorAmbient
-	Lighting.FogEnd = fogEnd
-	Lighting.FogColor = fogColor
-	Lighting.ExposureCompensation = exposure
-
-	-- Apply to Clouds
-	if clouds then
-		clouds.Cover = cloudCover
-		clouds.Color = cloudColor
-		clouds.Density = cloudDensity
-	end
-
-	-- Apply to Atmosphere
-	if atmosphere then
-		atmosphere.Density = atmoDensity
-		atmosphere.Color = atmoColor
-		atmosphere.Decay = atmoDecay
-		atmosphere.Glare = atmoGlare
-		atmosphere.Haze = atmoHaze
-	end
-end
-
--- ---------------------------------------------------------------------------
--- Time advancement
--- ---------------------------------------------------------------------------
 
 local function getPhaseDuration(phaseName: string): number
 	return TimeConfig.PhaseDurations[phaseName] or 60
@@ -265,6 +90,10 @@ local function getPhaseHours(phaseName: string): number
 	end
 	return 10
 end
+
+-- ---------------------------------------------------------------------------
+-- Time advancement
+-- ---------------------------------------------------------------------------
 
 local function advanceTime(deltaTime: number)
 	local phaseName = getPhaseFromHour(currentHour)
@@ -303,8 +132,11 @@ local function advanceTime(deltaTime: number)
 		end
 	end
 
+	local phaseChanged = (newPhase ~= lastPhase and lastPhase ~= "")
+	local dayChanged = (currentDay ~= lastDay and lastDay ~= -1)
+
 	-- Fire phase change event
-	if newPhase ~= lastPhase and lastPhase ~= "" then
+	if phaseChanged then
 		currentPhase = newPhase
 		if phaseChangedEvent then
 			phaseChangedEvent:Fire(currentPhase, currentDay)
@@ -312,7 +144,7 @@ local function advanceTime(deltaTime: number)
 	end
 
 	-- Fire day change event
-	if currentDay ~= lastDay and lastDay ~= -1 then
+	if dayChanged then
 		if dayChangedEvent then
 			dayChangedEvent:Fire(currentDay)
 		end
@@ -321,7 +153,7 @@ local function advanceTime(deltaTime: number)
 	lastPhase = newPhase
 	lastDay = currentDay
 
-	-- Update TimeState attributes for other systems and clients
+	-- Update TimeState attributes for other systems and clients (continuous authority)
 	if timeState then
 		timeState:SetAttribute("CurrentDay", currentDay)
 		timeState:SetAttribute("CurrentHour", currentHour)
@@ -329,8 +161,13 @@ local function advanceTime(deltaTime: number)
 		timeState:SetAttribute("PhaseProgress", phaseProgress)
 	end
 
-	-- Apply visual changes
-	applyVisualState(currentHour, currentDay)
+	-- Server baseline visual sync (throttled to 1.5s to prevent network property spam;
+	-- clients render smoothly at 60/120 FPS on RenderStepped without packet jitter)
+	visualSyncTimer = visualSyncTimer + deltaTime
+	if phaseChanged or dayChanged or visualSyncTimer >= 1.5 then
+		visualSyncTimer = 0.0
+		TimeVisuals.Apply(currentHour, currentDay)
+	end
 end
 
 -- ---------------------------------------------------------------------------
@@ -341,7 +178,8 @@ currentPhase = getPhaseFromHour(currentHour)
 lastPhase = currentPhase
 lastDay = currentDay
 
-applyVisualState(currentHour, currentDay)
+-- Ensure baseline visuals applied on server startup
+TimeVisuals.Apply(currentHour, currentDay)
 
 if timeState then
 	timeState:SetAttribute("CurrentDay", currentDay)
