@@ -43,6 +43,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local InventoryConfig = require(sharedFolder:WaitForChild("InventoryConfig"))
 local IconPack = require(sharedFolder:WaitForChild("IconPack"))
 local AudioManager = require(script.Parent:WaitForChild("AudioManager"))
+local ModalManager = require(script.Parent:WaitForChild("ModalManager"))
 
 --------------------------------------------------------------------------------
 -- STATE
@@ -158,7 +159,7 @@ local function isAnyModalOpen(): boolean
     local invOpen = (inventoryModal and inventoryModal.IsOpen and inventoryModal.IsOpen()) or false
     local barterOpen = (barterModal and barterModal.IsOpen and barterModal.IsOpen()) or false
     local sysOpen = isSystemMenuOpen or (systemMenuInstance and systemMenuInstance.IsOpen and systemMenuInstance.IsOpen()) or false
-    return sysOpen or invOpen or barterOpen
+    return sysOpen or invOpen or barterOpen or ModalManager.IsAnyModalOpen()
 end
 
 local function isCursorFree(): boolean
@@ -258,6 +259,12 @@ player:GetPropertyChangedSignal("CameraMinZoomDistance"):Connect(onCameraPropCha
 systemMenuInstance = UIComponents.CreateSystemMenu(hudGui, {
     OnResume = function()
         isSystemMenuOpen = false
+        ModalManager.NotifyStateChange()
+        updateMouseBehavior()
+    end,
+    OnClose = function()
+        isSystemMenuOpen = false
+        ModalManager.NotifyStateChange()
         updateMouseBehavior()
     end,
     OnQuit = function()
@@ -267,16 +274,34 @@ systemMenuInstance = UIComponents.CreateSystemMenu(hudGui, {
         end
         hudGui.Enabled = false
         UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        ModalManager.NotifyStateChange()
         updateMouseBehavior()
     end,
 })
 
+-- Register all in-game modals with the global ModalManager coordinator
+ModalManager.Register("InventoryModal", function()
+    return (inventoryModal and inventoryModal.IsOpen and inventoryModal.IsOpen()) or false
+end)
+ModalManager.Register("BarterModal", function()
+    return (barterModal and barterModal.IsOpen and barterModal.IsOpen()) or false
+end)
+ModalManager.Register("SettingsMenu", function()
+    return isSystemMenuOpen or (systemMenuInstance and systemMenuInstance.IsOpen and systemMenuInstance.IsOpen()) or false
+end)
+
+-- Global modal listener: fires whenever any system (dialogue, trading, inventory) opens or closes
+ModalManager.OnStateChanged(function()
+    updateMouseBehavior()
+end)
+
 local function toggleSystemMenu()
     isAltToggled = false
     isAltHeld = false
-    if isSystemMenuOpen then
-        systemMenuInstance.Close()
+    local wasOpen = isSystemMenuOpen or (systemMenuInstance and systemMenuInstance.IsOpen and systemMenuInstance.IsOpen())
+    if wasOpen then
         isSystemMenuOpen = false
+        systemMenuInstance.Close()
     else
         if inventoryModal.IsOpen() then
             inventoryModal.Close()
@@ -284,8 +309,8 @@ local function toggleSystemMenu()
         if barterModal.IsOpen() then
             barterModal.Close()
         end
-        systemMenuInstance.Open()
         isSystemMenuOpen = true
+        systemMenuInstance.Open()
     end
     updateMouseBehavior()
 end
@@ -881,7 +906,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     -- Escape key handles closing open modals or toggling Settings Menu (processed even if gameProcessed)
     if input.KeyCode == Enum.KeyCode.Escape then
         if player:GetAttribute("IsInGameplay") == true then
-            if isSystemMenuOpen then
+            if isSystemMenuOpen or (systemMenuInstance and systemMenuInstance.IsOpen and systemMenuInstance.IsOpen()) then
                 toggleSystemMenu()
             elseif inventoryModal.IsOpen() then
                 inventoryModal.Close()

@@ -210,182 +210,115 @@ local safePadding = Instance.new("UIPadding")
 safePadding.Parent = safeArea
 
 --------------------------------------------------------------------------------
--- LEFT AREA: HEROIC TITLE, NAVIGATION (PLAY ON TOP) & PARTY SLOTS
+-- LEFT HERO COLUMN (Poster-Style Layout matching Reference Image)
 --------------------------------------------------------------------------------
 local leftArea = Instance.new("Frame")
 leftArea.Name = "LeftArea"
-leftArea.Size = UDim2.new(0.52, 0, 1, 0)
-leftArea.Position = UDim2.new(0, 0, 0, 0)
-leftArea.AnchorPoint = Vector2.new(0, 0)
+leftArea.Size = UDim2.new(0, 360, 0, 480)
+leftArea.Position = UDim2.new(0, 48, 0.46, 0)
+leftArea.AnchorPoint = Vector2.new(0, 0.5)
 leftArea.BackgroundTransparency = 1
 leftArea.Visible = false
 leftArea.ZIndex = 6
 leftArea.Parent = safeArea
 
--- 1. Top Branding Group (Emblem + Title + Subtitle)
+-- 1. Top Branding Group (Campfire Emblem + 2-Line Condensed Title + Burnt Ember Subtitle)
 local brandingHeader = Instance.new("Frame")
 brandingHeader.Name = "BrandingHeader"
-brandingHeader.Size = UDim2.new(1, 0, 0, 100)
+brandingHeader.Size = UDim2.new(1, 0, 0, 210)
 brandingHeader.Position = UDim2.new(0, 0, 0, 0)
 brandingHeader.BackgroundTransparency = 1
 brandingHeader.ZIndex = 7
 brandingHeader.Parent = leftArea
 
--- Campfire Emblem
-local emblem = CampfireEmblem.new(UDim2.fromOffset(80, 80))
-emblem.Root.Position = UDim2.new(0, 40, 0, 40)
-emblem.Root.AnchorPoint = Vector2.new(0.5, 0.5)
+-- Campfire Emblem Centered Above Title
+local emblem = CampfireEmblem.new(UDim2.fromOffset(76, 76))
+emblem.Root.Position = UDim2.new(0.5, 0, 0, 0)
+emblem.Root.AnchorPoint = Vector2.new(0.5, 0)
 emblem.Root.Parent = brandingHeader
 
--- Title & Subtitle next to Emblem
+-- Title & Subtitle Stacked Directly Below Emblem
 local titleContainer = Instance.new("Frame")
 titleContainer.Name = "TitleContainer"
-titleContainer.Size = UDim2.new(1, -95, 1, 0)
-titleContainer.Position = UDim2.new(0, 95, 0, 0)
+titleContainer.Size = UDim2.new(1, 0, 0, 130)
+titleContainer.Position = UDim2.new(0.5, 0, 0, 80)
+titleContainer.AnchorPoint = Vector2.new(0.5, 0)
 titleContainer.BackgroundTransparency = 1
 titleContainer.ZIndex = 7
 titleContainer.Parent = brandingHeader
 
 local titleLayout = Instance.new("UIListLayout")
 titleLayout.FillDirection = Enum.FillDirection.Vertical
-titleLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-titleLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-titleLayout.Padding = UDim.new(0, 2)
+titleLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+titleLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+titleLayout.Padding = UDim.new(0, 8)
 titleLayout.Parent = titleContainer
 
+-- 2-Line High-Impact Oswald Bold Title ("DON'T LET \n THE FIRE DIE")
 local mainTitle = Instance.new("TextLabel")
 mainTitle.Name = "MainTitle"
-mainTitle.Size = UDim2.new(1, 0, 0, 36)
+mainTitle.Size = UDim2.new(1, 0, 0, 92)
 mainTitle.BackgroundTransparency = 1
-mainTitle.Font = UITheme.Fonts.Heading
-mainTitle.Text = "DON'T LET THE FIRE DIE"
-mainTitle.TextColor3 = UITheme.Colors.TextPrimary
-mainTitle.TextScaled = true
-mainTitle.TextWrapped = true
-mainTitle.TextSize = 25
-mainTitle.TextXAlignment = Enum.TextXAlignment.Left
-mainTitle.TextStrokeColor3 = Color3.fromRGB(15, 8, 6)
-mainTitle.TextStrokeTransparency = 0.25
+mainTitle.Font = Enum.Font.Oswald
+mainTitle.Text = "DON'T LET\nTHE FIRE DIE"
+mainTitle.TextColor3 = Color3.fromRGB(240, 235, 225) -- Off-white ivory parchment
+mainTitle.TextSize = 44
+mainTitle.LineHeight = 0.94
+mainTitle.TextXAlignment = Enum.TextXAlignment.Center
+mainTitle.TextStrokeColor3 = Color3.fromRGB(12, 10, 8)
+mainTitle.TextStrokeTransparency = 0.35
 mainTitle.ZIndex = 8
 mainTitle.Parent = titleContainer
 
-local mainTitleConstraint = Instance.new("UITextSizeConstraint")
-mainTitleConstraint.MaxTextSize = 28
-mainTitleConstraint.MinTextSize = 16
-mainTitleConstraint.Parent = mainTitle
-
+-- Glowing Burnt Ember Subtitle ("THE NIGHT WILL CLAIM YOU")
 local subTitle = Instance.new("TextLabel")
 subTitle.Name = "SubTitle"
-subTitle.Size = UDim2.new(1, 0, 0, 18)
+subTitle.Size = UDim2.new(1, 0, 0, 22)
 subTitle.BackgroundTransparency = 1
-subTitle.Font = UITheme.Fonts.Heading
-subTitle.Text = '"THE NIGHT WILL CLAIM YOU"'
-subTitle.TextColor3 = UITheme.Colors.EmberCrimson
-subTitle.TextSize = 13
-subTitle.TextXAlignment = Enum.TextXAlignment.Left
-subTitle.TextStrokeColor3 = Color3.fromRGB(12, 6, 6)
-subTitle.TextStrokeTransparency = 0.3
+subTitle.Font = Enum.Font.Oswald
+subTitle.Text = "THE NIGHT WILL CLAIM YOU"
+subTitle.TextColor3 = Color3.fromRGB(245, 130, 48) -- Vibrant amber/ember orange
+subTitle.TextSize = 15
+subTitle.TextXAlignment = Enum.TextXAlignment.Center
+subTitle.TextStrokeColor3 = Color3.fromRGB(15, 6, 4)
+subTitle.TextStrokeTransparency = 0.4
 subTitle.ZIndex = 8
 subTitle.Parent = titleContainer
 
--- 2. Middle Navigation Actions Container
+-- 2. Navigation Actions Container (PLAY, SETTINGS, CREDITS)
 local navContainer = Instance.new("Frame")
 navContainer.Name = "NavContainer"
-navContainer.Size = UDim2.new(0, 300, 0, 190)
-navContainer.Position = UDim2.new(0, 6, 0.46, 0)
-navContainer.AnchorPoint = Vector2.new(0, 0.5)
+navContainer.Size = UDim2.new(1, 0, 0, 210)
+navContainer.Position = UDim2.new(0.5, 0, 0, 240)
+navContainer.AnchorPoint = Vector2.new(0.5, 0)
 navContainer.BackgroundTransparency = 1
 navContainer.ZIndex = 9
 navContainer.Parent = leftArea
 
 local navLayout = Instance.new("UIListLayout")
 navLayout.FillDirection = Enum.FillDirection.Vertical
-navLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-navLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-navLayout.SortOrder = Enum.SortOrder.LayoutOrder -- CRITICAL: Strict LayoutOrder so PLAY is on top!
-navLayout.Padding = UDim.new(0, 14)
+navLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+navLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+navLayout.SortOrder = Enum.SortOrder.LayoutOrder
+navLayout.Padding = UDim.new(0, 16)
 navLayout.Parent = navContainer
 
--- 3. Bottom-Left Party / Co-op Slots (Anchored to exact bottom of LeftArea)
-local partyContainer = Instance.new("Frame")
-partyContainer.Name = "PartyContainer"
-partyContainer.Size = UDim2.new(1, 0, 0, 70)
-partyContainer.Position = UDim2.new(0, 0, 1, 0)
-partyContainer.AnchorPoint = Vector2.new(0, 1) -- Anchored at bottom!
-partyContainer.BackgroundTransparency = 1
-partyContainer.ZIndex = 14
-partyContainer.Parent = leftArea
-
-local partyLayout = Instance.new("UIListLayout")
-partyLayout.FillDirection = Enum.FillDirection.Horizontal
-partyLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-partyLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-partyLayout.Padding = UDim.new(0, 12)
-partyLayout.Parent = partyContainer
-
--- Slot 1: YOU (Player Avatar)
-UIComponents.CreatePartySlot({
-    Index = 1,
-    IsPlayer = true,
-    Player = player,
-    Parent = partyContainer,
-})
-
--- Slots 2, 3, 4: EMPTY [+] Slots
-for i = 2, 4 do
-    UIComponents.CreatePartySlot({
-        Index = i,
-        IsPlayer = false,
-        Player = nil,
-        Parent = partyContainer,
-    })
-end
-
---------------------------------------------------------------------------------
--- RIGHT AREA: SHOWCASE / ANNOUNCEMENT CARDS (Image 2 Style)
---------------------------------------------------------------------------------
-local rightArea = Instance.new("Frame")
-rightArea.Name = "RightArea"
-rightArea.Size = UDim2.new(0, 340, 0, 370)
-rightArea.Position = UDim2.new(1, 0, 0.5, 0)
-rightArea.AnchorPoint = Vector2.new(1, 0.5) -- Anchored at right edge of safe area!
-rightArea.BackgroundTransparency = 1
-rightArea.Visible = false
-rightArea.ZIndex = 14
-rightArea.Parent = safeArea
-
-local rightLayout = Instance.new("UIListLayout")
-rightLayout.FillDirection = Enum.FillDirection.Vertical
-rightLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-rightLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-rightLayout.Padding = UDim.new(0, 16)
-rightLayout.Parent = rightArea
-
--- Card 1: Official Release / Day 0 Prologue
-local featureCard1 = UIComponents.CreateFeatureCard({
-    Title = "DAY 0: THE LONG NIGHT",
-    Subtitle = "Survive the blizzard. Keep the fire burning.",
-    BadgeText = "ALPHA RELEASE",
-    BannerGradientColors = {
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(48, 22, 16)),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(86, 38, 22)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(18, 14, 20)),
-    },
-    Parent = rightArea,
-})
-
--- Card 2: The Hollow Monster Stalker Lore
-local featureCard2 = UIComponents.CreateFeatureCard({
-    Title = "BEWARE THE HOLLOW",
-    Subtitle = "When light fades, the shadows hunt.",
-    BadgeText = "SURVIVAL INTEL",
-    BannerGradientColors = {
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(22, 16, 28)),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(38, 22, 32)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 10, 14)),
-    },
-    Parent = rightArea,
-})
+-- 3. Bottom-Left Studio Watermark Stamp (Image reference: "A FLUENOSITY STUDIO GAME")
+local studioStamp = Instance.new("TextLabel")
+studioStamp.Name = "StudioStamp"
+studioStamp.Size = UDim2.new(0, 320, 0, 20)
+studioStamp.Position = UDim2.new(0, 4, 1, -8)
+studioStamp.AnchorPoint = Vector2.new(0, 1)
+studioStamp.BackgroundTransparency = 1
+studioStamp.Font = Enum.Font.GothamMedium
+studioStamp.Text = "A FLUENOSITY STUDIO GAME"
+studioStamp.TextColor3 = Color3.fromRGB(115, 122, 136) -- Subtle muted slate grey
+studioStamp.TextSize = 11
+studioStamp.TextXAlignment = Enum.TextXAlignment.Left
+studioStamp.TextStrokeColor3 = Color3.fromRGB(6, 7, 10)
+studioStamp.TextStrokeTransparency = 0.7
+studioStamp.ZIndex = 8
+studioStamp.Parent = safeArea
 
 --------------------------------------------------------------------------------
 -- PRODUCTION-GRADE RESPONSIVE ADAPTATION ENGINE
@@ -396,9 +329,9 @@ local function updateLayoutResponsiveness()
     if viewport.X == 0 or viewport.Y == 0 then return end
 
     local topInset, bottomInset = GuiService:GetGuiInset()
-    local sidePad = math.clamp(math.round(viewport.X * 0.04), 24, 52)
-    local topPad = math.max(topInset.Y, 44) + 14
-    local botPad = math.max(bottomInset.Y, 16) + 16
+    local sidePad = math.clamp(math.round(viewport.X * 0.05), 32, 72)
+    local topPad = math.max(topInset.Y, 36) + 10
+    local botPad = math.max(bottomInset.Y, 16) + 12
 
     safePadding.PaddingTop = UDim.new(0, topPad)
     safePadding.PaddingBottom = UDim.new(0, botPad)
@@ -406,37 +339,32 @@ local function updateLayoutResponsiveness()
     safePadding.PaddingRight = UDim.new(0, sidePad)
 
     -- Dynamic vertical adapting for short screens (laptops / mobile landscape)
-    if viewport.Y < 580 then
-        brandingHeader.Size = UDim2.new(1, 0, 0, 75)
+    if viewport.Y < 600 then
+        leftArea.Size = UDim2.new(0, 320, 0, 420)
+        brandingHeader.Size = UDim2.new(1, 0, 0, 180)
         emblem.Root.Size = UDim2.fromOffset(60, 60)
-        emblem.Root.Position = UDim2.new(0, 30, 0, 30)
-        titleContainer.Position = UDim2.new(0, 75, 0, 0)
-        mainTitle.TextSize = 20
-        subTitle.TextSize = 11
-        partyContainer.Size = UDim2.new(1, 0, 0, 56)
-        navContainer.Size = UDim2.new(0, 260, 0, 160)
-        rightArea.Size = UDim2.new(0, 290, 0, 310)
-    else
-        brandingHeader.Size = UDim2.new(1, 0, 0, 100)
-        emblem.Root.Size = UDim2.fromOffset(80, 80)
-        emblem.Root.Position = UDim2.new(0, 40, 0, 40)
-        titleContainer.Position = UDim2.new(0, 95, 0, 0)
-        mainTitle.TextSize = 25
+        titleContainer.Position = UDim2.new(0.5, 0, 0, 65)
+        mainTitle.TextSize = 34
         subTitle.TextSize = 13
-        partyContainer.Size = UDim2.new(1, 0, 0, 70)
-        navContainer.Size = UDim2.new(0, 300, 0, 190)
-        rightArea.Size = UDim2.new(0, 340, 0, 370)
+        navContainer.Position = UDim2.new(0.5, 0, 0, 205)
+    else
+        leftArea.Size = UDim2.new(0, 360, 0, 480)
+        brandingHeader.Size = UDim2.new(1, 0, 0, 210)
+        emblem.Root.Size = UDim2.fromOffset(76, 76)
+        titleContainer.Position = UDim2.new(0.5, 0, 0, 80)
+        mainTitle.TextSize = 44
+        subTitle.TextSize = 15
+        navContainer.Position = UDim2.new(0.5, 0, 0, 240)
     end
 
-    -- Width adapting (Hide right column on narrow/phone screens < 820px)
-    if viewport.X < 820 then
-        rightArea.Visible = false
-        leftArea.Size = UDim2.new(1, 0, 1, 0)
+    if viewport.X < 700 then
+        -- Mobile portrait / narrow screens: center menu horizontally
+        leftArea.Position = UDim2.new(0.5, 0, 0.46, 0)
+        leftArea.AnchorPoint = Vector2.new(0.5, 0.5)
     else
-        if hasIntroCompleted then
-            rightArea.Visible = true
-        end
-        leftArea.Size = UDim2.new(0.52, 0, 1, 0)
+        -- Desktop / wide screens: left-aligned
+        leftArea.Position = UDim2.new(0, 10, 0.46, 0)
+        leftArea.AnchorPoint = Vector2.new(0, 0.5)
     end
 end
 
@@ -631,7 +559,7 @@ quoteText.Parent = quoteBox
 -- 1. PLAY Action (ON TOP with LayoutOrder = 1)
 -- 1. PLAY Action (ON TOP with LayoutOrder = 1)
 local navPlay = UIComponents.CreateNavAction({
-    Text = "START GAME",
+    Text = "PLAY",
     IsPrimary = true,
     LayoutOrder = 1, -- Strictly on top!
     Parent = navContainer,
@@ -642,15 +570,11 @@ local navPlay = UIComponents.CreateNavAction({
         local fadeTime = reducedMotionEnabled and 0.25 or 0.4
         local fadeInfo = TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
-        -- 1. Smoothly fade out menu navigation & columns
+        -- 1. Smoothly fade out menu navigation to the left
         local leftSlide = TweenService:Create(leftArea, fadeInfo, {
-            Position = UDim2.new(-0.06, 0, 0, 0),
-        })
-        local rightSlide = TweenService:Create(rightArea, fadeInfo, {
-            Position = UDim2.new(1.06, 0, 0.5, 0),
+            Position = UDim2.new(leftArea.Position.X.Scale, leftArea.Position.X.Offset - 60, leftArea.Position.Y.Scale, leftArea.Position.Y.Offset),
         })
         leftSlide:Play()
-        rightSlide:Play()
 
         for _, desc in ipairs(safeArea:GetDescendants()) do
             if desc:IsA("TextLabel") then
@@ -801,17 +725,24 @@ local function runCinematicIntro()
     sparkIgnition:Destroy()
 
     ----------------------------------------------------------------------------
-    -- PHASE 3: STAGGERED ENTRANCE (LEFT FROM LEFT, RIGHT FROM RIGHT)
+    -- PHASE 3: STAGGERED ENTRANCE FROM THE LEFT (Image Reference Style)
     ----------------------------------------------------------------------------
-    -- Ensure leftArea is locked to the left margin (never starts in the middle!)
     leftArea.Visible = true
-    leftArea.Position = UDim2.new(0, 0, 0, 0)
 
-    -- Step 1: Branding Header (Emblem + Title + Subtitle) arrives from the LEFT
-    brandingHeader.Position = UDim2.new(0, -90, 0, 0)
+    local targetLeftPos = leftArea.Position
+    local startLeftPos = UDim2.new(targetLeftPos.X.Scale, targetLeftPos.X.Offset - 50, targetLeftPos.Y.Scale, targetLeftPos.Y.Offset)
+    leftArea.Position = startLeftPos
+
+    brandingHeader.Position = UDim2.new(0, -40, 0, 0)
     mainTitle.TextTransparency = 1
     subTitle.TextTransparency = 1
     emblem:SetTransparency(1)
+    studioStamp.TextTransparency = 1
+
+    local areaTween = TweenService:Create(leftArea, TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Position = targetLeftPos,
+    })
+    areaTween:Play()
 
     local headerTween = TweenService:Create(brandingHeader, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
         Position = UDim2.new(0, 0, 0, 0),
@@ -820,25 +751,20 @@ local function runCinematicIntro()
     emblem:AnimateFade(0, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out))
     TweenService:Create(mainTitle, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
     TweenService:Create(subTitle, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
+    TweenService:Create(studioStamp, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
 
     task.wait(0.12)
 
-    -- Step 2: Nav Actions (PLAY, SETTINGS, CREDITS) arrive from the LEFT, one by one!
-    navContainer.Position = UDim2.new(0, -70, 0.46, 0)
-    local navContainerTween = TweenService:Create(navContainer, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        Position = UDim2.new(0, 6, 0.46, 0),
-    })
-    navContainerTween:Play()
-
+    -- Step 2: Nav Actions (PLAY, SETTINGS, CREDITS) arrive with staggered delays
     local navItems = { navPlay, navSettings, navCredits }
     for i, btn in ipairs(navItems) do
         local content = btn:FindFirstChild("Content") :: Frame?
         if content then
-            content.Position = UDim2.new(0, -45, 0, 0)
+            content.Position = UDim2.new(0, -35, 0, 0)
             for _, d in ipairs(content:GetDescendants()) do
                 if d:IsA("TextLabel") then
                     d.TextTransparency = 1
-                elseif d:IsA("Frame") and d.Name:find("Rule") then
+                elseif d:IsA("Frame") and (d.Name:find("Flare") or d.Name:find("Pip") or d.Name:find("Aura")) then
                     d.BackgroundTransparency = 1
                 end
             end
@@ -849,81 +775,15 @@ local function runCinematicIntro()
                 for _, d in ipairs(content:GetDescendants()) do
                     if d:IsA("TextLabel") then
                         TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
-                    elseif d:IsA("Frame") and d.Name:find("Rule") then
+                    elseif d:IsA("Frame") and d.Name == "GlowFlare" and i == 1 then
                         TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0 }):Play()
+                    elseif d:IsA("Frame") and d.Name == "CenterPip" and i == 1 then
+                        TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0 }):Play()
+                    elseif d:IsA("Frame") and d.Name == "PipAura" and i == 1 then
+                        TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0.55 }):Play()
                     end
                 end
             end)
-        end
-    end
-
-    task.wait(0.18)
-
-    -- Step 3: Co-op Party Slots arrive from bottom-left
-    partyContainer.Position = UDim2.new(0, -70, 1, 0)
-    for _, slot in ipairs(partyContainer:GetChildren()) do
-        if slot:IsA("Frame") then
-            for _, d in ipairs(slot:GetDescendants()) do
-                if d:IsA("TextLabel") then
-                    d.TextTransparency = 1
-                elseif d:IsA("ImageLabel") then
-                    d.ImageTransparency = 1
-                end
-            end
-        end
-    end
-
-    local partyTween = TweenService:Create(partyContainer, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        Position = UDim2.new(0, 0, 1, 0),
-    })
-    partyTween:Play()
-
-    for idx, slot in ipairs(partyContainer:GetChildren()) do
-        if slot:IsA("Frame") then
-            task.delay((idx - 1) * 0.08, function()
-                for _, d in ipairs(slot:GetDescendants()) do
-                    if d:IsA("TextLabel") then
-                        TweenService:Create(d, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
-                    elseif d:IsA("ImageLabel") then
-                        TweenService:Create(d, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { ImageTransparency = 0 }):Play()
-                    end
-                end
-            end)
-        end
-    end
-
-    task.wait(0.15)
-
-    -- Step 4: Right Column Cards arrive from the RIGHT, one by one!
-    local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
-    if viewport.X >= 820 then
-        rightArea.Visible = true
-        rightArea.Position = UDim2.new(1.15, 0, 0.5, 0)
-        local rightTween = TweenService:Create(rightArea, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Position = UDim2.new(1, 0, 0.5, 0),
-        })
-        rightTween:Play()
-
-        local rightCards = { featureCard1, featureCard2 }
-        for idx, card in ipairs(rightCards) do
-            if card then
-                for _, d in ipairs(card:GetDescendants()) do
-                    if d:IsA("TextLabel") then
-                        d.TextTransparency = 1
-                    elseif d:IsA("Frame") and d.Name == "Banner" then
-                        d.BackgroundTransparency = 1
-                    end
-                end
-                task.delay((idx - 1) * 0.12, function()
-                    for _, d in ipairs(card:GetDescendants()) do
-                        if d:IsA("TextLabel") then
-                            TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
-                        elseif d:IsA("Frame") and d.Name == "Banner" then
-                            TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0 }):Play()
-                        end
-                    end
-                end)
-            end
         end
     end
 

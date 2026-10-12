@@ -59,115 +59,114 @@ function UIComponents.CreateNavAction(config: NavActionConfig): TextButton
     contentFrame.ZIndex = 11
     contentFrame.Parent = button
 
-    -- Top Accent Rule Line (Primary only, like PLAY in Image 2)
-    local topRule: Frame? = nil
-    local bottomRule: Frame? = nil
-
-    if isPrimary then
-        topRule = Instance.new("Frame")
-        topRule.Name = "TopRule"
-        topRule.Size = UDim2.new(0, 180, 0, 2)
-        topRule.Position = UDim2.new(0, 0, 0, 2)
-        topRule.BackgroundColor3 = UITheme.Colors.BorderSubtle
-        topRule.BorderSizePixel = 0
-        topRule.ZIndex = 12
-        topRule.Parent = contentFrame
-
-        local topRuleGrad = Instance.new("UIGradient")
-        topRuleGrad.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, UITheme.Colors.EmberHot),
-            ColorSequenceKeypoint.new(0.6, UITheme.Colors.BorderSubtle),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(30, 26, 26)),
-        })
-        topRuleGrad.Parent = topRule
-
-        bottomRule = Instance.new("Frame")
-        bottomRule.Name = "BottomRule"
-        bottomRule.Size = UDim2.new(0, 180, 0, 2)
-        bottomRule.Position = UDim2.new(0, 0, 1, -4)
-        bottomRule.BackgroundColor3 = UITheme.Colors.BorderSubtle
-        bottomRule.BorderSizePixel = 0
-        bottomRule.ZIndex = 12
-        bottomRule.Parent = contentFrame
-
-        local bottomRuleGrad = Instance.new("UIGradient")
-        bottomRuleGrad.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, UITheme.Colors.EmberHot),
-            ColorSequenceKeypoint.new(0.6, UITheme.Colors.BorderSubtle),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(30, 26, 26)),
-        })
-        bottomRuleGrad.Parent = bottomRule
-    end
-
-    -- Large Bold Text Label
+    -- Large Oswald / Gothic Bold Text Label
     local textLabel = Instance.new("TextLabel")
     textLabel.Name = "Label"
-    textLabel.Size = UDim2.fromScale(1, 1)
+    textLabel.Size = UDim2.new(1, 0, 0, isPrimary and 38 or 30)
     textLabel.Position = UDim2.new(0, 0, 0, 0)
     textLabel.BackgroundTransparency = 1
-    textLabel.Font = UITheme.Fonts.Heading
+    textLabel.Font = Enum.Font.Oswald
     textLabel.Text = config.Text
-    textLabel.TextColor3 = isPrimary and UITheme.Colors.TextPrimary or UITheme.Colors.TextSecondary
-    textLabel.TextSize = isPrimary and 32 or 26
-    textLabel.TextXAlignment = Enum.TextXAlignment.Left
+    textLabel.TextColor3 = isPrimary and Color3.fromRGB(255, 175, 65) or Color3.fromRGB(215, 218, 225)
+    textLabel.TextSize = isPrimary and 38 or 28
+    textLabel.TextXAlignment = Enum.TextXAlignment.Center
     textLabel.TextYAlignment = Enum.TextYAlignment.Center
-    textLabel.TextStrokeColor3 = Color3.fromRGB(12, 8, 6)
-    textLabel.TextStrokeTransparency = 0.3
+    textLabel.TextStrokeColor3 = Color3.fromRGB(10, 8, 6)
+    textLabel.TextStrokeTransparency = 0.35
     textLabel.ZIndex = 13
     textLabel.Parent = contentFrame
+
+    -- Horizontal Glowing Flare Underline (Primary has it visible by default; others reveal on hover)
+    local flareLine = Instance.new("Frame")
+    flareLine.Name = "GlowFlare"
+    flareLine.Size = UDim2.new(0, isPrimary and 240 or 200, 0, 2)
+    flareLine.Position = UDim2.new(0.5, 0, 1, -2)
+    flareLine.AnchorPoint = Vector2.new(0.5, 0)
+    flareLine.BackgroundColor3 = Color3.fromRGB(255, 185, 75)
+    flareLine.BorderSizePixel = 0
+    flareLine.BackgroundTransparency = isPrimary and 0 or 1
+    flareLine.ZIndex = 12
+    flareLine.Parent = contentFrame
+
+    local flareGrad = Instance.new("UIGradient")
+    flareGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(200, 100, 20)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 245, 190)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 100, 20)),
+    })
+    flareGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(0.25, 0.45),
+        NumberSequenceKeypoint.new(0.5, 0),
+        NumberSequenceKeypoint.new(0.75, 0.45),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    flareGrad.Parent = flareLine
+
+    -- Center light flare pip
+    local flarePip = Instance.new("Frame")
+    flarePip.Name = "CenterPip"
+    flarePip.Size = UDim2.fromOffset(6, 6)
+    flarePip.Position = UDim2.fromScale(0.5, 0.5)
+    flarePip.AnchorPoint = Vector2.new(0.5, 0.5)
+    flarePip.BackgroundColor3 = Color3.fromRGB(255, 250, 230)
+    flarePip.BackgroundTransparency = isPrimary and 0 or 1
+    flarePip.BorderSizePixel = 0
+    flarePip.ZIndex = 13
+    flarePip.Parent = flareLine
+
+    local pipCorner = Instance.new("UICorner")
+    pipCorner.CornerRadius = UDim.new(1, 0)
+    pipCorner.Parent = flarePip
+
+    local pipAura = Instance.new("Frame")
+    pipAura.Name = "PipAura"
+    pipAura.Size = UDim2.fromOffset(20, 10)
+    pipAura.Position = UDim2.fromScale(0.5, 0.5)
+    pipAura.AnchorPoint = Vector2.new(0.5, 0.5)
+    pipAura.BackgroundColor3 = Color3.fromRGB(255, 180, 50)
+    pipAura.BackgroundTransparency = isPrimary and 0.55 or 1
+    pipAura.BorderSizePixel = 0
+    pipAura.ZIndex = 12
+    pipAura.Parent = flareLine
+
+    local auraCorner = Instance.new("UICorner")
+    auraCorner.CornerRadius = UDim.new(1, 0)
+    auraCorner.Parent = pipAura
 
     -- Interactive Hover & Press Animations
     button.MouseEnter:Connect(function()
         AudioManager.Play("Hover")
         TweenService:Create(textLabel, UITheme.Tweens.Fast, {
-            TextColor3 = UITheme.Colors.EmberHot,
-            Position = UDim2.new(0, 8, 0, 0),
+            TextColor3 = Color3.fromRGB(255, 195, 80),
+            TextSize = isPrimary and 40 or 30,
         }):Play()
 
-        if topRule and bottomRule then
-            TweenService:Create(topRule, UITheme.Tweens.Fast, {
-                Size = UDim2.new(0, 230, 0, 3),
-                BackgroundColor3 = UITheme.Colors.EmberPrimary,
-            }):Play()
-            TweenService:Create(bottomRule, UITheme.Tweens.Fast, {
-                Size = UDim2.new(0, 230, 0, 3),
-                BackgroundColor3 = UITheme.Colors.EmberPrimary,
-            }):Play()
-        end
+        TweenService:Create(flareLine, UITheme.Tweens.Fast, {
+            BackgroundTransparency = 0,
+            Size = UDim2.new(0, 240, 0, 2),
+        }):Play()
+        TweenService:Create(flarePip, UITheme.Tweens.Fast, { BackgroundTransparency = 0 }):Play()
+        TweenService:Create(pipAura, UITheme.Tweens.Fast, { BackgroundTransparency = 0.5 }):Play()
     end)
 
     button.MouseLeave:Connect(function()
         TweenService:Create(textLabel, UITheme.Tweens.Fast, {
-            TextColor3 = isPrimary and UITheme.Colors.TextPrimary or UITheme.Colors.TextSecondary,
-            Position = UDim2.new(0, 0, 0, 0),
+            TextColor3 = isPrimary and Color3.fromRGB(255, 175, 65) or Color3.fromRGB(215, 218, 225),
+            TextSize = isPrimary and 38 or 28,
         }):Play()
 
-        if topRule and bottomRule then
-            TweenService:Create(topRule, UITheme.Tweens.Fast, {
-                Size = UDim2.new(0, 180, 0, 2),
-                BackgroundColor3 = UITheme.Colors.BorderSubtle,
+        if not isPrimary then
+            TweenService:Create(flareLine, UITheme.Tweens.Fast, {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(0, 200, 0, 2),
             }):Play()
-            TweenService:Create(bottomRule, UITheme.Tweens.Fast, {
-                Size = UDim2.new(0, 180, 0, 2),
-                BackgroundColor3 = UITheme.Colors.BorderSubtle,
-            }):Play()
-        end
-    end)
-
-    button.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            TweenService:Create(textLabel, UITheme.Tweens.Instant, {
-                Position = UDim2.new(0, 4, 0, 2),
-                TextColor3 = UITheme.Colors.EmberGold,
-            }):Play()
-        end
-    end)
-
-    button.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            TweenService:Create(textLabel, UITheme.Tweens.Fast, {
-                Position = UDim2.new(0, 8, 0, 0),
-                TextColor3 = UITheme.Colors.EmberHot,
+            TweenService:Create(flarePip, UITheme.Tweens.Fast, { BackgroundTransparency = 1 }):Play()
+            TweenService:Create(pipAura, UITheme.Tweens.Fast, { BackgroundTransparency = 1 }):Play()
+        else
+            TweenService:Create(flareLine, UITheme.Tweens.Fast, {
+                BackgroundTransparency = 0,
+                Size = UDim2.new(0, 240, 0, 2),
             }):Play()
         end
     end)
@@ -1962,6 +1961,7 @@ end
 export type SystemMenuCallbacks = {
     OnResume: () -> (),
     OnQuit: () -> (),
+    OnClose: (() -> ())?,
 }
 
 export type SystemMenuInstance = {
@@ -2716,30 +2716,32 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
     ----------------------------------------------------------------------------
     -- VISIBILITY & TRANSITION CONTROLLERS
     ----------------------------------------------------------------------------
-    local isTransitioning = false
+    local isOpen = false
 
     local function openMenu()
-        if isTransitioning then return end
-        isTransitioning = true
+        if isOpen then return end
+        isOpen = true
         container.Visible = true
         modalVeil.Modal = true
         switchTab("SETTINGS")
         AudioManager.Play("Click")
         TweenService:Create(container, UITheme.Tweens.Fast, { BackgroundTransparency = 0.35 }):Play()
-        task.wait(0.18)
-        isTransitioning = false
     end
 
     local function closeMenu()
-        if isTransitioning then return end
-        isTransitioning = true
+        if not isOpen then return end
+        isOpen = false
         modalVeil.Modal = false
         AudioManager.Play("Click")
+        if callbacks.OnClose then
+            callbacks.OnClose()
+        end
         local fadeTween = TweenService:Create(container, UITheme.Tweens.Fast, { BackgroundTransparency = 1 })
         fadeTween.Completed:Connect(function()
-            container.Visible = false
-            modalVeil.Modal = false
-            isTransitioning = false
+            if not isOpen then
+                container.Visible = false
+                modalVeil.Modal = false
+            end
         end)
         fadeTween:Play()
     end
@@ -2754,7 +2756,7 @@ function UIComponents.CreateSystemMenu(parent: Instance, callbacks: SystemMenuCa
         Open = openMenu,
         Close = closeMenu,
         IsOpen = function()
-            return container.Visible
+            return isOpen
         end,
         Destroy = function()
             container:Destroy()

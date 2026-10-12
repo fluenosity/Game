@@ -30,7 +30,7 @@ local GameConfig = {
     -- 1. SKIP SPLASH SCREEN
     -- If true: Skips the white "A FLUENOSITY STUDIO PRODUCTION" intro screen entirely.
     -- If false: Displays the full cinematic white studio splash sequence.
-    SKIP_SPLASH_SCREEN = true,
+    SKIP_SPLASH_SCREEN = false,
 
     -- 2. SKIP MAIN MENU
     -- If true: Bypasses the Main Menu screen and proceeds straight into the world with preloading.
@@ -41,7 +41,7 @@ local GameConfig = {
     -- If true: The server automatically spawns the player character into the world immediately on join
     -- (Players.CharacterAutoLoads = true / instant LoadCharacter()).
     -- If false: The character only spawns when explicitly requested by clicking "PLAY".
-    DIRECT_SPAWN = true,
+    DIRECT_SPAWN = false,
 
     -- 4. FAST LOADING SCREEN
     -- If true: Skips or shortens artificial loading screen transitions for rapid testing.
