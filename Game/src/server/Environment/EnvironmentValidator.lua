@@ -15,12 +15,25 @@
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local envConfigScript = ReplicatedStorage:WaitForChild("FluenosityShared"):WaitForChild("EnvironmentConfig")
-local okConfig, freshConfig = pcall(function() return require(envConfigScript:Clone()) end)
-local EnvironmentConfig = (okConfig and freshConfig) or require(envConfigScript)
+local function getFreshModule(moduleScript: ModuleScript): any
+    local clone = moduleScript:Clone()
+    clone.Name = "__Fresh_" .. moduleScript.Name
+    clone.Parent = ReplicatedStorage
+    local ok, res = pcall(function()
+        return require(clone)
+    end)
+    clone:Destroy()
+    if ok and res then
+        return res
+    end
+    return require(moduleScript)
+end
+
+local envConfigScript = ReplicatedStorage:WaitForChild("FluenosityShared"):WaitForChild("EnvironmentConfig") :: ModuleScript
+local EnvironmentConfig = getFreshModule(envConfigScript)
 
 local envFolder = script.Parent or game:GetService("ServerScriptService"):WaitForChild("FluenosityServer"):WaitForChild("Environment")
-local PathSystem = require(envFolder:WaitForChild("PathSystem"))
+local PathSystem = getFreshModule(envFolder:WaitForChild("PathSystem") :: ModuleScript)
 
 local EnvironmentValidator = {}
 
@@ -79,10 +92,13 @@ function EnvironmentValidator.Validate(injectedCfg: any?, injectedPathSystem: an
         local trees = treesFolder:GetChildren()
         report.TreeCount = #trees
         
-        local maxPlayable = (activeCfg.TREES and (activeCfg.TREES.MaxPlayableTreeBudget or activeCfg.TREES.PlayableTreeBudget)) or 320
-        local maxBackdrop = (activeCfg.TREES and activeCfg.TREES.BackdropTreeBudget) or 80
-        local totalBudget = maxPlayable + maxBackdrop
-        if report.TreeCount > (totalBudget + 30) then
+        local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
+        local biomeConfigScript = sharedFolder:WaitForChild("BiomeConfig") :: ModuleScript
+        local okB, freshB = pcall(function() return require(biomeConfigScript:Clone()) end)
+        local activeBiomeConfig = (okB and freshB) or require(biomeConfigScript)
+        local activePreset = (activeBiomeConfig and activeBiomeConfig.GetActivePreset and activeBiomeConfig.GetActivePreset())
+        local totalBudget = (activePreset and activePreset.TargetTotalTrees) or 1320
+        if report.TreeCount > (totalBudget + 100) then
             table.insert(report.Errors, string.format("Tree count (%d) exceeds budget (%d)", report.TreeCount, totalBudget))
             report.Passed = false
         end
@@ -169,9 +185,12 @@ function EnvironmentValidator.Validate(injectedCfg: any?, injectedPathSystem: an
         report.GroundCoverCount = count
     end
     
-    print("----------------------------------------------------------------")
-    print("  FOREST ENVIRONMENT AUDIT RESULTS")
-    print(string.format("  • Trees Spawned:        %d (Target: %d)", report.TreeCount, 400))
+    local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
+    local biomeConfigScript = sharedFolder:WaitForChild("BiomeConfig") :: ModuleScript
+    local okB, freshB = pcall(function() return require(biomeConfigScript:Clone()) end)
+    local activeBiomeConfig = (okB and freshB) or require(biomeConfigScript)
+    local auditTarget = (activeBiomeConfig and activeBiomeConfig.GetActivePreset and activeBiomeConfig.GetActivePreset().TargetTotalTrees) or 1320
+    print(string.format("  • Trees Spawned:        %d (Target: %d)", report.TreeCount, auditTarget))
     print(string.format("  • Rocks Spawned:        %d", report.RockCount))
     print(string.format("  • Ground Cover Items:   %d", report.GroundCoverCount))
     print(string.format("  • Camp Invasions:       %d", report.CampInvasions))

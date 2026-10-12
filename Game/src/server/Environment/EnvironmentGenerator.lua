@@ -220,7 +220,7 @@ function EnvironmentGenerator.Generate(): boolean
         warn("[EnvironmentGenerator] Rocks step notice:", errRocks)
     end
     
-    -- 7. Populate Ground Cover (Ferns, Surface Roots, Mossy Logs)
+    -- 7. Populate Authored Ground Cover (DenseLeafPatch, CloverPatch, Ferns, Wildflowers, Small Rocks, Logs, Sticks)
     local okGround, errGround = pcall(function()
         local GroundCover = loadFreshModule("GroundCover")
         GroundCover.Populate(groundFolder, activeConfig, activePathSystem)
@@ -239,6 +239,15 @@ function EnvironmentGenerator.Generate(): boolean
     pcall(function()
         local CampfireSystem = loadFreshModule("CampfireSystem")
         CampfireSystem.Initialize()
+    end)
+    
+    -- 10. Perimeter Barrier (Preserves user's custom drawn barrier)
+    pcall(function()
+        local WorldBarrierSystem = loadFreshModule("WorldBarrierSystem")
+        local existing = Workspace:FindFirstChild("WorldBarrier")
+        if existing and existing:FindFirstChild("Nodes") and #existing.Nodes:GetChildren() >= 3 then
+            WorldBarrierSystem.UpdateFromNodes(existing)
+        end
     end)
     
     local totalTime = math.round((os.clock() - startTime) * 100) / 100

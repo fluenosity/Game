@@ -45,6 +45,14 @@ EnvironmentConfig.CONTAINER_NAME = "ForestEnvironment"
 EnvironmentConfig.FOLDER_TREES = "Trees"
 EnvironmentConfig.FOLDER_ROCKS = "Rocks"
 EnvironmentConfig.FOLDER_GROUND_COVER = "GroundCover"
+EnvironmentConfig.BARRIER = {
+    Center = Vector3.new(-10, 0, 10),
+    RadiusX = 415.0,
+    RadiusZ = 455.0,
+    WallHeight = 160.0,
+    GuideThickness = 6.0,
+    ShowAerialGuide = true,
+}
 
 -- ---------------------------------------------------------------------------
 -- ---------------------------------------------------------------------------

@@ -402,125 +402,97 @@ function CampfireSystem.BuildSittingTrunks(): Folder
 
     pedestalModel.Parent = seatsFolder
 
-    -- 2. Four Organic Fallen Timber Logs (Varied sizes, angles, and distances)
-    local trunkConfigs = {
+    -- 2. Four Photorealistic Tree-Pack Timber Logs (FallenTree & FallenTreeMossyVar01 from Deadwood_Logs)
+    local assets = ReplicatedStorage:FindFirstChild("DontLetTheFireDieAssets") or ServerStorage:FindFirstChild("DontLetTheFireDieAssets")
+    local deadwoodFolder = assets and assets:FindFirstChild("Environment") and assets.Environment:FindFirstChild("Deadwood_Logs")
+    local templateClean = deadwoodFolder and deadwoodFolder:FindFirstChild("FallenTree")
+    local templateMossy = deadwoodFolder and deadwoodFolder:FindFirstChild("FallenTreeMossyVar01")
+
+    local trunkSpecs = {
         {
-            Name = "NorthEastTrunk",
-            Center = Vector3.new(1.4, 0, -7.2),
-            AngleDeg = -7,
-            Length = 8.4,
-            Diameter = 2.45,
-            BarkColor = Color3.fromRGB(54, 40, 30),
-            HasKnot = true,
+            Name = "NorthTrunk",
+            Template = templateClean,
+            Size = Vector3.new(10.0, 2.3, 2.5),
+            Center = Vector3.new(3.0, 11.55, -437.4),
+            AngleY = 0,
+            SeatAxis = "X",
+            SeatOffsets = { -1.8, 1.8 },
         },
         {
-            Name = "SouthEastTrunk",
-            Center = Vector3.new(7.1, 0, 1.6),
-            AngleDeg = 97,
-            Length = 7.6,
-            Diameter = 2.35,
-            BarkColor = Color3.fromRGB(48, 36, 26),
-            HasKnot = false,
+            Name = "SouthTrunk",
+            Template = templateClean,
+            Size = Vector3.new(10.2, 2.3, 2.5),
+            Center = Vector3.new(3.0, 11.55, -422.6),
+            AngleY = 180,
+            SeatAxis = "X",
+            SeatOffsets = { -1.8, 1.8 },
         },
         {
-            Name = "SouthWestTrunk",
-            Center = Vector3.new(-1.2, 0, 7.3),
-            AngleDeg = 173,
-            Length = 8.8,
-            Diameter = 2.50,
-            BarkColor = Color3.fromRGB(56, 42, 32),
-            HasKnot = true,
+            Name = "EastTrunk",
+            Template = templateMossy,
+            Size = Vector3.new(10.0, 2.4, 2.6),
+            Center = Vector3.new(10.4, 11.60, -430.0),
+            AngleY = 90,
+            SeatAxis = "Z",
+            SeatOffsets = { -1.8, 1.8 },
         },
         {
-            Name = "NorthWestTrunk",
-            Center = Vector3.new(-6.9, 0, -2.1),
-            AngleDeg = 263,
-            Length = 7.8,
-            Diameter = 2.30,
-            BarkColor = Color3.fromRGB(50, 38, 28),
-            HasKnot = false,
+            Name = "WestTrunk",
+            Template = templateMossy,
+            Size = Vector3.new(10.2, 2.4, 2.6),
+            Center = Vector3.new(-4.4, 11.60, -430.0),
+            AngleY = 270,
+            SeatAxis = "Z",
+            SeatOffsets = { -1.8, 1.8 },
         },
     }
 
-    for _, cfg in ipairs(trunkConfigs) do
+    local firePos = Vector3.new(3.0, 10.50, -430.0)
+
+    for _, spec in ipairs(trunkSpecs) do
         local trunkModel = Instance.new("Model")
-        trunkModel.Name = cfg.Name
+        trunkModel.Name = spec.Name
         CollectionService:AddTag(trunkModel, "IgnoreWoodScanner")
 
-        local trunkGroundY = getGroundHeight(cfg.Center.X, cfg.Center.Z)
-        local baseCenter = Vector3.new(cfg.Center.X, trunkGroundY + (cfg.Diameter * 0.44), cfg.Center.Z)
-        local baseRotation = CFrame.Angles(0, math.rad(cfg.AngleDeg), 0)
-
-        local logPart = Instance.new("Part")
-        logPart.Name = "Log"
-        logPart.Shape = Enum.PartType.Cylinder
-        logPart.Size = Vector3.new(cfg.Length, cfg.Diameter, cfg.Diameter)
-        logPart.CFrame = CFrame.new(baseCenter) * baseRotation
-        logPart.Color = cfg.BarkColor
-        logPart.Material = Enum.Material.Wood
-        logPart.TopSurface = Enum.SurfaceType.Smooth
-        logPart.BottomSurface = Enum.SurfaceType.Smooth
-        logPart.Anchored = true
-        logPart.CanCollide = true
-        logPart.Parent = trunkModel
-
-        for _, endSign in ipairs({ -1, 1 }) do
-            local endCap = Instance.new("Part")
-            endCap.Name = "HeartwoodEndCap"
-            endCap.Shape = Enum.PartType.Cylinder
-            endCap.Size = Vector3.new(0.06, cfg.Diameter * 0.95, cfg.Diameter * 0.95)
-            endCap.CFrame = logPart.CFrame * CFrame.new((cfg.Length / 2) * endSign, 0, 0)
-            endCap.Color = Color3.fromRGB(152, 118, 86)
-            endCap.Material = Enum.Material.WoodPlanks
-            endCap.TopSurface = Enum.SurfaceType.Smooth
-            endCap.BottomSurface = Enum.SurfaceType.Smooth
-            endCap.Anchored = true
-            endCap.CanCollide = true
-            endCap.Parent = trunkModel
+        local logPart: BasePart
+        if spec.Template then
+            local sourceMesh = spec.Template:FindFirstChildWhichIsA("MeshPart")
+            if sourceMesh then
+                local cloneMesh = sourceMesh:Clone()
+                cloneMesh.Name = "Log"
+                cloneMesh.Size = spec.Size
+                cloneMesh.CFrame = CFrame.new(spec.Center) * CFrame.Angles(0, math.rad(spec.AngleY), 0)
+                cloneMesh.Anchored = true
+                cloneMesh.CanCollide = true
+                cloneMesh.CastShadow = true
+                cloneMesh.Parent = trunkModel
+                logPart = cloneMesh
+            end
         end
 
-        if cfg.HasKnot then
-            local knot = Instance.new("Part")
-            knot.Name = "BranchKnot"
-            knot.Shape = Enum.PartType.Cylinder
-            knot.Size = Vector3.new(0.55, 0.45, 0.45)
-            knot.CFrame = logPart.CFrame * CFrame.new(-0.8, (cfg.Diameter * 0.42), 0.3) * CFrame.Angles(0, 0, math.rad(45))
-            knot.Color = cfg.BarkColor
-            knot.Material = Enum.Material.Wood
-            knot.Anchored = true
-            knot.CanCollide = true
-            knot.Parent = trunkModel
-        end
-
-        local chockOffset = (cfg.Length * 0.33)
-        for _, offsetSign in ipairs({ -chockOffset, chockOffset }) do
-            local chock = Instance.new("Part")
-            chock.Name = "Chock"
-            chock.Size = Vector3.new(1.1, 0.65, 1.1)
-            local chockCF = logPart.CFrame * CFrame.new(offsetSign, -(cfg.Diameter * 0.35), 0.15)
-            chock.CFrame = chockCF * CFrame.Angles(0, math.rad(offsetSign * 6), 0)
-            chock.Color = Color3.fromRGB(68, 66, 64)
-            chock.Material = Enum.Material.Slate
-            chock.Anchored = true
-            chock.CanCollide = true
-
-            local chockMesh = Instance.new("SpecialMesh")
-            chockMesh.MeshType = Enum.MeshType.Sphere
-            chockMesh.Scale = Vector3.new(1.0, 0.6, 1.0)
-            chockMesh.Parent = chock
-
-            chock.Parent = trunkModel
+        if not logPart then
+            -- Fallback cylinder
+            local fallback = Instance.new("Part")
+            fallback.Name = "Log"
+            fallback.Shape = Enum.PartType.Cylinder
+            fallback.Size = spec.Size
+            fallback.CFrame = CFrame.new(spec.Center) * CFrame.Angles(0, math.rad(spec.AngleY), 0)
+            fallback.Color = Color3.fromRGB(60, 46, 36)
+            fallback.Material = Enum.Material.Wood
+            fallback.Anchored = true
+            fallback.CanCollide = true
+            fallback.Parent = trunkModel
+            logPart = fallback
         end
 
         -- 2 Seats per Trunk (8 seats total)
-        -- seat.Disabled = true and seat.CanTouch = false prevents auto-sitting!
-        local seatSpread = (cfg.Length * 0.24)
-        local seatOffsets = { -seatSpread, seatSpread }
-        for sIdx, sOffset in ipairs(seatOffsets) do
-            -- Lowered seat position: sits flush on the exact timber bark surface without floating
-            local seatSurfaceY = (cfg.Diameter * 0.50) - 0.22
-            local seatPos = (logPart.CFrame * CFrame.new(sOffset, seatSurfaceY, 0)).Position
-            local lookTarget = Vector3.new(0, seatPos.Y, 0)
+        local seatSurfaceY = spec.Center.Y + (spec.Size.Y * 0.46)
+        for sIdx, sOffset in ipairs(spec.SeatOffsets) do
+            local seatPos = (spec.SeatAxis == "X")
+                and Vector3.new(spec.Center.X + sOffset, seatSurfaceY, spec.Center.Z)
+                or  Vector3.new(spec.Center.X, seatSurfaceY, spec.Center.Z + sOffset)
+
+            local lookTarget = Vector3.new(firePos.X, seatPos.Y, firePos.Z)
             local seatCF = CFrame.lookAt(seatPos, lookTarget)
 
             local seat = Instance.new("Seat")

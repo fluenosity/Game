@@ -29,6 +29,7 @@ local UITheme = require(script.Parent:WaitForChild("UITheme"))
 local UIComponents = require(script.Parent:WaitForChild("UIComponents"))
 local EmberParticles = require(script.Parent:WaitForChild("EmberParticles"))
 local CampfireEmblem = require(script.Parent:WaitForChild("CampfireEmblem"))
+local LoadingManager = require(script.Parent:WaitForChild("LoadingManager"))
 
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local GameConfig = require(sharedFolder:WaitForChild("GameConfig"))
@@ -76,33 +77,32 @@ end
 -- DEV CONFIG CHECK: SKIP MAIN MENU
 -- =============================================================================
 if GameConfig.ShouldSkipMainMenu() then
-    -- Fast Direct Play: Ensure controls and camera are active on character
-    setCharacterControlsEnabled(true)
-    if camera then
-        camera.CameraType = Enum.CameraType.Custom
-    end
+    -- Fast Direct Play with Clean Shader & Asset Loading Screen (Prevents Pop-in & Flickering)
+    local devScreenGui = Instance.new("ScreenGui")
+    devScreenGui.Name = "DontLetTheFireDie_DevLoadingGui"
+    devScreenGui.ResetOnSpawn = false
+    devScreenGui.IgnoreGuiInset = true
+    devScreenGui.DisplayOrder = 100
+    devScreenGui.Parent = playerGui
 
-    -- If server did not direct-spawn, request spawn immediately
-    local spawnEvent = sharedFolder:FindFirstChild("RequestSpawnCharacter") :: RemoteEvent?
-    if spawnEvent then
-        spawnEvent:FireServer()
-    end
+    local devLoading = UIComponents.CreateLoadingScreen(devScreenGui)
+    devLoading.Show({
+        Status = "COMPILING SHADERS & PRELOADING WILDERNESS...",
+        Tip = "Preloading environment assets, compiling shaders, and stabilizing physics...",
+        Progress = 0.05,
+        Detail = "Initializing Direct Play session...",
+    })
 
-    local function onCharSpawned(char: Model)
-        local hum = char:WaitForChild("Humanoid", 10) :: Humanoid?
-        if camera and hum then
-            camera.CameraType = Enum.CameraType.Custom
-            camera.CameraSubject = hum
-        end
+    LoadingManager.LoadGame(devLoading, function()
+        devLoading.Destroy()
+        devScreenGui:Destroy()
         setCharacterControlsEnabled(true)
-    end
+        if camera then
+            camera.CameraType = Enum.CameraType.Custom
+        end
+    end)
 
-    if player.Character then
-        onCharSpawned(player.Character)
-    end
-    player.CharacterAdded:Connect(onCharSpawned)
-
-    print("[MainMenu] DevMode: SKIP_MAIN_MENU is active. Bypassed menu and entered game directly.")
+    print("[MainMenu] DevMode: SKIP_MAIN_MENU active. Running shader preloading pipeline...")
     return
 end
 
@@ -567,7 +567,7 @@ quoteText.Parent = quoteBox
 -- 1. PLAY Action (ON TOP with LayoutOrder = 1)
 -- 1. PLAY Action (ON TOP with LayoutOrder = 1)
 local navPlay = UIComponents.CreateNavAction({
-    Text = "PLAY",
+    Text = "START GAME",
     IsPrimary = true,
     LayoutOrder = 1, -- Strictly on top!
     Parent = navContainer,
@@ -598,53 +598,21 @@ local navPlay = UIComponents.CreateNavAction({
             end
         end
 
-        -- 2. Fade in Cinematic Loading Screen with Bottom-Right Spinner & Survival Tip
+        -- 2. Fade in Cinematic Loading Screen with Glowing Progress Bar
         loadingScreen.Show({
             Status = "CONNECTING TO FOREST SECTOR...",
-            Tip = "The campfire is your only safe haven. When it dies, the forest takes you.",
+            Tip = "The campfire is your only safe haven. When it dies, the forest claims you.",
+            Progress = 0.05,
+            Detail = "Preloading environment assets & compiling shaders...",
         })
 
-        -- 3. Request server to spawn character into the world
-        local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared", 3)
-        if sharedFolder then
-            local spawnEvent = sharedFolder:WaitForChild("RequestSpawnCharacter", 3) :: RemoteEvent?
-            if spawnEvent then
-                spawnEvent:FireServer()
-            end
-        end
-
-        task.spawn(function()
-            -- Wait for character to spawn & physics to settle
-            local character = player.Character
-            if not character then
-                character = player.CharacterAdded:Wait()
-            end
-
-            local humanoid = character:WaitForChild("Humanoid", 10) :: Humanoid?
-            local rootPart = character:WaitForChild("HumanoidRootPart", 10)
-
-            -- Update loading spinner status
-            loadingScreen.SetStatus("WARMING CABIN...")
-
-            -- Attach camera to character
-            if camera and humanoid then
-                camera.CameraType = Enum.CameraType.Custom
-                camera.CameraSubject = humanoid
-            end
-
-            -- Allow world streaming to settle
-            task.wait(0.6)
-
-            -- Enable player controls
-            setCharacterControlsEnabled(true)
+        -- 3. Run production-grade LoadingManager pipeline
+        LoadingManager.LoadGame(loadingScreen, function()
             hasIntroCompleted = true
-
-            -- Smoothly dissolve loading screen to reveal the world
-            loadingScreen.Hide(function()
-                emberSystem:Destroy()
-                emblem:Destroy()
-                screenGui:Destroy()
-            end)
+            emberSystem:Destroy()
+            emblem:Destroy()
+            screenGui:Destroy()
+            setCharacterControlsEnabled(true)
         end)
     end,
 })

@@ -163,22 +163,30 @@ function RockPlacer.Populate(rocksFolder: Folder, injectedCfg: any?, injectedPat
         PathSystem = injectedPathSystem
     end
     
+    local freshBiomeScript = sharedFolder:WaitForChild("BiomeConfig") :: ModuleScript
+    local okB, freshB = pcall(function() return require(freshBiomeScript:Clone()) end)
+    local activeBiomeConfig = (okB and freshB) or BiomeConfig
+    local activePreset = (activeBiomeConfig.GetActivePreset and activeBiomeConfig.GetActivePreset()) or {}
+
     local activeCfg = injectedCfg or EnvironmentConfig
     local rng = createRng((activeCfg and activeCfg.SEED) or 133742 + 999)
     
     local placedPositions: { Vector3 } = {}
     local rockCount = 0
     
-    -- Targets distributed across full map (Realistic spacing)
-    local targetLarge = 14
-    local targetMedium = 32
-    local targetSmall = 50
+    -- Targets distributed across full map (V7 Boulder & Outcrop detailing)
+    local targetLarge = 25
+    local targetMedium = 50
+    local targetSmall = 75
     local targetTotal = targetLarge + targetMedium + targetSmall
     
-    local minX, maxX = -415.0, 415.0
-    local minZ, maxZ = -455.0, 410.0
+    local minX = activePreset.Bounds and activePreset.Bounds.MinX or -500.0
+    local maxX = activePreset.Bounds and activePreset.Bounds.MaxX or 500.0
+    local minZ = activePreset.Bounds and activePreset.Bounds.MinZ or -545.0
+    local maxZ = activePreset.Bounds and activePreset.Bounds.MaxZ or 545.0
+    local maxElev = activePreset.MaxElevation or 45.0
     
-    local maxAttempts = targetTotal * 30
+    local maxAttempts = targetTotal * 35
     local attempts = 0
     
     while rockCount < targetTotal and attempts < maxAttempts do
@@ -201,7 +209,7 @@ function RockPlacer.Populate(rocksFolder: Folder, injectedCfg: any?, injectedPat
             continue
         end
         
-        if groundPos.Y > 28.0 then
+        if groundPos.Y > maxElev then
             continue
         end
         

@@ -142,8 +142,8 @@ BiomeConfig.HUBS = {
         ExclusionRadius = 38.0,
     },
     Village = {
-        BoundsMin = Vector2.new(-245, 400),
-        BoundsMax = Vector2.new(55, 600),
+        BoundsMin = Vector2.new(-255, 430),
+        BoundsMax = Vector2.new(20, 555),
     },
     Trader = {
         Center = Vector3.new(-403.5, 0, 133),
@@ -162,6 +162,109 @@ BiomeConfig.HUBS = {
 }
 
 -- ---------------------------------------------------------------------------
+-- PRESET & WORLD SNAPSHOT CONFIGURATION SYSTEM
+-- Allows switching, rolling back, or moving forward between world versions!
+-- ---------------------------------------------------------------------------
+BiomeConfig.PRESETS = {
+    -- V4 Base: Clean 440-tree distribution with strict central bounds
+    V4_Base = {
+        Name = "V4_Base (440 Trees, Basin Only)",
+        TargetTotalTrees = 440,
+        Bounds = { MinX = -415.0, MaxX = 415.0, MinZ = -455.0, MaxZ = 410.0 },
+        MaxElevation = 25.0,
+        MaxSlopeDeg = 28.0,
+        AllowSnowyTrees = false,
+        ClusterChanceConifer = 0.30,
+        ClusterChanceWoodland = 0.15,
+        GladeThresholdConifer = -0.38,
+        GladeThresholdWoodland = -0.22,
+    },
+    
+    -- V5 Dense: High-density 690-tree central basin (Saved Snapshot)
+    V5_Dense = {
+        Name = "V5_Dense (690 Trees, Central Basin)",
+        TargetTotalTrees = 690,
+        Bounds = { MinX = -415.0, MaxX = 415.0, MinZ = -455.0, MaxZ = 410.0 },
+        MaxElevation = 25.0,
+        MaxSlopeDeg = 28.0,
+        AllowSnowyTrees = false,
+        ClusterChanceConifer = 0.45,
+        ClusterChanceWoodland = 0.20,
+        GladeThresholdConifer = -0.42,
+        GladeThresholdWoodland = -0.28,
+    },
+    
+    -- V6 Full Perimeter Dense: 960 trees covering North, South, East, West perimeters + border-only snowy trees
+    V6_FullPerimeterDense = {
+        Name = "V6_FullPerimeterDense (960 Trees, Full Perimeters & Border Snow Trees)",
+        TargetTotalTrees = 960,
+        Bounds = { MinX = -490.0, MaxX = 490.0, MinZ = -535.0, MaxZ = 535.0 },
+        MaxElevation = 42.0,
+        MaxSlopeDeg = 30.0,
+        AllowSnowyTrees = true,
+        SnowyTreesBorderOnly = true,
+        BorderMinRadius = 385.0,
+        BorderMinCoord = { X = 380.0, Z_South = -480.0, Z_North = 530.0 },
+        BorderMinElevation = 25.0,
+        ClusterChanceConifer = 0.48,
+        ClusterChanceWoodland = 0.22,
+        GladeThresholdConifer = -0.44,
+        GladeThresholdWoodland = -0.30,
+        TargetGroundCover = 350,
+    },
+    
+    -- V7 Dense Border & Lush Undergrowth: 1320 trees with dense unbroken mountain border wall & 1200 ground undergrowth items
+    V7_DenseBorderAndUndergrowth = {
+        Name = "V7_DenseBorderAndUndergrowth (1320 Trees, Dense Border Wall & Lush Understory)",
+        TargetTotalTrees = 1320,
+        Bounds = { MinX = -500.0, MaxX = 500.0, MinZ = -545.0, MaxZ = 545.0 },
+        MaxElevation = 45.0,
+        MaxSlopeDeg = 32.0,
+        AllowSnowyTrees = true,
+        SnowyTreesBorderOnly = true,
+        BorderMinRadius = 385.0,
+        BorderMinCoord = { X = 380.0, Z_South = -480.0, Z_North = 530.0 },
+        BorderMinElevation = 25.0,
+        BorderWallPassTrees = 280,
+        PathShoulderPassTrees = 120,
+        ClusterChanceConifer = 0.52,
+        ClusterChanceWoodland = 0.28,
+        GladeThresholdConifer = -0.48,
+        GladeThresholdWoodland = -0.34,
+        TargetGroundCover = 1200,
+    },
+    
+    -- V8 World-Edge Forest & Dense Vegetation Layer: 1850 trees extending to world edges + 4500 items 3D grass & dirt layer
+    V8_WorldEdgeForestAndVegetationLayer = {
+        Name = "V8_WorldEdgeForestAndVegetationLayer (1850 Trees to Edge of World & 4500 Ground Vegetation Layer)",
+        TargetTotalTrees = 1850,
+        Bounds = { MinX = -720.0, MaxX = 720.0, MinZ = -740.0, MaxZ = 740.0 },
+        MaxElevation = 68.0,
+        MaxSlopeDeg = 36.0,
+        AllowSnowyTrees = true,
+        SnowyTreesBorderOnly = true,
+        BorderMinRadius = 400.0,
+        BorderMinCoord = { X = 380.0, Z_South = -470.0, Z_North = 520.0 },
+        BorderMinElevation = 25.0,
+        SectorTreesPerZone = 140,
+        BorderWallPassTrees = 380,
+        PathShoulderPassTrees = 120,
+        ClusterChanceConifer = 0.55,
+        ClusterChanceWoodland = 0.30,
+        GladeThresholdConifer = -0.52,
+        GladeThresholdWoodland = -0.38,
+        TargetGroundCover = 4500,
+    },
+}
+
+-- ACTIVE PRESET SWITCH: Set to "V5_Dense", "V6_FullPerimeterDense", "V7_DenseBorderAndUndergrowth" to roll back!
+BiomeConfig.ACTIVE_PRESET = "V8_WorldEdgeForestAndVegetationLayer"
+
+function BiomeConfig.GetActivePreset()
+    return BiomeConfig.PRESETS[BiomeConfig.ACTIVE_PRESET] or BiomeConfig.PRESETS.V8_WorldEdgeForestAndVegetationLayer
+end
+
+-- ---------------------------------------------------------------------------
 -- 3. BIOME DEFINITION TABLES (Absolute Realistic Heights in Studs)
 -- ---------------------------------------------------------------------------
 BiomeConfig.BIOMES = {
@@ -171,6 +274,7 @@ BiomeConfig.BIOMES = {
             { Model = "RedwoodTreeLarge-Var01", Weight = 35, ScaleMin = 0.29, ScaleMax = 0.37 },
             { Model = "RedwoodTree-Var01", Weight = 40, ScaleMin = 0.50, ScaleMax = 0.67 },
             { Model = "Redwoodtree-LowLOD-Var01", Weight = 25, ScaleMin = 0.32, ScaleMax = 0.43 },
+            { Model = "Redwood_Snowy01", Weight = 18, ScaleMin = 0.28, ScaleMax = 0.38 }, -- Filtered to border-only
             { Model = "DogwoodTree_Var01", Weight = 12, ScaleMin = 0.95, ScaleMax = 1.35 },
         },
         CanopyFallingLeavesChance = 0.28,
@@ -220,12 +324,13 @@ BiomeConfig.BIOMES = {
     RockyHighlands = {
         Name = "Rocky Highlands & Ridges",
         Trees = {
-            { Model = "RedwoodTree-Var01", Weight = 40, ScaleMin = 0.41, ScaleMax = 0.56 },
-            { Model = "Redwoodtree-LowLOD-Var01", Weight = 35, ScaleMin = 0.26, ScaleMax = 0.37 },
-            { Model = "BeechwoodSapling_Var01", Weight = 25, ScaleMin = 1.13, ScaleMax = 1.58 },
+            { Model = "RedwoodTree-Var01", Weight = 35, ScaleMin = 0.41, ScaleMax = 0.56 },
+            { Model = "Redwoodtree-LowLOD-Var01", Weight = 30, ScaleMin = 0.26, ScaleMax = 0.37 },
+            { Model = "Redwood_Snowy01", Weight = 35, ScaleMin = 0.28, ScaleMax = 0.38 }, -- Filtered to border-only
+            { Model = "BeechwoodSapling_Var01", Weight = 20, ScaleMin = 1.13, ScaleMax = 1.58 },
         },
         CanopyFallingLeavesChance = 0.05,
-        MinTreeDistance = 12.5,
+        MinTreeDistance = 10.0,
         Rocks = {
             Large = { "LargeBoulder_Var01", "LargeBoulder_Var02" },
             Medium = { "MediumBoulderVar01" },

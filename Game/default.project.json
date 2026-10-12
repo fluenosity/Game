@@ -3,6 +3,13 @@
   "tree": {
     "$className": "DataModel",
     "$ignoreUnknownInstances": true,
+    "ReplicatedFirst": {
+      "$className": "ReplicatedFirst",
+      "$ignoreUnknownInstances": true,
+      "EarlyCurtain": {
+        "$path": "src/loading/EarlyCurtain.client.lua"
+      }
+    },
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "$ignoreUnknownInstances": true,

@@ -33,10 +33,9 @@ local GameConfig = {
     SKIP_SPLASH_SCREEN = true,
 
     -- 2. SKIP MAIN MENU
-    -- If true: Bypasses the Main Menu screen (PLAY, SETTINGS, CREDITS, CO-OP SLOTS)
-    -- and proceeds straight into the playable world without user interaction.
-    -- If false: Displays the interactive Main Menu until the player clicks "PLAY".
-    SKIP_MAIN_MENU = true,
+    -- If true: Bypasses the Main Menu screen and proceeds straight into the world with preloading.
+    -- If false: Displays the interactive Main Menu until the player clicks "START GAME".
+    SKIP_MAIN_MENU = false,
 
     -- 3. DIRECT SPAWN
     -- If true: The server automatically spawns the player character into the world immediately on join

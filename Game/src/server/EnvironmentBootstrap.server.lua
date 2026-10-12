@@ -46,11 +46,7 @@ pcall(function()
     CampfireSystem.Initialize()
 end)
 
--- ONLY generate at runtime if explicitly requested by config (disabled by default so world is permanent)
-if EnvironmentConfig.AUTO_GENERATE_ON_SERVER_START then
-    local EnvironmentGenerator = require(envModuleFolder:WaitForChild("EnvironmentGenerator"))
-    task.spawn(function()
-        task.wait(0.5)
-        EnvironmentGenerator.Generate()
-    end)
-end
+-- Procedural world generation is permanently disabled at runtime.
+-- All environmental instances (Trees, Rocks, GroundCover, WorldBarrier, Cabins)
+-- are saved directly in the place file for custom manual level design and editing.
+

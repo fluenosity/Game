@@ -1,0 +1,6 @@
+{
+  "name": "WorldBarrierPen",
+  "tree": {
+    "$path": "src/server/Environment/WorldBarrierPenPlugin.server.lua"
+  }
+}

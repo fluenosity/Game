@@ -1321,10 +1321,153 @@ function UIComponents.CreateLoadingScreen(parent: Instance): LoadingScreenInstan
     tipBody.ZIndex = 84
     tipBody.Parent = topRightBanner
 
-    -- 4. Bottom-Right Animated Spinner
+    -- 4. Center-Bottom Glowing Progress Bar HUD (Production Grade)
+    local progressHUD = Instance.new("Frame")
+    progressHUD.Name = "ProgressHUD"
+    progressHUD.Size = UDim2.new(0.68, 0, 0, 68)
+    progressHUD.Position = UDim2.new(0.5, 0, 1, -48)
+    progressHUD.AnchorPoint = Vector2.new(0.5, 1)
+    progressHUD.BackgroundTransparency = 1
+    progressHUD.ZIndex = 86
+    progressHUD.Parent = container
+
+    local hudConstraint = Instance.new("UISizeConstraint")
+    hudConstraint.MaxSize = Vector2.new(720, 90)
+    hudConstraint.MinSize = Vector2.new(280, 50)
+    hudConstraint.Parent = progressHUD
+
+    -- Top Row: Stage Name (Left) + Percentage (Right)
+    local topRow = Instance.new("Frame")
+    topRow.Name = "TopRow"
+    topRow.Size = UDim2.new(1, 0, 0, 20)
+    topRow.BackgroundTransparency = 1
+    topRow.ZIndex = 87
+    topRow.Parent = progressHUD
+
+    local stageLabel = Instance.new("TextLabel")
+    stageLabel.Name = "StageLabel"
+    stageLabel.Size = UDim2.new(1, -70, 1, 0)
+    stageLabel.Position = UDim2.new(0, 0, 0, 0)
+    stageLabel.BackgroundTransparency = 1
+    stageLabel.Font = UITheme.Fonts.Heading
+    stageLabel.Text = "INITIALIZING WORLD..."
+    stageLabel.TextColor3 = Color3.fromRGB(240, 244, 250)
+    stageLabel.TextSize = 13
+    stageLabel.TextXAlignment = Enum.TextXAlignment.Left
+    stageLabel.ZIndex = 88
+    stageLabel.Parent = topRow
+
+    local percentLabel = Instance.new("TextLabel")
+    percentLabel.Name = "PercentLabel"
+    percentLabel.Size = UDim2.new(0, 60, 1, 0)
+    percentLabel.Position = UDim2.new(1, 0, 0, 0)
+    percentLabel.AnchorPoint = Vector2.new(1, 0)
+    percentLabel.BackgroundTransparency = 1
+    percentLabel.Font = UITheme.Fonts.Heading
+    percentLabel.Text = "0%"
+    percentLabel.TextColor3 = UITheme.Colors.EmberHot
+    percentLabel.TextSize = 14
+    percentLabel.TextXAlignment = Enum.TextXAlignment.Right
+    percentLabel.ZIndex = 88
+    percentLabel.Parent = topRow
+
+    -- Progress Track Bar
+    local trackBar = Instance.new("Frame")
+    trackBar.Name = "TrackBar"
+    trackBar.Size = UDim2.new(1, 0, 0, 8)
+    trackBar.Position = UDim2.new(0, 0, 0, 25)
+    trackBar.BackgroundColor3 = Color3.fromRGB(12, 14, 18)
+    trackBar.BorderSizePixel = 0
+    trackBar.ZIndex = 87
+    trackBar.Parent = progressHUD
+
+    local trackCorner = Instance.new("UICorner")
+    trackCorner.CornerRadius = UDim.new(0, 4)
+    trackCorner.Parent = trackBar
+
+    local trackStroke = Instance.new("UIStroke")
+    trackStroke.Color = Color3.fromRGB(245, 140, 40)
+    trackStroke.Transparency = 0.82
+    trackStroke.Thickness = 1
+    trackStroke.Parent = trackBar
+
+    -- Progress Fill Bar
+    local fillBar = Instance.new("Frame")
+    fillBar.Name = "FillBar"
+    fillBar.Size = UDim2.new(0, 0, 1, 0)
+    fillBar.BackgroundColor3 = Color3.fromRGB(255, 140, 30)
+    fillBar.BorderSizePixel = 0
+    fillBar.ZIndex = 88
+    fillBar.Parent = trackBar
+
+    local fillCorner = Instance.new("UICorner")
+    fillCorner.CornerRadius = UDim.new(0, 4)
+    fillCorner.Parent = fillBar
+
+    local fillGrad = Instance.new("UIGradient")
+    fillGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(180, 40, 15)),
+        ColorSequenceKeypoint.new(0.65, Color3.fromRGB(255, 135, 25)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 235, 160)),
+    })
+    fillGrad.Parent = fillBar
+
+    -- Leading edge glow head
+    local glowHead = Instance.new("Frame")
+    glowHead.Name = "GlowHead"
+    glowHead.Size = UDim2.fromOffset(8, 8)
+    glowHead.Position = UDim2.new(1, 0, 0.5, 0)
+    glowHead.AnchorPoint = Vector2.new(0.5, 0.5)
+    glowHead.BackgroundColor3 = Color3.fromRGB(255, 245, 210)
+    glowHead.BorderSizePixel = 0
+    glowHead.ZIndex = 89
+    glowHead.Visible = false
+    glowHead.Parent = fillBar
+
+    local glowCorner = Instance.new("UICorner")
+    glowCorner.CornerRadius = UDim.new(1, 0)
+    glowCorner.Parent = glowHead
+
+    -- Bottom Details Sub-Row
+    local bottomRow = Instance.new("Frame")
+    bottomRow.Name = "BottomRow"
+    bottomRow.Size = UDim2.new(1, 0, 0, 18)
+    bottomRow.Position = UDim2.new(0, 0, 0, 39)
+    bottomRow.BackgroundTransparency = 1
+    bottomRow.ZIndex = 87
+    bottomRow.Parent = progressHUD
+
+    local detailLabel = Instance.new("TextLabel")
+    detailLabel.Name = "DetailLabel"
+    detailLabel.Size = UDim2.new(0.65, 0, 1, 0)
+    detailLabel.Position = UDim2.new(0, 0, 0, 0)
+    detailLabel.BackgroundTransparency = 1
+    detailLabel.Font = UITheme.Fonts.Body
+    detailLabel.Text = "Synchronizing survival environment..."
+    detailLabel.TextColor3 = Color3.fromRGB(150, 160, 175)
+    detailLabel.TextSize = 11
+    detailLabel.TextXAlignment = Enum.TextXAlignment.Left
+    detailLabel.ZIndex = 88
+    detailLabel.Parent = bottomRow
+
+    local sectorLabel = Instance.new("TextLabel")
+    sectorLabel.Name = "SectorLabel"
+    sectorLabel.Size = UDim2.new(0.35, 0, 1, 0)
+    sectorLabel.Position = UDim2.new(1, 0, 0, 0)
+    sectorLabel.AnchorPoint = Vector2.new(1, 0)
+    sectorLabel.BackgroundTransparency = 1
+    sectorLabel.Font = UITheme.Fonts.Body
+    sectorLabel.Text = "SECTOR // ALPINE WILDERNESS"
+    sectorLabel.TextColor3 = Color3.fromRGB(120, 130, 145)
+    sectorLabel.TextSize = 11
+    sectorLabel.TextXAlignment = Enum.TextXAlignment.Right
+    sectorLabel.ZIndex = 88
+    sectorLabel.Parent = bottomRow
+
+    -- 5. Bottom-Right Animated Spinner
     local spinnerHolder = Instance.new("Frame")
     spinnerHolder.Name = "SpinnerHolder"
-    spinnerHolder.Size = UDim2.fromOffset(300, 38)
+    spinnerHolder.Size = UDim2.fromOffset(260, 38)
     spinnerHolder.Position = UDim2.new(1, -32, 1, -28)
     spinnerHolder.AnchorPoint = Vector2.new(1, 1)
     spinnerHolder.BackgroundTransparency = 1
@@ -1333,7 +1476,7 @@ function UIComponents.CreateLoadingScreen(parent: Instance): LoadingScreenInstan
 
     local spinner = UIComponents.CreateLoadingSpinner(spinnerHolder, "INITIALIZING WORLD...")
 
-    -- 5. Native Smooth Transition Curtain (Eliminates CanvasGroup downsample blur)
+    -- 6. Native Smooth Transition Curtain (Eliminates CanvasGroup downsample blur)
     local fadeCurtain = Instance.new("Frame")
     fadeCurtain.Name = "FadeCurtain"
     fadeCurtain.Size = UDim2.fromScale(1, 1)
@@ -1345,13 +1488,41 @@ function UIComponents.CreateLoadingScreen(parent: Instance): LoadingScreenInstan
     fadeCurtain.Parent = container
 
     local isTransitioning = false
+    local currentRatio = 0
 
-    local function showLoading(options: { Status: string?, Tip: string? }?)
+    local function setProgress(ratio: number, statusText: string?, detailText: string?)
+        currentRatio = math.clamp(ratio, 0, 1)
+        glowHead.Visible = currentRatio > 0.01 and currentRatio < 0.99
+
+        TweenService:Create(fillBar, TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = UDim2.new(currentRatio, 0, 1, 0),
+        }):Play()
+
+        percentLabel.Text = string.format("%d%%", math.floor(currentRatio * 100))
+        if statusText then
+            stageLabel.Text = statusText:upper()
+            spinner.SetStatus(statusText)
+        end
+        if detailText then
+            detailLabel.Text = detailText
+        end
+    end
+
+    local function showLoading(options: { Status: string?, Tip: string?, Progress: number?, Detail: string? }?)
         if isTransitioning then return end
         isTransitioning = true
 
         if options and options.Status then
+            stageLabel.Text = options.Status:upper()
             spinner.SetStatus(options.Status)
+        end
+        if options and options.Detail then
+            detailLabel.Text = options.Detail
+        end
+        if options and options.Progress then
+            setProgress(options.Progress, options.Status, options.Detail)
+        else
+            setProgress(0, options and options.Status, options and options.Detail)
         end
         if options and options.Tip then
             tipBody.Text = options.Tip
@@ -1375,7 +1546,7 @@ function UIComponents.CreateLoadingScreen(parent: Instance): LoadingScreenInstan
         if isTransitioning then return end
         isTransitioning = true
 
-        local fadeTween = TweenService:Create(fadeCurtain, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        local fadeTween = TweenService:Create(fadeCurtain, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
             BackgroundTransparency = 0,
         })
         fadeTween.Completed:Connect(function()
@@ -1391,7 +1562,9 @@ function UIComponents.CreateLoadingScreen(parent: Instance): LoadingScreenInstan
     return {
         Container = container,
         Show = showLoading,
+        SetProgress = setProgress,
         SetStatus = function(statusText: string)
+            stageLabel.Text = statusText:upper()
             spinner.SetStatus(statusText)
         end,
         SetTip = function(tipText: string)
