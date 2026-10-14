@@ -7,7 +7,7 @@
 
     Features:
     - Authoritative server validation for melee attacks (reach, cooldown, alive check)
-    - Full damage calculations (Jab: 12 HP, Cross: 18 HP, Heavy Punch: 32 HP)
+    - Server-authoritative damage for equipped one-handed weapon attacks
     - Guard / Blocking mitigation: 70% damage reduction when target is blocking
     - Physics-based knockback impulse applied to target HumanoidRootPart
     - Visual impact effects and floating combat text replication
@@ -37,38 +37,81 @@ if not meleeHitReplicatedEvent then
     meleeHitReplicatedEvent.Parent = sharedFolder
 end
 
+local meleeBlockRequest = sharedFolder:FindFirstChild("MeleeBlockRequest") :: RemoteEvent?
+if not meleeBlockRequest then
+    meleeBlockRequest = Instance.new("RemoteEvent")
+    meleeBlockRequest.Name = "MeleeBlockRequest"
+    meleeBlockRequest.Parent = sharedFolder
+end
+
+local meleeBlockState = sharedFolder:FindFirstChild("MeleeBlockState") :: RemoteEvent?
+if not meleeBlockState then
+    meleeBlockState = Instance.new("RemoteEvent")
+    meleeBlockState.Name = "MeleeBlockState"
+    meleeBlockState.Parent = sharedFolder
+end
+
 -- -----------------------------------------------------------------------------
--- 2. ATTACK CONFIGURATION & LIMITS
+-- 2. WEAPON ATTACK CONFIGURATION & LIMITS
 -- -----------------------------------------------------------------------------
-local ATTACK_CONFIG = {
-    ["PunchRight"] = {
-        Damage = 12,
-        MaxReach = 7.0,
-        Cooldown = 0.22,
-        KnockbackForce = 18.0,
-        UpwardForce = 2.0,
-        Sound = "PunchImpact",
-    },
-    ["PunchLeft"] = {
-        Damage = 12,
-        MaxReach = 7.0,
-        Cooldown = 0.22,
-        KnockbackForce = 18.0,
-        UpwardForce = 2.0,
-        Sound = "PunchImpact",
-    },
-    ["Heavy"] = {
-        Damage = 32,
-        MaxReach = 9.0,
-        Cooldown = 0.55,
-        KnockbackForce = 62.0,
-        UpwardForce = 14.0,
-        Sound = "PunchHeavyImpact",
-    },
+type WeaponAttackConfig = {
+    Damage: number,
+    MaxReach: number,
+    Cooldown: number,
+    Duration: number,
+    KnockbackForce: number,
+    UpwardForce: number,
+    GuardDrain: number,
+    Sound: string,
 }
 
--- Rate-limiting table per player
-local playerLastAttackTime: { [Player]: number } = {}
+local WEAPON_ATTACK_CONFIG: { [string]: { [string]: WeaponAttackConfig } } = {
+}
+
+-- Rate-limit each attack independently so a heavy does not consume an M1's window.
+local playerLastAttackTime: { [Player]: { [string]: number } } = {}
+local playerAttackToken: { [Player]: number } = {}
+Players.PlayerRemoving:Connect(function(player)
+    playerLastAttackTime[player] = nil
+    playerAttackToken[player] = nil
+end)
+
+local DEFAULT_GUARD_STAMINA = 100
+local GUARD_BREAK_DURATION = 1.25
+local guardBreakToken: { [Model]: number } = {}
+
+local function initializeCombatCharacter(character: Model)
+    character:SetAttribute("IsBlocking", false)
+    character:SetAttribute("IsGuardBroken", false)
+    character:SetAttribute("GuardStamina", DEFAULT_GUARD_STAMINA)
+end
+
+local function breakGuard(character: Model)
+    local token = (guardBreakToken[character] or 0) + 1
+    guardBreakToken[character] = token
+    character:SetAttribute("IsBlocking", false)
+    character:SetAttribute("IsGuardBroken", true)
+    task.delay(GUARD_BREAK_DURATION, function()
+        if not character.Parent or guardBreakToken[character] ~= token then return end
+        character:SetAttribute("IsGuardBroken", false)
+        character:SetAttribute("GuardStamina", DEFAULT_GUARD_STAMINA)
+        guardBreakToken[character] = nil
+    end)
+end
+
+local function onPlayerAdded(player: Player)
+    player.CharacterAdded:Connect(function(character: Model)
+        initializeCombatCharacter(character)
+    end)
+    if player.Character then
+        initializeCombatCharacter(player.Character)
+    end
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+for _, player in ipairs(Players:GetPlayers()) do
+    onPlayerAdded(player)
+end
 
 -- -----------------------------------------------------------------------------
 -- 3. FLOATING COMBAT TEXT & HIT EFFECTS
@@ -143,7 +186,13 @@ local function onMeleeAttackRequest(
     local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
     if not hum or not hrp or hum.Health <= 0 then return end
 
-    local config = ATTACK_CONFIG[attackType]
+    local equippedTool = char:FindFirstChildOfClass("Tool")
+    if not equippedTool or equippedTool:GetAttribute("CombatWeapon") ~= true then return end
+
+    local weaponId = equippedTool:GetAttribute("WeaponId")
+    if typeof(weaponId) ~= "string" then return end
+    local weaponConfig = WEAPON_ATTACK_CONFIG[weaponId]
+    local config = weaponConfig and weaponConfig[attackType]
     if not config then return end
     if targetInstance ~= nil and typeof(targetInstance) ~= "Instance" then return end
     if typeof(hitPos) ~= "Vector3" or typeof(hitNormal) ~= "Vector3" then return end
@@ -158,11 +207,17 @@ local function onMeleeAttackRequest(
 
     -- Anti-cheat rate limit validation
     local now = os.clock()
-    local lastAttack = playerLastAttackTime[player] or 0
+    local playerAttackTimes = playerLastAttackTime[player]
+    if not playerAttackTimes then
+        playerAttackTimes = {}
+        playerLastAttackTime[player] = playerAttackTimes
+    end
+    local rateLimitKey = if attackType == "WeaponLightA" or attackType == "WeaponLightB" then "WeaponLight" else attackType
+    local lastAttack = playerAttackTimes[rateLimitKey] or 0
     if now - lastAttack < config.Cooldown * 0.75 then
         return
     end
-    playerLastAttackTime[player] = now
+    playerAttackTimes[rateLimitKey] = now
 
     -- Reach distance validation
     local dist = (hrp.Position - hitPos).Magnitude
@@ -173,6 +228,16 @@ local function onMeleeAttackRequest(
     if attackDirection.Magnitude > 0.001 and hrp.CFrame.LookVector:Dot(attackDirection.Unit) < -0.65 then
         return
     end
+
+    -- Replicate only after the server accepts the attack type, timing, and reach.
+    local token = (playerAttackToken[player] or 0) + 1
+    playerAttackToken[player] = token
+    char:SetAttribute("IsAttacking", true)
+    task.delay(config.Duration, function()
+        if player.Parent and player.Character == char and playerAttackToken[player] == token then
+            char:SetAttribute("IsAttacking", false)
+        end
+    end)
 
     -- Identify target Humanoid
     local targetChar: Model? = nil
@@ -194,6 +259,12 @@ local function onMeleeAttackRequest(
             end
             current = current.Parent
         end
+    end
+
+    if targetHRP then
+        local targetOffset = targetHRP.Position - hrp.Position
+        if targetOffset.Magnitude > config.MaxReach + 2.0 then return end
+        if targetOffset.Magnitude > 0.001 and hrp.CFrame.LookVector:Dot(targetOffset.Unit) < -0.65 then return end
     end
 
     -- If direct click didn't yield a humanoid, do a spatial spherecast forward
@@ -222,18 +293,43 @@ local function onMeleeAttackRequest(
     end
 
     if not targetHum or targetHum.Health <= 0 then
-        -- Missed / punched thin air or scenery: replicate whoosh/swing
+        -- Missed the target or swung into scenery; the local swing animation remains visible.
         return
     end
 
     -- Check if target is actively Blocking / Guarding
-    local isTargetBlocking = targetChar and targetChar:GetAttribute("IsBlocking") == true
+    local isTargetBlocking = targetChar ~= nil
+        and targetChar:GetAttribute("IsBlocking") == true
+        and targetChar:GetAttribute("IsGuardBroken") ~= true
     local damageDealt = config.Damage
     local soundToPlay = config.Sound
 
-    if isTargetBlocking then
-        damageDealt = math.max(1, math.floor(damageDealt * 0.30)) -- 70% damage reduction
-        soundToPlay = "BlockImpact"
+    if isTargetBlocking and targetChar then
+        local defenderRoot = targetHRP
+        local facingAttacker = targetChar:GetAttribute("IsCombatTestCharacter") == true
+        if defenderRoot then
+            local defenderFacing = hrp.Position - defenderRoot.Position
+            facingAttacker = facingAttacker or (defenderFacing.Magnitude > 0.001
+                and defenderRoot.CFrame.LookVector:Dot(defenderFacing.Unit) > 0.15)
+        end
+
+        if facingAttacker then
+            local guardStamina = targetChar:GetAttribute("GuardStamina")
+            if typeof(guardStamina) ~= "number" then
+                guardStamina = DEFAULT_GUARD_STAMINA
+            end
+            guardStamina = math.max(0, guardStamina - (config.GuardDrain or 25))
+            targetChar:SetAttribute("GuardStamina", guardStamina)
+            soundToPlay = "BlockImpact"
+
+            if guardStamina <= 0 then
+                breakGuard(targetChar)
+            else
+                damageDealt = math.max(1, math.floor(damageDealt * 0.30))
+            end
+        else
+            isTargetBlocking = false
+        end
     end
 
     -- Deduct target health
@@ -241,10 +337,8 @@ local function onMeleeAttackRequest(
 
     -- Apply physics knockback
     if targetHRP and not targetHRP.Anchored then
-        local knockDir = (targetHRP.Position - hrp.Position).Unit
-        if knockDir.Magnitude < 0.1 then
-            knockDir = hrp.CFrame.LookVector
-        end
+        local knockOffset = targetHRP.Position - hrp.Position
+        local knockDir = if knockOffset.Magnitude > 0.1 then knockOffset.Unit else hrp.CFrame.LookVector
         local force = (knockDir * config.KnockbackForce + Vector3.new(0, config.UpwardForce, 0))
         targetHRP:ApplyImpulse(force * targetHRP.AssemblyMass)
     end
@@ -256,9 +350,9 @@ local function onMeleeAttackRequest(
     end
     displayPart = displayPart or hrp
     if displayPart and displayPart:IsA("BasePart") then
-        spawnDamagePopup(displayPart, damageDealt, isTargetBlocking, attackType == "Heavy")
+        spawnDamagePopup(displayPart, damageDealt, isTargetBlocking, attackType == "WeaponHeavy")
     end
-    spawnHitParticles(hitPos, hitNormal, attackType == "Heavy")
+    spawnHitParticles(hitPos, hitNormal, attackType == "WeaponHeavy")
 
     -- Broadcast hit replication event to clients for audio & camera shake sync
     if meleeHitReplicatedEvent then
@@ -273,184 +367,76 @@ local function onMeleeAttackRequest(
     end
 end
 
+if meleeBlockRequest then
+    meleeBlockRequest.OnServerEvent:Connect(function(player: Player, requestedBlocking: boolean)
+        if typeof(requestedBlocking) ~= "boolean" then return end
+        local character = player.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if not character or not humanoid or humanoid.Health <= 0 then return end
+
+        if requestedBlocking then
+            local canBlock = character:GetAttribute("IsGuardBroken") ~= true
+                and character:GetAttribute("IsAttacking") ~= true
+            if not canBlock then
+                if meleeBlockState then meleeBlockState:FireClient(player, false) end
+                return
+            end
+        end
+
+        character:SetAttribute("IsBlocking", requestedBlocking)
+        if meleeBlockState then
+            meleeBlockState:FireClient(player, requestedBlocking)
+        end
+    end)
+end
+
 if meleeAttackEvent then
     meleeAttackEvent.OnServerEvent:Connect(onMeleeAttackRequest)
 end
 
 -- -----------------------------------------------------------------------------
--- 5. CAMPSITE TRAINING DUMMY SPAWNER
+-- 5. R15 FEMALE COMBAT TEST CHARACTER
 -- -----------------------------------------------------------------------------
-local function createTrainingDummy()
-    local existingDummy = workspace:FindFirstChild("CampsiteTrainingDummy")
-    if existingDummy then return end
+local function createCombatTestCharacter()
+    if workspace:FindFirstChild("CombatTestFemale") then return end
 
-    local dummyModel = Instance.new("Model")
-    dummyModel.Name = "CampsiteTrainingDummy"
+    local roster = sharedFolder:FindFirstChild("SurvivorRoster")
+    local femaleTemplate = roster and roster:FindFirstChild("Maya")
+    if not femaleTemplate or not femaleTemplate:IsA("Model") then
+        warn("Combat test character not spawned: SurvivorRoster.Maya is unavailable")
+        return
+    end
 
-    local dummyPos = Vector3.new(10, 10.5, -420) -- Clearing beside campfire
+    local character = femaleTemplate:Clone()
+    character.Name = "CombatTestFemale"
+    local animateScript = character:FindFirstChild("Animate")
+    if animateScript and animateScript:IsA("BaseScript") then
+        animateScript:Destroy()
+    end
+    character:SetAttribute("IsCombatTestCharacter", true)
+    character:SetAttribute("IsBlocking", true)
+    character:SetAttribute("IsGuardBroken", false)
+    character:SetAttribute("GuardStamina", DEFAULT_GUARD_STAMINA)
 
-    -- Root Part
-    local hrp = Instance.new("Part")
-    hrp.Name = "HumanoidRootPart"
-    hrp.Size = Vector3.new(2, 2, 1)
-    hrp.CFrame = CFrame.new(dummyPos + Vector3.new(0, 3, 0)) * CFrame.Angles(0, math.rad(-75), 0)
-    hrp.Transparency = 1
-    hrp.CanCollide = false
-    hrp.Anchored = false
-    hrp.Parent = dummyModel
-    dummyModel.PrimaryPart = hrp
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then
+        character:Destroy()
+        warn("Combat test character not spawned: Maya has no Humanoid")
+        return
+    end
 
-    -- Torso (Burlap padded punch dummy)
-    local torso = Instance.new("Part")
-    torso.Name = "UpperTorso"
-    torso.Size = Vector3.new(2.4, 2.8, 1.4)
-    torso.CFrame = hrp.CFrame
-    torso.Color = Color3.fromRGB(140, 115, 85) -- Coarse burlap canvas
-    torso.Material = Enum.Material.Fabric
-    torso.CanCollide = true
-    torso.Parent = dummyModel
-
-    local torsoWeld = Instance.new("WeldConstraint")
-    torsoWeld.Part0 = hrp
-    torsoWeld.Part1 = torso
-    torsoWeld.Parent = hrp
-
-    -- Head (Wooden carved post with straw band)
-    local head = Instance.new("Part")
-    head.Name = "Head"
-    head.Size = Vector3.new(1.4, 1.4, 1.4)
-    head.CFrame = hrp.CFrame * CFrame.new(0, 2.1, 0)
-    head.Color = Color3.fromRGB(115, 85, 60)
-    head.Material = Enum.Material.Wood
-    head.CanCollide = true
-    head.Parent = dummyModel
-
-    local headWeld = Instance.new("WeldConstraint")
-    headWeld.Part0 = hrp
-    headWeld.Part1 = head
-    headWeld.Parent = hrp
-
-    -- Base Stand (Heavy timber post anchored into the snow)
-    local standPost = Instance.new("Part")
-    standPost.Name = "StandPost"
-    standPost.Size = Vector3.new(0.8, 3.2, 0.8)
-    standPost.CFrame = hrp.CFrame * CFrame.new(0, -2.4, 0)
-    standPost.Color = Color3.fromRGB(70, 50, 35)
-    standPost.Material = Enum.Material.WoodPlanks
-    standPost.Anchored = true
-    standPost.CanCollide = true
-    standPost.Parent = dummyModel
-
-    -- Spring constraint to let the dummy sway and recoil dynamically when punched!
-    local attachment0 = Instance.new("Attachment")
-    attachment0.Position = Vector3.new(0, 1.4, 0)
-    attachment0.Parent = standPost
-
-    local attachment1 = Instance.new("Attachment")
-    attachment1.Position = Vector3.new(0, -1.0, 0)
-    attachment1.Parent = hrp
-
-    local spring = Instance.new("SpringConstraint")
-    spring.Attachment0 = attachment0
-    spring.Attachment1 = attachment1
-    spring.Stiffness = 3000
-    spring.Damping = 120
-    spring.FreeLength = 0.5
-    spring.LimitsEnabled = true
-    spring.MaxLength = 1.2
-    spring.Parent = hrp
-
-    local ballSocket = Instance.new("BallSocketConstraint")
-    ballSocket.Attachment0 = attachment0
-    ballSocket.Attachment1 = attachment1
-    ballSocket.LimitsEnabled = true
-    ballSocket.UpperAngle = 35
-    ballSocket.Parent = hrp
-
-    -- Humanoid for damage reception
-    local humanoid = Instance.new("Humanoid")
-    humanoid.MaxHealth = 100
-    humanoid.Health = 100
+    humanoid.DisplayName = "Maya - Combat Test"
+    humanoid.MaxHealth = 1000
+    humanoid.Health = humanoid.MaxHealth
+    humanoid.WalkSpeed = 0
+    humanoid.JumpPower = 0
+    humanoid.AutoRotate = false
+    humanoid.BreakJointsOnDeath = false
     humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-    humanoid.Parent = dummyModel
+    humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
 
-    -- Health Billboard
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "DummyHealthBar"
-    billboard.Size = UDim2.fromOffset(130, 24)
-    billboard.StudsOffset = Vector3.new(0, 2.4, 0)
-    billboard.AlwaysOnTop = true
-    billboard.MaxDistance = 45
-    billboard.Parent = head
-
-    local bgBar = Instance.new("Frame")
-    bgBar.Name = "BarBackground"
-    bgBar.Size = UDim2.new(1, 0, 0, 10)
-    bgBar.Position = UDim2.new(0, 0, 0.5, 0)
-    bgBar.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-    bgBar.BackgroundTransparency = 0.3
-    bgBar.BorderSizePixel = 0
-    bgBar.Parent = billboard
-
-    local bgCorner = Instance.new("UICorner")
-    bgCorner.CornerRadius = UDim.new(1, 0)
-    bgCorner.Parent = bgBar
-
-    local bgStroke = Instance.new("UIStroke")
-    bgStroke.Thickness = 1
-    bgStroke.Color = Color3.fromRGB(255, 160, 50)
-    bgStroke.Transparency = 0.5
-    bgStroke.Parent = bgBar
-
-    local fillBar = Instance.new("Frame")
-    fillBar.Name = "FillBar"
-    fillBar.Size = UDim2.new(1, 0, 1, 0)
-    fillBar.BackgroundColor3 = Color3.fromRGB(220, 60, 50)
-    fillBar.BorderSizePixel = 0
-    fillBar.Parent = bgBar
-
-    local fillCorner = Instance.new("UICorner")
-    fillCorner.CornerRadius = UDim.new(1, 0)
-    fillCorner.Parent = fillBar
-
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Name = "DummyTitle"
-    nameLabel.Size = UDim2.new(1, 0, 0, 12)
-    nameLabel.Position = UDim2.new(0, 0, 0, -12)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.Font = Enum.Font.GothamMedium
-    nameLabel.TextSize = 10
-    nameLabel.TextColor3 = Color3.fromRGB(255, 220, 180)
-    nameLabel.Text = "SPARRING DUMMY"
-    nameLabel.Parent = billboard
-
-    -- Auto-Regen logic
-    local lastHitTime = 0
-    humanoid.HealthChanged:Connect(function(newHealth)
-        lastHitTime = os.clock()
-        local healthPct = math.clamp(newHealth / humanoid.MaxHealth, 0, 1)
-        TweenService:Create(fillBar, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Size = UDim2.new(healthPct, 0, 1, 0),
-        }):Play()
-
-        if newHealth <= 0 then
-            task.delay(1.5, function()
-                humanoid.Health = humanoid.MaxHealth
-            end)
-        end
-    end)
-
-    task.spawn(function()
-        while dummyModel.Parent do
-            task.wait(0.5)
-            if humanoid.Health < humanoid.MaxHealth and os.clock() - lastHitTime > 3.0 then
-                humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + 15)
-            end
-        end
-    end)
-
-    dummyModel.Parent = workspace
+    character:PivotTo(CFrame.new(10, 13.5, -420) * CFrame.Angles(0, math.rad(-75), 0))
+    character.Parent = workspace
 end
 
--- Initialize dummy once world is ready
-task.defer(createTrainingDummy)
+task.defer(createCombatTestCharacter)

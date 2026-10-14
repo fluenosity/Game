@@ -6,7 +6,6 @@
     Developed for Fluenosity Studio.
 
     Features:
-    - Empty starting inventory for all players (StartingLoadout = {})
     - Map-wide wood pile scanner: auto-attaches ProximityPrompt to genuine woodland log piles
     - Strict 5 Wood Logs carry limit enforced across the player's entire inventory
     - In-camp Vintage Matchbox pickup on dedicated stone pedestal (auto-respawn for co-op)
@@ -74,6 +73,11 @@ end
 local function hasItem(player: Player, itemId: string): boolean
     local has = InventoryManager.HasItem(player, itemId)
     return has
+end
+
+local function isProtectedItem(itemId: string): boolean
+    local def = InventoryConfig.Items[itemId]
+    return def ~= nil and def.IsProtected == true
 end
 
 -- Add item to player inventory respecting stack sizes and unlocked slots
@@ -182,6 +186,7 @@ dropItemEvent.OnServerEvent:Connect(function(player: Player, slotIndex: number)
 
     local slot = inv[slotIndex]
     if not slot or slot.Count <= 0 then return end
+    if isProtectedItem(slot.Id) then return end
 
     local char = player.Character
     if not char or not char.PrimaryPart then return end
@@ -206,6 +211,7 @@ discardItemEvent.OnServerEvent:Connect(function(player: Player, slotIndex: numbe
 
     local slot = inv[slotIndex]
     if not slot then return end
+    if isProtectedItem(slot.Id) then return end
 
     inv[slotIndex] = nil
     syncInventoryEvent:FireClient(player, inv)
@@ -219,6 +225,7 @@ splitItemEvent.OnServerEvent:Connect(function(player: Player, slotIndex: number)
 
     local slot = inv[slotIndex]
     if not slot or slot.Count <= 1 then return end
+    if isProtectedItem(slot.Id) then return end
 
     local emptySlot: number? = nil
     for s = 1, (InventoryConfig.UNLOCKED_SLOTS or 9) do

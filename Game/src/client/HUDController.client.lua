@@ -813,7 +813,7 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
         vitalsInstance.SetHunger(currentHunger, maxHunger)
     end
 
-    -- Movement speed arbitration (Crouch = 8, Walk = 16, Sprint = 26, Attacking = 0)
+    -- Movement speed arbitration (attacks stay mobile; Crouch = 8, Walk = 16, Sprint = 26)
     local isAttacking = (activeCharacter and activeCharacter:GetAttribute("IsAttacking") == true)
     local isCrouched = (activeCharacter and activeCharacter:GetAttribute("IsCrouching") == true)
 
@@ -822,9 +822,7 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
         isFatigued = false
         if activeHumanoid then
             local targetSpeed = normalWalkSpeed
-            if isAttacking then
-                targetSpeed = 0
-            elseif isCrouched then
+            if isCrouched then
                 targetSpeed = 8
             elseif isSprinting then
                 targetSpeed = sprintWalkSpeed
@@ -874,9 +872,7 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
 
         if activeHumanoid then
             local targetSpeed = normalWalkSpeed
-            if isAttacking then
-                targetSpeed = 0
-            elseif isCrouched then
+            if isCrouched then
                 targetSpeed = 8
             elseif isFatigued then
                 targetSpeed = fatiguedWalkSpeed
@@ -1068,15 +1064,8 @@ UserInputService.InputEnded:Connect(function(input)
         isSprinting = false
         vitalsInstance.SetSprinting(false)
         if activeHumanoid and not isFatigued then
-            local isAttacking = activeCharacter and activeCharacter:GetAttribute("IsAttacking") == true
             local isCrouched = activeCharacter and activeCharacter:GetAttribute("IsCrouching") == true
-            if isAttacking then
-                activeHumanoid.WalkSpeed = 0
-            elseif isCrouched then
-                activeHumanoid.WalkSpeed = 8
-            else
-                activeHumanoid.WalkSpeed = normalWalkSpeed
-            end
+            activeHumanoid.WalkSpeed = isCrouched and 8 or normalWalkSpeed
         end
     end
 end)

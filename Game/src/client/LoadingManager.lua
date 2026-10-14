@@ -24,6 +24,7 @@ local player = Players.LocalPlayer
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local GameConfig = require(sharedFolder:WaitForChild("GameConfig"))
 local EnvironmentConfig = require(sharedFolder:WaitForChild("EnvironmentConfig"))
+local WardrobeConfig = require(sharedFolder:WaitForChild("SurvivorWardrobeConfig"))
 
 local LoadingManager = {}
 
@@ -115,7 +116,7 @@ local function ensureAtmosphericPostProcessing(): { Instance }
     return { atmo, cc, bloom, rays, sky }
 end
 
-function LoadingManager.LoadGame(loadingScreen: any, onCompleted: (() -> ())?)
+function LoadingManager.LoadGame(loadingScreen: any, onCompleted: (() -> ())?, selection: any?)
     task.spawn(function()
         -- 1. Initial State (5%)
         loadingScreen.SetProgress(0.06, "CONNECTING TO WILDERNESS...", "Establishing client replication channel...")
@@ -162,15 +163,30 @@ function LoadingManager.LoadGame(loadingScreen: any, onCompleted: (() -> ())?)
         -- 5. Phase 4: Character Physics & Spawn Stabilization (0.82 -> 0.96)
         loadingScreen.SetProgress(0.88, "CALIBRATING CHARACTER SURVIVAL STATE...", "Aligning camera & stabilizing character physics...")
         
-        -- Request spawn if character doesn't exist or gender changed
-        local selectedGender = player:GetAttribute("SelectedGender") or "Male"
-        local spawnEvent = sharedFolder:FindFirstChild("RequestSpawnCharacter") :: RemoteEvent?
+        -- The server validates the roster ID and every wardrobe item before spawning.
+        local cleanSelection = WardrobeConfig.ValidateSelection(selection)
+            or WardrobeConfig.GetDefaultSelection("Leo")
         local character = player.Character
-        if not character or player:GetAttribute("CurrentCharacterGender") ~= selectedGender then
-            if spawnEvent then
-                spawnEvent:FireServer(selectedGender)
+        if not character or player:GetAttribute("CurrentCharacterId") ~= cleanSelection.CharacterId then
+            local spawnFunction = sharedFolder:WaitForChild("RequestSpawnCharacter", 10)
+            if not spawnFunction or not spawnFunction:IsA("RemoteFunction") then
+                warn("[LoadingManager] RequestSpawnCharacter RemoteFunction is unavailable")
+                return
             end
-            character = player.CharacterAdded:Wait()
+
+            local ok, spawned, reason = pcall(function()
+                return spawnFunction:InvokeServer(cleanSelection)
+            end)
+            if not ok or spawned ~= true then
+                warn("[LoadingManager] Survivor spawn was rejected: " .. tostring(reason or spawned))
+                return
+            end
+
+            local previousCharacter = character
+            character = player.Character
+            if not character or character == previousCharacter then
+                character = player.CharacterAdded:Wait()
+            end
         end
         
         local humanoid = character:WaitForChild("Humanoid", 10) :: Humanoid?

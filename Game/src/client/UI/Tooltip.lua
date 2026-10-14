@@ -6,15 +6,19 @@
 
     Features:
     - Attach to any GuiObject with Tooltip.Attach(target, config)
-    - Auto-clamps to screen viewport bounds (responsive)
-    - Luxury frosted glass with specular border and category badge
+    - Auto-clamps to screen viewport bounds (responsive across all devices)
+    - Smart positioning:
+      * Top zone (<40% screen / headers / topbars): displays BELOW anchor so it never covers buttons
+      * Bottom zone (>=40% screen / hotbars / vitals): displays ABOVE anchor
+      * Horizontal alignment: right-aligns for buttons on right, left-aligns for left, centers for middle
+    - Dual styling:
+      * Simple tooltips (title-only icon buttons like [X]): ultra-compact glass pill auto-sized to text
+      * Rich tooltips (backpack/settings/hotbar): full glass card with category badge, description & hint
     - Smooth fade & micro-elevation ease
-    - Smart placement: shows BELOW anchor when near top 25% of screen
-      (fixes top-right widget tooltips stacking on the widget)
 ]]
 
-
 local TweenService = game:GetService("TweenService")
+local TextService = game:GetService("TextService")
 local Players = game:GetService("Players")
 local UITheme = require(script.Parent:WaitForChild("UITheme"))
 
@@ -66,134 +70,210 @@ function Tooltip.Attach(target: GuiObject, config: TooltipConfig)
             activeTooltipFrame = nil
         end
 
-        local tip = Instance.new("Frame")
-        tip.Name = "FloatingTooltip"
-        tip.Size = UDim2.new(0, config.Width or 240, 0, 0)
-        tip.AutomaticSize = Enum.AutomaticSize.Y
-        tip.BackgroundColor3 = UITheme.Colors.GlassModal
-        tip.BackgroundTransparency = 0.20
-        tip.BorderSizePixel = 0
-        tip.ZIndex = 1000
+        local isSimple = (config.Description == nil or config.Description == "")
+            and (config.ActionHint == nil or config.ActionHint == "")
+            and (config.Category == nil or config.Category == "")
 
-        UITheme.ApplyGlass(tip, {
-            CornerRadius = 10,
-            StrokeColor = UITheme.Colors.BorderGlass,
-            StrokeThickness = 1.2,
-        })
+        -- Determine exact dimensions
+        local tipWidth: number
+        local tipHeight: number
 
-        local padding = Instance.new("UIPadding")
-        padding.PaddingTop = UDim.new(0, 10)
-        padding.PaddingBottom = UDim.new(0, 10)
-        padding.PaddingLeft = UDim.new(0, 14)
-        padding.PaddingRight = UDim.new(0, 14)
-        padding.Parent = tip
-
-        local layout = Instance.new("UIListLayout")
-        layout.FillDirection = Enum.FillDirection.Vertical
-        layout.Padding = UDim.new(0, 4)
-        layout.SortOrder = Enum.SortOrder.LayoutOrder
-        layout.Parent = tip
-
-        -- Header row (Title + Category Badge)
-        local headerRow = Instance.new("Frame")
-        headerRow.Name = "HeaderRow"
-        headerRow.Size = UDim2.new(1, 0, 0, 18)
-        headerRow.BackgroundTransparency = 1
-        headerRow.LayoutOrder = 1
-        headerRow.Parent = tip
-
-        local title = Instance.new("TextLabel")
-        title.Name = "Title"
-        title.Size = UDim2.new(1, config.Category and -70 or 0, 1, 0)
-        title.BackgroundTransparency = 1
-        title.Font = UITheme.Fonts.Heading
-        title.Text = config.Title
-        title.TextColor3 = UITheme.Colors.TextPrimary
-        title.TextSize = 13
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        title.TextTruncate = Enum.TextTruncate.AtEnd
-        title.Parent = headerRow
-
-        if config.Category then
-            local badge = Instance.new("TextLabel")
-            badge.Name = "Category"
-            badge.Size = UDim2.new(0, 65, 1, 0)
-            badge.Position = UDim2.new(1, -65, 0, 0)
-            badge.BackgroundTransparency = 1
-            badge.Font = UITheme.Fonts.Heading
-            badge.Text = config.Category
-            badge.TextColor3 = UITheme.Colors.EmberHot
-            badge.TextSize = 9
-            badge.TextXAlignment = Enum.TextXAlignment.Right
-            badge.Parent = headerRow
+        if isSimple then
+            local textBounds = TextService:GetTextSize(
+                config.Title,
+                11,
+                UITheme.Fonts.Heading,
+                Vector2.new(300, 30)
+            )
+            tipWidth = config.Width or math.clamp(math.ceil(textBounds.X) + 20, 60, 240)
+            tipHeight = 26
+        else
+            tipWidth = config.Width or 220
+            local descHeight = 0
+            if config.Description and config.Description ~= "" then
+                local descBounds = TextService:GetTextSize(
+                    config.Description,
+                    11,
+                    UITheme.Fonts.Body,
+                    Vector2.new(tipWidth - 24, 1000)
+                )
+                descHeight = math.ceil(descBounds.Y) + 4
+            end
+            local hintHeight = (config.ActionHint and config.ActionHint ~= "") and 18 or 0
+            tipHeight = 20 + 18 + descHeight + hintHeight
         end
 
-        -- Description Body
-        if config.Description and config.Description ~= "" then
-            local desc = Instance.new("TextLabel")
-            desc.Name = "Desc"
-            desc.Size = UDim2.new(1, 0, 0, 0)
-            desc.AutomaticSize = Enum.AutomaticSize.Y
-            desc.BackgroundTransparency = 1
-            desc.Font = UITheme.Fonts.Body
-            desc.Text = config.Description
-            desc.TextColor3 = UITheme.Colors.TextSecondary
-            desc.TextSize = 11
-            desc.TextWrapped = true
-            desc.TextXAlignment = Enum.TextXAlignment.Left
-            desc.LayoutOrder = 2
-            desc.Parent = tip
-        end
-
-        -- Action Hint Footer
-        if config.ActionHint and config.ActionHint ~= "" then
-            local hint = Instance.new("TextLabel")
-            hint.Name = "ActionHint"
-            hint.Size = UDim2.new(1, 0, 0, 14)
-            hint.BackgroundTransparency = 1
-            hint.Font = UITheme.Fonts.Caption
-            hint.Text = "⚡ " .. config.ActionHint
-            hint.TextColor3 = UITheme.Colors.EmberGold
-            hint.TextSize = 10
-            hint.TextXAlignment = Enum.TextXAlignment.Left
-            hint.LayoutOrder = 3
-            hint.Parent = tip
-        end
-
-        -- Smart position calculation with viewport clamping
+        -- Viewport & position calculations
         local targetPos = target.AbsolutePosition
         local targetSize = target.AbsoluteSize
         local camera = workspace.CurrentCamera
         local vpSize = camera and camera.ViewportSize or Vector2.new(1920, 1080)
 
-        local tipWidth = config.Width or 220
-        local TOOLTIP_H_EST = 85
-        local MARGIN = 10
         local SCREEN_MARGIN = 12
+        local GAP = 8
+        local GUI_INSET = 36 -- Topbar inset height
 
-        -- Horizontal: center-align on target, clamped to screen edges
-        local posX = targetPos.X + (targetSize.X / 2) - (tipWidth / 2)
+        -- Horizontal calculation:
+        -- Right zone (>65%) -> right-align with target (prevents spilling left over adjacent buttons)
+        -- Left zone (<35%) -> left-align with target
+        -- Middle zone -> center-align on target
+        local targetCenterX = targetPos.X + (targetSize.X / 2)
+        local screenFractionX = targetCenterX / vpSize.X
+        local posX: number
+
+        if screenFractionX > 0.65 then
+            posX = (targetPos.X + targetSize.X) - tipWidth
+        elseif screenFractionX < 0.35 then
+            posX = targetPos.X
+        else
+            posX = targetCenterX - (tipWidth / 2)
+        end
+
         posX = math.clamp(posX, SCREEN_MARGIN, vpSize.X - tipWidth - SCREEN_MARGIN)
 
-        -- Vertical: show BELOW when anchor is in top 25% of screen
-        -- (fixes top-right widget tooltips covering buttons)
-        local isNearTop = (targetPos.Y / vpSize.Y) < 0.25
+        -- Vertical calculation:
+        -- Top zone (<40% screen, headers, top widgets): ALWAYS place BELOW anchor so it never covers buttons
+        -- Lower zone (>=40% screen, hotbars, inventory): place ABOVE anchor
+        local targetCenterY = targetPos.Y + (targetSize.Y / 2)
+        local screenFractionY = targetCenterY / vpSize.Y
+        local spaceAbove = targetPos.Y - GUI_INSET
+
+        local placeBelow = (screenFractionY < 0.40) or (spaceAbove < (tipHeight + GAP))
         local posY: number
         local animOffsetY: number
 
-        if isNearTop then
-            posY = targetPos.Y + targetSize.Y + MARGIN
+        if placeBelow then
+            posY = targetPos.Y + targetSize.Y + GAP
             animOffsetY = -4
         else
-            posY = targetPos.Y - TOOLTIP_H_EST - MARGIN
+            posY = targetPos.Y - tipHeight - GAP
             animOffsetY = 4
-            if posY < SCREEN_MARGIN then
-                posY = targetPos.Y + targetSize.Y + MARGIN
+            if posY < GUI_INSET then
+                posY = targetPos.Y + targetSize.Y + GAP
                 animOffsetY = -4
             end
         end
 
-        posY = math.clamp(posY, SCREEN_MARGIN, vpSize.Y - TOOLTIP_H_EST - SCREEN_MARGIN)
+        posY = math.clamp(posY, GUI_INSET, vpSize.Y - tipHeight - SCREEN_MARGIN)
+
+        -- Construct Floating Tooltip Frame
+        local tip = Instance.new("Frame")
+        tip.Name = "FloatingTooltip"
+        tip.Size = UDim2.fromOffset(tipWidth, tipHeight)
+        tip.BackgroundColor3 = Color3.fromRGB(12, 14, 18)
+        tip.BackgroundTransparency = 0.15
+        tip.BorderSizePixel = 0
+        tip.ZIndex = 1000
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, isSimple and 6 or 8)
+        corner.Parent = tip
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = Color3.fromRGB(255, 255, 255)
+        stroke.Transparency = 0.84
+        stroke.Thickness = 1
+        stroke.Parent = tip
+
+        if isSimple then
+            local padding = Instance.new("UIPadding")
+            padding.PaddingTop = UDim.new(0, 3)
+            padding.PaddingBottom = UDim.new(0, 3)
+            padding.PaddingLeft = UDim.new(0, 10)
+            padding.PaddingRight = UDim.new(0, 10)
+            padding.Parent = tip
+
+            local title = Instance.new("TextLabel")
+            title.Name = "Title"
+            title.Size = UDim2.fromScale(1, 1)
+            title.BackgroundTransparency = 1
+            title.Font = UITheme.Fonts.Heading
+            title.Text = config.Title
+            title.TextColor3 = UITheme.Colors.TextPrimary
+            title.TextSize = 11
+            title.TextXAlignment = Enum.TextXAlignment.Center
+            title.TextYAlignment = Enum.TextYAlignment.Center
+            title.Parent = tip
+        else
+            local padding = Instance.new("UIPadding")
+            padding.PaddingTop = UDim.new(0, 10)
+            padding.PaddingBottom = UDim.new(0, 10)
+            padding.PaddingLeft = UDim.new(0, 12)
+            padding.PaddingRight = UDim.new(0, 12)
+            padding.Parent = tip
+
+            local layout = Instance.new("UIListLayout")
+            layout.FillDirection = Enum.FillDirection.Vertical
+            layout.Padding = UDim.new(0, 4)
+            layout.SortOrder = Enum.SortOrder.LayoutOrder
+            layout.Parent = tip
+
+            -- Header row (Title + Category Badge)
+            local headerRow = Instance.new("Frame")
+            headerRow.Name = "HeaderRow"
+            headerRow.Size = UDim2.new(1, 0, 0, 18)
+            headerRow.BackgroundTransparency = 1
+            headerRow.LayoutOrder = 1
+            headerRow.Parent = tip
+
+            local title = Instance.new("TextLabel")
+            title.Name = "Title"
+            title.Size = UDim2.new(1, config.Category and -70 or 0, 1, 0)
+            title.BackgroundTransparency = 1
+            title.Font = UITheme.Fonts.Heading
+            title.Text = config.Title
+            title.TextColor3 = UITheme.Colors.TextPrimary
+            title.TextSize = 13
+            title.TextXAlignment = Enum.TextXAlignment.Left
+            title.TextTruncate = Enum.TextTruncate.AtEnd
+            title.Parent = headerRow
+
+            if config.Category then
+                local badge = Instance.new("TextLabel")
+                badge.Name = "Category"
+                badge.Size = UDim2.new(0, 65, 1, 0)
+                badge.Position = UDim2.new(1, -65, 0, 0)
+                badge.BackgroundTransparency = 1
+                badge.Font = UITheme.Fonts.Heading
+                badge.Text = config.Category
+                badge.TextColor3 = UITheme.Colors.EmberHot
+                badge.TextSize = 9
+                badge.TextXAlignment = Enum.TextXAlignment.Right
+                badge.Parent = headerRow
+            end
+
+            -- Description Body
+            if config.Description and config.Description ~= "" then
+                local desc = Instance.new("TextLabel")
+                desc.Name = "Desc"
+                desc.Size = UDim2.new(1, 0, 0, 0)
+                desc.AutomaticSize = Enum.AutomaticSize.Y
+                desc.BackgroundTransparency = 1
+                desc.Font = UITheme.Fonts.Body
+                desc.Text = config.Description
+                desc.TextColor3 = UITheme.Colors.TextSecondary
+                desc.TextSize = 11
+                desc.TextWrapped = true
+                desc.TextXAlignment = Enum.TextXAlignment.Left
+                desc.LayoutOrder = 2
+                desc.Parent = tip
+            end
+
+            -- Action Hint Footer
+            if config.ActionHint and config.ActionHint ~= "" then
+                local hint = Instance.new("TextLabel")
+                hint.Name = "ActionHint"
+                hint.Size = UDim2.new(1, 0, 0, 14)
+                hint.BackgroundTransparency = 1
+                hint.Font = UITheme.Fonts.Caption
+                hint.Text = "⚡ " .. config.ActionHint
+                hint.TextColor3 = UITheme.Colors.EmberGold
+                hint.TextSize = 10
+                hint.TextXAlignment = Enum.TextXAlignment.Left
+                hint.LayoutOrder = 3
+                hint.Parent = tip
+            end
+        end
 
         tip.Position = UDim2.new(0, posX, 0, posY + animOffsetY)
         tip.Parent = layer
@@ -202,7 +282,7 @@ function Tooltip.Attach(target: GuiObject, config: TooltipConfig)
         -- Smooth entrance
         tip.BackgroundTransparency = 1
         TweenService:Create(tip, UITheme.Tweens.Fast, {
-            BackgroundTransparency = 0.20,
+            BackgroundTransparency = 0.15,
             Position = UDim2.new(0, posX, 0, posY),
         }):Play()
     end

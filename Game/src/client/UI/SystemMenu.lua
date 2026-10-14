@@ -113,51 +113,41 @@ function SystemMenu.Create(parent: Instance, callbacks: SystemMenuCallbacks): Sy
     headerBar.ZIndex = 93
     headerBar.Parent = windowFrame
 
-    -- 1. Left of Header: Title & Subtitle with Ember Icon
+    -- 1. Left of Header: Title with Ember Icon (subtext removed)
     local titleFrame = Instance.new("Frame")
     titleFrame.Name = "TitleFrame"
-    titleFrame.Size = UDim2.new(0, 260, 1, 0)
+    titleFrame.Size = UDim2.new(0, 180, 1, 0)
     titleFrame.Position = UDim2.fromOffset(0, 0)
     titleFrame.BackgroundTransparency = 1
     titleFrame.ZIndex = 94
     titleFrame.Parent = headerBar
 
     local headerIcon = IconPack.CreateIcon("settings", 20, UITheme.Colors.EmberPrimary, 0)
-    headerIcon.Position = UDim2.fromOffset(0, 4)
+    headerIcon.Position = UDim2.new(0, 0, 0.5, 0)
+    headerIcon.AnchorPoint = Vector2.new(0, 0.5)
     headerIcon.ZIndex = 95
     headerIcon.Parent = titleFrame
 
     local logoText = Instance.new("TextLabel")
     logoText.Name = "LogoText"
-    logoText.Size = UDim2.new(1, -30, 0, 20)
-    logoText.Position = UDim2.fromOffset(28, 2)
+    logoText.Size = UDim2.new(1, -28, 1, 0)
+    logoText.Position = UDim2.new(0, 28, 0.5, 0)
+    logoText.AnchorPoint = Vector2.new(0, 0.5)
     logoText.BackgroundTransparency = 1
     logoText.Font = UITheme.Fonts.Heading
-    logoText.Text = "SETTINGS"
+    logoText.Text = "MENU"
     logoText.TextColor3 = UITheme.Colors.TextPrimary
     logoText.TextSize = 14
     logoText.TextXAlignment = Enum.TextXAlignment.Left
+    logoText.TextYAlignment = Enum.TextYAlignment.Center
     logoText.ZIndex = 95
     logoText.Parent = titleFrame
-
-    local statusDot = Instance.new("TextLabel")
-    statusDot.Name = "StatusTag"
-    statusDot.Size = UDim2.new(1, -30, 0, 14)
-    statusDot.Position = UDim2.fromOffset(28, 24)
-    statusDot.BackgroundTransparency = 1
-    statusDot.Font = UITheme.Fonts.Tag
-    statusDot.Text = "●  SURVIVAL & PREFERENCES"
-    statusDot.TextColor3 = UITheme.Colors.EmberHot
-    statusDot.TextSize = 9
-    statusDot.TextXAlignment = Enum.TextXAlignment.Left
-    statusDot.ZIndex = 95
-    statusDot.Parent = titleFrame
 
     -- 2. Center of Header: Horizontal Navigation Tabs
     local tabsContainer = Instance.new("Frame")
     tabsContainer.Name = "TabsContainer"
-    tabsContainer.Size = UDim2.new(1, -540, 1, 0)
-    tabsContainer.Position = UDim2.fromOffset(270, 0)
+    tabsContainer.Size = UDim2.new(1, -500, 1, 0)
+    tabsContainer.Position = UDim2.fromOffset(190, 0)
     tabsContainer.BackgroundTransparency = 1
     tabsContainer.ZIndex = 94
     tabsContainer.Parent = headerBar

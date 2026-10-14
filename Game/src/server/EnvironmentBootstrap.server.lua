@@ -25,7 +25,8 @@ local function anchorWorldStructures()
         if desc:IsA("BasePart") and not desc:IsA("Terrain") then
             local model = desc:FindFirstAncestorOfClass("Model")
             local isCharacter = model and Players:GetPlayerFromCharacter(model)
-            if not isCharacter then
+            local isCombatTestCharacter = model and model:GetAttribute("IsCombatTestCharacter") == true
+            if not isCharacter and not isCombatTestCharacter then
                 desc.Anchored = true
             end
         end

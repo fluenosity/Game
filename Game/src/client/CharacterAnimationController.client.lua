@@ -5,26 +5,15 @@
     for "Don't Let the Fire Die". Developed for Fluenosity Studio.
 
     Features:
-    - 100% Procedural R15 Joint Blending (Spring Damper Kinematics)
-      * Works flawlessly on both AnimationConstraint and Motor6D joints
-      * 0% asset permission failures (immune to Roblox catalog permission blocks)
-    - Full Combat Suite:
-      * M1 light punches alternate right and left hands
-      * Punches blend over the active R15 run, jump, and fall pose
-      * Right-Click Heavy Punch: MouseButton2 (Hold >= 0.4s) power windup & knockback thrust
-      * Block / Guard: [F] or Hold M2 defensive raised-arm guard (-70% incoming damage)
+    - Combat keeps its existing hit, damage, and guard logic without character action poses
     - Locomotion & Body Awareness:
       * FPP Natural Idle: Breathing cycle with relaxed hands visible in peripheral view
       * FPP Walk Cycle (WalkSpeed = 16): Rhythmic arm swing & synchronized footsteps
       * FPP Sprint Cycle (WalkSpeed = 26): Forward lean, high-energy arm pump, dynamic camera sway
-      * FPP Jump & Apex: Upward momentum takeoff & suspended airborne float
-      * FPP Heavy Landing: Deep camera compression dip & hands bracing downward
+      * Lightweight airborne movement with the default R15 jump/fall animation
+      * Soft landing feedback without a landing pose or movement lock
       * FPP Crouch / Sneak [C] / [LeftCtrl]: Low-profile sneak posture & lowered camera
-    - World & Survival Interactions:
-      * Lighting Campfire: Kneel down & match striking gesture
-      * Ground Pickup: One-handed downward scoop to harvest wood/stone
-      * Drop Item Throw: Forward toss gesture when discarding/dropping inventory items
-      * Death Collapse: Forward knee drop and snow faceplant on Health = 0
+    - Interaction and combat actions do not replace the character movement animations
 ]]
 
 local Players = game:GetService("Players")
@@ -57,6 +46,8 @@ if not meleeHitReplicatedEvent then
     meleeHitReplicatedEvent.Name = "MeleeHitReplicated"
     meleeHitReplicatedEvent.Parent = sharedFolder
 end
+local meleeBlockRequestEvent = sharedFolder:WaitForChild("MeleeBlockRequest") :: RemoteEvent
+local meleeBlockStateEvent = sharedFolder:WaitForChild("MeleeBlockState") :: RemoteEvent
 
 -- -----------------------------------------------------------------------------
 -- 2. SPRING DAMPER SYSTEM (Euler-Maruyama Integration)
@@ -95,7 +86,7 @@ local function createSpring(stiffness: number, damping: number, initialPos: Vect
 end
 
 -- Camera Springs for visceral recoil and procedural bob
-local camRecoilSpring = createSpring(280, 26) -- Punch kick recoil (Pitch, Yaw, Roll)
+local camRecoilSpring = createSpring(280, 26) -- Weapon impact recoil (Pitch, Yaw, Roll)
 local camDipSpring = createSpring(180, 18)    -- Vertical landing/crouch dip
 local camSwaySpring = createSpring(140, 16)   -- Horizontal locomotion sway
 
@@ -110,8 +101,8 @@ local lastYaw = 0
 -- -----------------------------------------------------------------------------
 -- 3. ANIMATION STATE MACHINE
 -- -----------------------------------------------------------------------------
-type CombatAction = "None" | "PunchRight" | "PunchLeft" | "HeavyWindup" | "HeavyRelease" | "Block"
-type SpecialAction = "None" | "GroundPickup" | "CampfireLight" | "ItemThrow" | "HeavyLanding" | "Died"
+type CombatAction = "None" | "WeaponLightA" | "WeaponLightB" | "WeaponHeavy" | "Block"
+type SpecialAction = "None" | "GroundPickup" | "CampfireLight" | "ItemThrow" | "GuardBreak" | "Died"
 
 local state = {
     IsCrouching = false,
@@ -122,12 +113,9 @@ local state = {
 
     -- Combat
     CombatAction = "None" :: CombatAction,
-    ComboStep = 0, -- 0 = right hand next, 1 = left hand next
-    LastLightPunchTime = 0,
-    M2PressStartTime = 0,
-    IsM2Held = false,
+    LastHeavyAttackTime = 0,
+    NextLightSwing = 1,
     IsFHeld = false,
-    HeavyCharged = false,
 
     -- Action timings
     ActionStartTime = 0,
@@ -141,6 +129,7 @@ local state = {
     LastFootstepClock = 0,
     LastVerticalVelocity = 0,
 }
+local attackToken = 0
 
 -- -----------------------------------------------------------------------------
 -- 4. CHARACTER JOINTS & VISIBILITY REGISTRY
@@ -185,11 +174,59 @@ local joints: JointSet = {
     LeftAnkle = nil,
 }
 
+local LIGHT_ATTACK_DURATION = 0.50
+local HEAVY_ATTACK_DURATION = 0.52
+local HEAVY_ATTACK_COOLDOWN = 0.85
+local GUARD_BREAK_DURATION = 1.25
+local function getEquippedCombatWeapon(character: Model): Tool?
+    for _, child in ipairs(character:GetChildren()) do
+        if child:IsA("Tool") and child:GetAttribute("CombatWeapon") == true then
+            return child
+        end
+    end
+    return nil
+end
+
+local function playWeaponSound(character: Model?, soundName: string): boolean
+    if not character then return false end
+    local tool = getEquippedCombatWeapon(character)
+    local handle = tool and tool:FindFirstChild("Handle")
+    local sound = handle and handle:FindFirstChild(soundName)
+    if sound and sound:IsA("Sound") then
+        sound:Play()
+        return true
+    end
+    return false
+end
+
 local armParts: { BasePart } = {}
 local headParts: { BasePart } = {}
+local characterConnections: { RBXScriptConnection } = {}
 local defaultHipHeight = 2.0
 local locomotionTracks: { [string]: AnimationTrack } = {}
+local activeLocomotionName: string? = nil
 local currentLeanZ = 0
+
+local function getLocomotionTrack(trackName: string?): AnimationTrack?
+    if not trackName then return nil end
+    return locomotionTracks[trackName]
+end
+
+local function transitionLocomotion(trackName: string?, fadeTime: number?)
+    if activeLocomotionName == trackName then return end
+
+    local fade = fadeTime or 0.14
+    local previousTrack = getLocomotionTrack(activeLocomotionName)
+    if previousTrack and previousTrack.IsPlaying then
+        previousTrack:Stop(fade)
+    end
+
+    activeLocomotionName = trackName
+    local nextTrack = getLocomotionTrack(trackName)
+    if nextTrack then
+        nextTrack:Play(fade)
+    end
+end
 
 -- Safely set Transform on either AnimationConstraint or Motor6D
 local function setJointTransform(joint: Instance?, cf: CFrame)
@@ -208,9 +245,47 @@ local function applyJointOffset(joint: Instance?, offset: CFrame)
 end
 
 local function cacheCharacterJoints(char: Model)
+    for _, connection in ipairs(characterConnections) do
+        connection:Disconnect()
+    end
+    table.clear(characterConnections)
+
+    state.IsCrouching = char:GetAttribute("IsCrouching") == true
+    state.IsSprinting = false
+    state.IsGrounded = true
+    state.IsAirborne = false
+    state.IsDead = false
+    state.CombatAction = "None"
+    state.LastHeavyAttackTime = 0
+    state.NextLightSwing = 1
+    state.SpecialAction = "None"
+    state.ActionStartTime = 0
+    state.ActionDuration = 0
+    attackToken += 1
+    for _, track in pairs(locomotionTracks) do
+        if track.IsPlaying then track:Stop(0) end
+        track:Destroy()
+    end
+    table.clear(locomotionTracks)
+    activeLocomotionName = nil
+    crouchSpring:Reset(Vector3.new(state.IsCrouching and 1 or 0, 0, 0))
+    sprintSpring:Reset(Vector3.zero)
+    landingSpring:Reset(Vector3.zero)
+
     activeCharacter = char
     activeHumanoid = char:WaitForChild("Humanoid", 10) :: Humanoid?
     activeHRP = char:WaitForChild("HumanoidRootPart", 10) :: BasePart?
+
+    table.insert(characterConnections, char:GetAttributeChangedSignal("IsGuardBroken"):Connect(function()
+        if char:GetAttribute("IsGuardBroken") == true then
+            state.CombatAction = "None"
+            state.SpecialAction = "GuardBreak"
+            state.SpecialStartTime = os.clock()
+            state.SpecialDuration = GUARD_BREAK_DURATION
+        elseif state.SpecialAction == "GuardBreak" then
+            state.SpecialAction = "None"
+        end
+    end))
 
     table.clear(armParts)
     table.clear(headParts)
@@ -260,10 +335,11 @@ local function cacheCharacterJoints(char: Model)
 
         local animator = activeHumanoid:WaitForChild("Animator", 5) :: Animator?
         local kfsProvider = game:GetService("KeyframeSequenceProvider")
-        -- Optional authored locomotion tracks; procedural R15 offsets remain the fallback.
+        -- Locomotion KeyframeSequences are stored in Workspace so Rojo won't drop the
+        -- Studio-imported source clips. Only named movement tracks are played below.
         local locoFolder = sharedFolder:FindFirstChild("LocomotionAnimations")
+            or workspace:FindFirstChild("LocomotionAnimations")
         if animator and locoFolder then
-            table.clear(locomotionTracks)
             for _, item in ipairs(locoFolder:GetChildren()) do
                 pcall(function()
                     local track: AnimationTrack? = nil
@@ -291,24 +367,24 @@ local function cacheCharacterJoints(char: Model)
                 p.Color = skinTone
             end
         end
-        activeHumanoid.Died:Connect(function()
+        table.insert(characterConnections, activeHumanoid.Died:Connect(function()
             state.IsDead = true
             state.SpecialAction = "Died"
             state.SpecialStartTime = os.clock()
             state.SpecialDuration = 999
             AudioManager.Play("HeavyLanding")
-        end)
+        end))
 
         -- Synchronize crouch state if HUDController or sprint alters it
-        char:GetAttributeChangedSignal("IsCrouching"):Connect(function()
+        table.insert(characterConnections, char:GetAttributeChangedSignal("IsCrouching"):Connect(function()
             local isC = char:GetAttribute("IsCrouching") == true
             if state.IsCrouching ~= isC then
                 state.IsCrouching = isC
                 crouchSpring.Target = Vector3.new(isC and 1 or 0, 0, 0)
             end
-        end)
+        end))
 
-        activeHumanoid.StateChanged:Connect(function(oldState, newState)
+        table.insert(characterConnections, activeHumanoid.StateChanged:Connect(function(oldState, newState)
             if newState == Enum.HumanoidStateType.Jumping or newState == Enum.HumanoidStateType.Freefall then
                 state.IsAirborne = true
                 state.IsGrounded = false
@@ -316,26 +392,16 @@ local function cacheCharacterJoints(char: Model)
                 state.IsAirborne = false
                 state.IsGrounded = true
 
-                -- Euphoria-level landing absorption
+                -- Brief, subtle feedback only. Landing never holds or locks the character.
                 local impactSpeed = math.abs(state.LastVerticalVelocity)
                 if impactSpeed > 6 then
-                    local force = math.clamp(impactSpeed * 0.38, 2.0, 16)
+                    local force = math.clamp(impactSpeed * 0.12, 0.8, 3.5)
                     landingSpring.Velocity = Vector3.new(0, force, 0)
-                    camDipSpring.Velocity = Vector3.new(0, -force * 0.40, 0)
-
-                    -- Only trigger severe HeavyLanding freeze if falling from a cliff (> 60 studs/s)
-                    if impactSpeed > 60 then
-                        state.SpecialAction = "HeavyLanding"
-                        state.SpecialStartTime = os.clock()
-                        state.SpecialDuration = 0.45
-                        camRecoilSpring.Velocity = Vector3.new(math.rad(4.5), 0, 0)
-                        AudioManager.Play("HeavyLanding")
-                    else
-                        AudioManager.Play("Footstep")
-                    end
+                    camDipSpring.Velocity = Vector3.new(0, -force * 0.16, 0)
+                    AudioManager.Play("Footstep")
                 end
             end
-        end)
+        end))
     end
 end
 
@@ -352,13 +418,18 @@ if meleeHitReplicatedEvent then
     meleeHitReplicatedEvent.OnClientEvent:Connect(function(attacker, targetChar, attackType, hitPos, soundName, isBlocked)
         if attacker == player then
             -- Attacker feedback
-            if soundName and soundName ~= "" then
+            local hasToolHitSound = playWeaponSound(attacker.Character, if isBlocked then "Block" else "Hit")
+            if hasToolHitSound then
+                return
+            elseif soundName and soundName ~= "" then
                 AudioManager.Play(soundName)
             else
                 AudioManager.Play(isBlocked and "BlockImpact" or "PunchImpact")
             end
         elseif targetChar == activeCharacter then
-            AudioManager.Play(isBlocked and "BlockImpact" or "PunchImpact")
+            if not playWeaponSound(attacker.Character, if isBlocked then "Block" else "Hit") then
+                AudioManager.Play(isBlocked and "BlockImpact" or "PunchImpact")
+            end
         end
     end)
 end
@@ -407,12 +478,13 @@ ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt,
 end)
 
 -- -----------------------------------------------------------------------------
--- 7. INPUT HANDLING (M1 Light Attack Combo, Block [F], Crouch [C])
+-- 7. INPUT HANDLING (M1 Combo, Heavy [E], Block [F]/Right Mouse, Crouch [C])
 -- -----------------------------------------------------------------------------
 local function isInputEligible(): boolean
     if player:GetAttribute("IsInGameplay") ~= true then return false end
     if state.IsDead then return false end
     if state.SpecialAction ~= "None" then return false end
+    if state.CombatAction == "Block" then return false end
     if ModalManager.IsAnyModalOpen() then return false end
     if UserInputService:GetFocusedTextBox() ~= nil then return false end
     return true
@@ -422,6 +494,7 @@ local function setBlocking(isBlocking: boolean)
     if activeCharacter then
         activeCharacter:SetAttribute("IsBlocking", isBlocking)
     end
+    meleeBlockRequestEvent:FireServer(isBlocking)
     if isBlocking then
         state.CombatAction = "Block"
     elseif state.CombatAction == "Block" then
@@ -429,35 +502,33 @@ local function setBlocking(isBlocking: boolean)
     end
 end
 
-local attackToken = 0
-
-local function executeAttack(attackType: string)
-    if not activeCharacter or not camera or not activeHumanoid then return end
+local function executeAttack(attackType: string, duration: number)
+    if not activeCharacter or not getEquippedCombatWeapon(activeCharacter) or not camera or not activeHumanoid then return end
     local hrp = activeCharacter:FindFirstChild("HumanoidRootPart") :: BasePart?
     if not hrp then return end
 
     -- Flag as attacking (Animate script reads this to prevent idle snap)
-    state.IsSprinting = false
     activeCharacter:SetAttribute("IsAttacking", true)
-    -- NOTE: WalkSpeed is NOT zeroed -- character keeps moving through the punch
+    -- Keep movement free; the weapon swing animation blends over locomotion.
 
-    local currentToken = os.clock()
-    attackToken = currentToken
-    local duration = 0.34
-
+    attackToken += 1
+    local currentToken = attackToken
     task.delay(duration, function()
         if attackToken == currentToken and activeHumanoid and not state.IsDead then
             if activeCharacter then
                 activeCharacter:SetAttribute("IsAttacking", false)
             end
-            if state.CombatAction == "PunchRight" or state.CombatAction == "PunchLeft" then
+            if state.CombatAction == "WeaponLightA" or state.CombatAction == "WeaponLightB"
+                or state.CombatAction == "WeaponHeavy" then
                 state.CombatAction = "None"
             end
         end
     end)
 
-    -- Subtle gentle audio swish (no camera recoil kick)
-    AudioManager.Play("PunchSwing")
+    -- Use equipped tool swing audio when present, with a quiet fallback.
+    if not playWeaponSound(activeCharacter, "Swing") then
+        AudioManager.Play("PunchSwing")
+    end
 
     -- Spatial raycast forward to find target instance and impact point (for open-world hitting)
     local rayParams = RaycastParams.new()
@@ -478,38 +549,46 @@ local function executeAttack(attackType: string)
 end
 
 local function triggerLightAttack()
-    if not isInputEligible() then return end
+    if not isInputEligible() or not activeCharacter or not getEquippedCombatWeapon(activeCharacter) then return end
     local now = os.clock()
+    local attackType = if state.NextLightSwing == 1 then "WeaponLightA" else "WeaponLightB"
+    state.NextLightSwing = if state.NextLightSwing == 1 then 2 else 1
+    state.CombatAction = attackType
+    state.ActionStartTime = now
+    state.ActionDuration = LIGHT_ATTACK_DURATION
+    executeAttack(attackType, LIGHT_ATTACK_DURATION)
+end
 
-    if state.ComboStep == 1 and (now - state.LastLightPunchTime < 0.70) then
-        -- Second hit: left hand
-        state.CombatAction = "PunchLeft"
-        state.ActionStartTime = now
-        state.ActionDuration = 0.34
-        state.ComboStep = 0
-        state.LastLightPunchTime = now
-        executeAttack("PunchLeft")
-    else
-        -- First hit: right hand
-        state.CombatAction = "PunchRight"
-        state.ActionStartTime = now
-        state.ActionDuration = 0.34
-        state.LastLightPunchTime = now
-        state.ComboStep = 1
-        executeAttack("PunchRight")
-    end
+local function triggerHeavyAttack()
+    if not isInputEligible() or not activeCharacter or not getEquippedCombatWeapon(activeCharacter) then return end
+    local now = os.clock()
+    if now - state.LastHeavyAttackTime < HEAVY_ATTACK_COOLDOWN then return end
+
+    state.CombatAction = "WeaponHeavy"
+    state.ActionStartTime = now
+    state.ActionDuration = HEAVY_ATTACK_DURATION
+    state.LastHeavyAttackTime = now
+    executeAttack("WeaponHeavy", HEAVY_ATTACK_DURATION)
 end
 
 UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
     if not isInputEligible() then return end
-    if gameProcessed and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+    if gameProcessed
+        and input.UserInputType ~= Enum.UserInputType.MouseButton1
+        and input.UserInputType ~= Enum.UserInputType.MouseButton2 then
         return
     end
 
-    -- Guard / Block [F]
-    if input.KeyCode == Enum.KeyCode.F then
+    -- Guard / Block [F] or right mouse button.
+    if input.KeyCode == Enum.KeyCode.F or input.UserInputType == Enum.UserInputType.MouseButton2 then
         state.IsFHeld = true
         setBlocking(true)
+        return
+    end
+
+    -- Heavy weapon swing uses E so right mouse remains available for blocking.
+    if input.KeyCode == Enum.KeyCode.E then
+        triggerHeavyAttack()
         return
     end
 
@@ -526,7 +605,7 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
         return
     end
 
-    -- M1: short, alternating right-left light punches while movement continues.
+    -- M1: one quick, equipped weapon swing while movement continues.
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         triggerLightAttack()
         return
@@ -534,13 +613,21 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 end)
 
 UserInputService.InputEnded:Connect(function(input: InputObject)
-    -- Guard / Block [F] Release
-    if input.KeyCode == Enum.KeyCode.F then
+    -- Guard / Block [F] or right mouse release.
+    if input.KeyCode == Enum.KeyCode.F or input.UserInputType == Enum.UserInputType.MouseButton2 then
         state.IsFHeld = false
         if state.CombatAction == "Block" then
             setBlocking(false)
         end
         return
+    end
+end)
+
+meleeBlockStateEvent.OnClientEvent:Connect(function(acceptedBlocking: boolean)
+    if acceptedBlocking or state.CombatAction ~= "Block" then return end
+    state.CombatAction = "None"
+    if activeCharacter then
+        activeCharacter:SetAttribute("IsBlocking", false)
     end
 end)
 
@@ -560,8 +647,9 @@ local function easeInOutQuad(t: number): number
     end
 end
 
--- Kinematics calculated at RenderPriority.Character.Value + 1 (Runs after Animator, ensuring procedural joint transforms are never overwritten)
-RunService:BindToRenderStep("ProceduralLocomotion", Enum.RenderPriority.Character.Value + 1, function(dt: number)
+-- Motor6D/AnimationConstraint.Transform is overwritten by Animator before PreSimulation.
+-- Compose the game's original procedural movement layer over its locomotion tracks.
+RunService.PreSimulation:Connect(function(dt: number)
     if not activeCharacter or not activeHumanoid or not activeHRP then return end
 
     local now = os.clock()
@@ -580,7 +668,7 @@ RunService:BindToRenderStep("ProceduralLocomotion", Enum.RenderPriority.Characte
 
     local effectiveSprintAlpha = currentSprintAlpha
 
-    -- Progress locomotion clock (freeze during active punch to hold stride mid-strike)
+    -- Keep the locomotion clock moving through weapon swings so the stride never snaps.
     if isMoving then
         local strideFreq = 7.5 + (currentSprintAlpha * 4.0) -- Smooth 7.5 -> 11.5 rad/s
         state.WalkCycleClock = state.WalkCycleClock + dt * strideFreq
@@ -645,30 +733,53 @@ RunService:BindToRenderStep("ProceduralLocomotion", Enum.RenderPriority.Characte
     local forwardLeanTarget = isTPP and math.rad(2 + effectiveSprintAlpha * 4) or 0
     if not isMoving then forwardLeanTarget = 0 end
     if isTPP then
-        forwardLeanTarget = forwardLeanTarget + math.rad(landingComp * 10)
+        forwardLeanTarget = forwardLeanTarget + math.rad(landingComp * 2)
     end
 
     leanSpring.Target = Vector3.new(forwardLeanTarget, 0, bankTarget)
     local leanPos = leanSpring:Update(dt)
     currentLeanZ = isTPP and leanPos.Z or 0
 
-    -- 60 FPS Locomotion Animation Blending
-    local runTrack = locomotionTracks["Running60fps"] or locomotionTracks["Run"]
-    local leftTurnTrack = locomotionTracks["leftTurn60fps"] or locomotionTracks["LeftTurn"]
-    local rightTurnTrack = locomotionTracks["RightTurn60fps"] or locomotionTracks["RightTurn"]
+    -- The original movement set is used regardless of equipped tools.
+    local humanoidState = activeHumanoid:GetState()
+    local nextLocomotion: string? = nil
+    local usesDefaultStateAnimation = humanoidState == Enum.HumanoidStateType.Climbing
+        or humanoidState == Enum.HumanoidStateType.Swimming
+        or humanoidState == Enum.HumanoidStateType.Seated
+        or humanoidState == Enum.HumanoidStateType.Dead
 
-    if runTrack then
-        if isMoving and (wantsSprint or horizontalSpeed > 16) then
-            if not runTrack.IsPlaying then
-                runTrack:Play(0.18)
-            end
-            runTrack:AdjustSpeed(math.clamp(horizontalSpeed / 16, 0.8, 1.4))
+    if not usesDefaultStateAnimation then
+        if humanoidState == Enum.HumanoidStateType.Jumping or humanoidState == Enum.HumanoidStateType.Freefall then
+            -- Let the character's original Animate script handle the air states.
+            nextLocomotion = nil
+        elseif isMoving then
+            nextLocomotion = (wantsSprint or horizontalSpeed >= 19) and "Run" or "Walk"
         else
-            if runTrack.IsPlaying then
-                runTrack:Stop(0.2)
-            end
+            nextLocomotion = "Idle"
         end
     end
+
+    local selectedLocomotionTrack = getLocomotionTrack(nextLocomotion)
+    if selectedLocomotionTrack and selectedLocomotionTrack.Length <= 0 then
+        selectedLocomotionTrack = nil
+    end
+    local authoredLocomotionActive = selectedLocomotionTrack ~= nil
+    if authoredLocomotionActive then
+        transitionLocomotion(nextLocomotion)
+        local activeTrack = selectedLocomotionTrack :: AnimationTrack
+        local playbackSpeed = 1
+        if nextLocomotion == "Walk" then
+            playbackSpeed = math.clamp(horizontalSpeed / 14.5, 0.78, 1.45)
+        elseif nextLocomotion == "Run" then
+            playbackSpeed = math.clamp(horizontalSpeed / 20, 0.9, 1.45)
+        end
+        activeTrack:AdjustSpeed(playbackSpeed)
+    else
+        transitionLocomotion(nil)
+    end
+
+    local leftTurnTrack = locomotionTracks["leftTurn60fps"] or locomotionTracks["LeftTurn"]
+    local rightTurnTrack = locomotionTracks["RightTurn60fps"] or locomotionTracks["RightTurn"]
 
     if leftTurnTrack then
         if isMoving and yawDelta > 0.04 then
@@ -720,18 +831,18 @@ RunService:BindToRenderStep("ProceduralLocomotion", Enum.RenderPriority.Characte
         lAnkleOffset = lAnkleOffset * CFrame.Angles(math.rad(28 * crouchAlpha), 0, 0)
     end
 
-    -- 2. Landing Impact Absorption (Euphoria suspension)
+    -- 2. Soft landing compression; it fades immediately and never blocks movement.
     if landingComp > 0.001 then
-        rootOffset = rootOffset * CFrame.new(0, -landingComp * 0.85, 0)
-        rKneeOffset = rKneeOffset * CFrame.Angles(math.rad(-landingComp * 42), 0, 0)
-        lKneeOffset = lKneeOffset * CFrame.Angles(math.rad(-landingComp * 42), 0, 0)
-        waistOffset = waistOffset * CFrame.Angles(math.rad(landingComp * 14), 0, 0)
+        rootOffset = rootOffset * CFrame.new(0, -landingComp * 0.18, 0)
+        rKneeOffset = rKneeOffset * CFrame.Angles(math.rad(-landingComp * 12), 0, 0)
+        lKneeOffset = lKneeOffset * CFrame.Angles(math.rad(-landingComp * 12), 0, 0)
+        waistOffset = waistOffset * CFrame.Angles(math.rad(landingComp * 4), 0, 0)
     end
 
     -- Small additive gait polish keeps movement readable without replacing the rig's
-    -- authored walk/run cycle. Punches leave this phase running continuously.
+    -- authored walk/run cycle. Weapon swings leave this phase running continuously.
     local runAlpha = isMoving and math.clamp(horizontalSpeed / 12, 0, 1) or 0
-    if runAlpha > 0.001 then
+    if runAlpha > 0.001 and not (authoredLocomotionActive and (nextLocomotion == "Walk" or nextLocomotion == "Run")) then
         local legSwing = math.sin(state.WalkCycleClock) * math.rad(12 * runAlpha)
         local kneeLift = math.max(math.cos(state.WalkCycleClock), 0) * math.rad(16 * runAlpha)
         rHipOffset = rHipOffset * CFrame.Angles(legSwing, 0, 0)
@@ -740,20 +851,11 @@ RunService:BindToRenderStep("ProceduralLocomotion", Enum.RenderPriority.Characte
         lKneeOffset = lKneeOffset * CFrame.Angles(-math.max(-math.cos(state.WalkCycleClock), 0) * math.rad(16 * runAlpha), 0, 0)
     end
 
-    -- 3. Airborne Suspension (Legs trail slightly)
-    if state.IsAirborne then
-        rHipOffset = rHipOffset * CFrame.Angles(math.rad(-10), 0, math.rad(4))
-        lHipOffset = lHipOffset * CFrame.Angles(math.rad(-10), 0, math.rad(-4))
-        rKneeOffset = rKneeOffset * CFrame.Angles(math.rad(-16), 0, 0)
-        lKneeOffset = lKneeOffset * CFrame.Angles(math.rad(-16), 0, 0)
-    end
-
     -- 4. Dynamic turn banking applied to root (TPP only, ultra-mild)
     if isTPP and math.abs(leanPos.Z) > 0.0001 then
         rootOffset = rootOffset * CFrame.Angles(0, 0, leanPos.Z * 0.3)
     end
 
-    -- Apply lower body offsets multiplicatively on top of Animator's base pose
     applyJointOffset(joints.Root, rootOffset)
     applyJointOffset(joints.RightHip, rHipOffset)
     applyJointOffset(joints.LeftHip, lHipOffset)
@@ -784,11 +886,6 @@ RunService:BindToRenderStep("ProceduralLocomotion", Enum.RenderPriority.Characte
             lShoulderBase = CFrame.Angles(math.rad(14), math.rad(10), math.rad(-12))
             rElbowBase = CFrame.Angles(math.rad(28), 0, 0)
             lElbowBase = CFrame.Angles(math.rad(28), 0, 0)
-        elseif state.IsAirborne then
-            rShoulderBase = CFrame.Angles(math.rad(28), math.rad(-12), math.rad(18))
-            lShoulderBase = CFrame.Angles(math.rad(28), math.rad(12), math.rad(-18))
-            rElbowBase = CFrame.Angles(math.rad(22), 0, 0)
-            lElbowBase = CFrame.Angles(math.rad(22), 0, 0)
         end
     else
         -- FIRST-PERSON PERSPECTIVE (FPP): Viewmodel ready posture visible in camera
@@ -805,11 +902,6 @@ RunService:BindToRenderStep("ProceduralLocomotion", Enum.RenderPriority.Characte
             lShoulderBase = CFrame.Angles(math.rad(82), math.rad(34), math.rad(-24))
             rElbowBase = CFrame.Angles(math.rad(-112), math.rad(20), 0)
             lElbowBase = CFrame.Angles(math.rad(-112), math.rad(-20), 0)
-        elseif state.IsAirborne then
-            rShoulderBase = CFrame.Angles(math.rad(90), math.rad(-20), math.rad(18))
-            lShoulderBase = CFrame.Angles(math.rad(90), math.rad(20), math.rad(-18))
-            rElbowBase = CFrame.Angles(math.rad(-45), 0, 0)
-            lElbowBase = CFrame.Angles(math.rad(-45), 0, 0)
         elseif isMoving then
             local swingAmp = 16 + (effectiveSprintAlpha * 14)
             local armSwing = math.rad(walkStride * swingAmp)
@@ -827,124 +919,9 @@ RunService:BindToRenderStep("ProceduralLocomotion", Enum.RenderPriority.Characte
     end
 
     ----------------------------------------------------------------------------
-    -- OVERLAY: COMBAT ACTIONS (alternating light punches, Block)
-    ----------------------------------------------------------------------------
-    if state.CombatAction == "PunchRight" or state.CombatAction == "PunchLeft" then
-        local progress = math.clamp((now - state.ActionStartTime) / state.ActionDuration, 0, 1)
-        local punchAlpha = if progress < 0.22
-            then easeOutCubic(progress / 0.22)
-            else easeOutCubic((1 - progress) / 0.78)
-        local isRightPunch = state.CombatAction == "PunchRight"
-        local side = isRightPunch and -1 or 1
-        local shoulderOffset = CFrame.Angles(math.rad(34 * punchAlpha), math.rad(side * 6 * punchAlpha), math.rad(side * -4 * punchAlpha))
-        local elbowOffset = CFrame.Angles(math.rad(-16 * punchAlpha), 0, 0)
-        local wristOffset = CFrame.Angles(math.rad(-4 * punchAlpha), 0, math.rad(side * 4 * punchAlpha))
-        local guardShoulderOffset = CFrame.Angles(math.rad(10 * punchAlpha), math.rad(-side * 3 * punchAlpha), 0)
-        local guardElbowOffset = CFrame.Angles(math.rad(-8 * punchAlpha), 0, 0)
-
-        if isTPP then
-            -- Add the strike to the Animator's current run, jump, or fall pose.
-            local activeShoulder = isRightPunch and joints.RightShoulder or joints.LeftShoulder
-            local activeElbow = isRightPunch and joints.RightElbow or joints.LeftElbow
-            local activeWrist = isRightPunch and joints.RightWrist or joints.LeftWrist
-            local guardShoulder = isRightPunch and joints.LeftShoulder or joints.RightShoulder
-            local guardElbow = isRightPunch and joints.LeftElbow or joints.RightElbow
-            applyJointOffset(activeShoulder, shoulderOffset)
-            applyJointOffset(activeElbow, elbowOffset)
-            applyJointOffset(activeWrist, wristOffset)
-            applyJointOffset(guardShoulder, guardShoulderOffset)
-            applyJointOffset(guardElbow, guardElbowOffset)
-        elseif isRightPunch then
-            rShoulderBase = rShoulderBase * shoulderOffset
-            rElbowBase = rElbowBase * elbowOffset
-            rWristBase = rWristBase * wristOffset
-            lShoulderBase = lShoulderBase * guardShoulderOffset
-            lElbowBase = lElbowBase * guardElbowOffset
-        else
-            lShoulderBase = lShoulderBase * shoulderOffset
-            lElbowBase = lElbowBase * elbowOffset
-            lWristBase = lWristBase * wristOffset
-            rShoulderBase = rShoulderBase * guardShoulderOffset
-            rElbowBase = rElbowBase * guardElbowOffset
-        end
-        applyJointOffset(joints.Waist, CFrame.Angles(math.rad(2 * punchAlpha), math.rad(side * 7 * punchAlpha), 0))
-
-    elseif state.CombatAction == "Block" then
-        local guardRS = CFrame.Angles(math.rad(104), math.rad(-32), math.rad(22))
-        local guardRE = CFrame.Angles(math.rad(-125), math.rad(18), 0)
-        local guardRW = CFrame.Angles(0, math.rad(45), 0)
-
-        local guardLS = CFrame.Angles(math.rad(104), math.rad(32), math.rad(-22))
-        local guardLE = CFrame.Angles(math.rad(-125), math.rad(-18), 0)
-        local guardLW = CFrame.Angles(0, math.rad(-45), 0)
-
-        rShoulderBase = rShoulderBase:Lerp(guardRS, 0.85)
-        rElbowBase = rElbowBase:Lerp(guardRE, 0.85)
-        rWristBase = rWristBase:Lerp(guardRW, 0.85)
-
-        lShoulderBase = lShoulderBase:Lerp(guardLS, 0.85)
-        lElbowBase = lElbowBase:Lerp(guardLE, 0.85)
-        lWristBase = lWristBase:Lerp(guardLW, 0.85)
-    end
-
-    ----------------------------------------------------------------------------
-    -- OVERLAY: SPECIAL INTERACTIONS (Pickup, Campfire, Throw, HeavyLanding, Death)
-    ----------------------------------------------------------------------------
-    if state.SpecialAction == "GroundPickup" then
-        local p = math.clamp((now - state.SpecialStartTime) / state.SpecialDuration, 0, 1)
-        local scoopAlpha = (p < 0.45) and (p / 0.45) or (1 - (p - 0.45) / 0.55)
-        scoopAlpha = easeInOutQuad(scoopAlpha)
-
-        local scoopShoulder = CFrame.Angles(math.rad(25), math.rad(-15), math.rad(10))
-        local scoopElbow = CFrame.Angles(math.rad(-20), 0, 0)
-        rShoulderBase = rShoulderBase:Lerp(scoopShoulder, scoopAlpha)
-        rElbowBase = rElbowBase:Lerp(scoopElbow, scoopAlpha)
-        applyJointOffset(joints.Waist, CFrame.Angles(math.rad(scoopAlpha * 14), 0, 0))
-
-    elseif state.SpecialAction == "CampfireLight" then
-        local p = math.clamp((now - state.SpecialStartTime) / state.SpecialDuration, 0, 1)
-        local matchAlpha = easeInOutQuad(math.clamp(p * 2, 0, 1))
-
-        local boxShoulder = CFrame.Angles(math.rad(78), math.rad(18), math.rad(-10))
-        local boxElbow = CFrame.Angles(math.rad(-90), 0, 0)
-        lShoulderBase = lShoulderBase:Lerp(boxShoulder, matchAlpha)
-        lElbowBase = lElbowBase:Lerp(boxElbow, matchAlpha)
-
-        local strikeProgress = math.clamp((p - 0.25) / 0.5, 0, 1)
-        local strikeStroke = math.sin(strikeProgress * math.pi)
-        local strikeShoulder = CFrame.Angles(math.rad(82) + math.rad(strikeStroke * 18), math.rad(-14), 0)
-        rShoulderBase = rShoulderBase:Lerp(strikeShoulder, matchAlpha)
-
-    elseif state.SpecialAction == "ItemThrow" then
-        local p = math.clamp((now - state.SpecialStartTime) / state.SpecialDuration, 0, 1)
-        local throwAlpha = (p < 0.4) and (p / 0.4) or (1 - (p - 0.4) / 0.6)
-        throwAlpha = easeOutCubic(throwAlpha)
-
-        local tossShoulder = CFrame.Angles(math.rad(95), math.rad(-10), math.rad(8))
-        local tossElbow = CFrame.Angles(math.rad(-15), 0, 0)
-        rShoulderBase = rShoulderBase:Lerp(tossShoulder, throwAlpha)
-        rElbowBase = rElbowBase:Lerp(tossElbow, throwAlpha)
-
-    elseif state.SpecialAction == "HeavyLanding" then
-        local p = math.clamp((now - state.SpecialStartTime) / state.SpecialDuration, 0, 1)
-        local landAlpha = (1 - p) * easeOutCubic(1 - p)
-
-        local braceRS = CFrame.Angles(math.rad(45), math.rad(-22), math.rad(24))
-        local braceLS = CFrame.Angles(math.rad(45), math.rad(22), math.rad(-24))
-        rShoulderBase = rShoulderBase:Lerp(braceRS, landAlpha * 0.7)
-        lShoulderBase = lShoulderBase:Lerp(braceLS, landAlpha * 0.7)
-
-    elseif state.SpecialAction == "Died" then
-        rShoulderBase = CFrame.Angles(math.rad(15), math.rad(-30), math.rad(40))
-        lShoulderBase = CFrame.Angles(math.rad(15), math.rad(30), math.rad(-40))
-        rElbowBase = CFrame.Angles(math.rad(-25), 0, 0)
-        lElbowBase = CFrame.Angles(math.rad(-25), 0, 0)
-    end
-
-    ----------------------------------------------------------------------------
     -- APPLY PROCEDURAL ARM TRANSFORMS
     ----------------------------------------------------------------------------
-    if not isTPP or crouchAlpha > 0.001 or state.SpecialAction ~= "None" or state.CombatAction == "Block" then
+    if not isTPP or crouchAlpha > 0.001 then
         setJointTransform(joints.RightShoulder, rShoulderBase)
         setJointTransform(joints.RightElbow, rElbowBase)
         setJointTransform(joints.RightWrist, rWristBase)
@@ -1017,6 +994,7 @@ RunService.RenderStepped:Connect(function(dt: number)
         local bankRollCF = isTPP and CFrame.Angles(0, 0, -currentLeanZ * 0.2) or CFrame.identity
         camera.CFrame = camera.CFrame * recoilCF * bankRollCF
     end
+
 end)
 
 return CharacterAnimationController

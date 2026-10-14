@@ -17,6 +17,7 @@ export type ItemDefinition = {
     MaxStack: number,
     IsEquippable: boolean,
     IsUsable: boolean,
+    IsProtected: boolean?,
     IconName: string, -- Lucide vector icon identifier
     AccentColor: Color3, -- Vector duotone tint color
     Stats: {
@@ -255,7 +256,7 @@ InventoryConfig.Items = {
     },
 } :: { [string]: ItemDefinition }
 
--- Starting loadout: completely empty for every player as requested:
+-- No signature weapon is granted; the survival loadout starts empty.
 InventoryConfig.StartingLoadout = {} :: { [number]: InventoryItem? }
 
 return InventoryConfig

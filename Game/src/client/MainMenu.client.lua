@@ -31,6 +31,7 @@ local EmberParticles = require(script.Parent:WaitForChild("EmberParticles"))
 local CampfireEmblem = require(script.Parent:WaitForChild("CampfireEmblem"))
 local LoadingManager = require(script.Parent:WaitForChild("LoadingManager"))
 local AudioManager = require(script.Parent:WaitForChild("AudioManager"))
+local SurvivorWardrobe = require(script.Parent:WaitForChild("SurvivorWardrobe"))
 
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local GameConfig = require(sharedFolder:WaitForChild("GameConfig"))
@@ -411,6 +412,7 @@ end
 -- REUSABLE CINEMATIC LOADING SCREEN COMPONENT
 --------------------------------------------------------------------------------
 local loadingScreen = UI.LoadingScreen.Create(screenGui)
+local wardrobeScreen = SurvivorWardrobe.Create(screenGui, UI, UITheme)
 
 --------------------------------------------------------------------------------
 -- MODALS (SETTINGS & CREDITS)
@@ -613,9 +615,7 @@ quoteText.Parent = quoteBox
 --------------------------------------------------------------------------------
 -- RIGHT SURVIVOR SELECTION PANEL (Dedicated Luxury Character Selection)
 --------------------------------------------------------------------------------
-local selectedGender = player:GetAttribute("SelectedGender") or "Male"
-player:SetAttribute("SelectedGender", selectedGender)
-player:SetAttribute("CurrentCharacterGender", selectedGender)
+local selectedGender = "Male"
 
 rightArea = UI.Panel.Create({
     Name = "RightSurvivorArea",
@@ -876,8 +876,6 @@ local function wireCardEvents(cardData: any, gender: string)
     local function selectThisGender()
         if selectedGender ~= gender then
             selectedGender = gender
-            player:SetAttribute("SelectedGender", gender)
-            player:SetAttribute("CurrentCharacterGender", gender)
             updateSurvivorCards()
             UI.Theme.PlayClick()
         end
@@ -915,6 +913,51 @@ wireCardEvents(femaleCard, "Female")
 -- INTERACTIVE NAV ACTIONS (ORDER: 1. PLAY, 2. SETTINGS, 3. CREDITS)
 --------------------------------------------------------------------------------
 -- 1. PLAY Action (Primary Glassmorphic button with Lucide Flame Icon)
+local function beginGame(selection: any)
+    local fadeTime = reducedMotionEnabled and 0.25 or 0.4
+    local fadeInfo = TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+    -- Fade the main menu navigation after the wardrobe has been confirmed.
+    local leftSlide = TweenService:Create(leftArea, fadeInfo, {
+        Position = UDim2.new(leftArea.Position.X.Scale, leftArea.Position.X.Offset - 60, leftArea.Position.Y.Scale, leftArea.Position.Y.Offset),
+    })
+    leftSlide:Play()
+
+    for _, desc in ipairs(safeArea:GetDescendants()) do
+        if desc:IsA("TextLabel") then
+            TweenService:Create(desc, fadeInfo, { TextTransparency = 1 }):Play()
+        elseif desc:IsA("UIStroke") then
+            TweenService:Create(desc, fadeInfo, { Transparency = 1 }):Play()
+        elseif desc:IsA("Frame") or desc:IsA("TextButton") then
+            TweenService:Create(desc, fadeInfo, { BackgroundTransparency = 1 }):Play()
+        end
+    end
+
+    loadingScreen.Show({
+        Status = "CONNECTING TO FOREST SECTOR...",
+        Tip = "The campfire is your only safe haven. When it dies, the forest claims you.",
+        Progress = 0.05,
+        Detail = "Preloading environment assets & compiling shaders...",
+    })
+
+    LoadingManager.LoadGame(loadingScreen, function()
+        hasIntroCompleted = true
+        emberSystem:Destroy()
+        emblem:Destroy()
+        if bgVideo then
+            bgVideo:Pause()
+            bgVideo:Destroy()
+        end
+        wardrobeScreen.Destroy()
+        screenGui:Destroy()
+        player:SetAttribute("IsInGameplay", true)
+        setCharacterControlsEnabled(true)
+        if camera then
+            camera.CameraType = Enum.CameraType.Custom
+        end
+    end, selection)
+end
+
 local navPlay = UI.Button.Create({
     Text = "PLAY",
     Subtext = "ENTER WILDERNESS",
@@ -927,56 +970,10 @@ local navPlay = UI.Button.Create({
     OnClick = function()
         if isBusy then return end
         isBusy = true
-
-        local fadeTime = reducedMotionEnabled and 0.25 or 0.4
-        local fadeInfo = TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-
-        -- 1. Smoothly fade out menu navigation
-        local leftSlide = TweenService:Create(leftArea, fadeInfo, {
-            Position = UDim2.new(leftArea.Position.X.Scale, leftArea.Position.X.Offset - 60, leftArea.Position.Y.Scale, leftArea.Position.Y.Offset),
-        })
-        leftSlide:Play()
-
-        if rightArea then
-            local rightSlide = TweenService:Create(rightArea, fadeInfo, {
-                Position = UDim2.new(rightArea.Position.X.Scale, rightArea.Position.X.Offset + 60, rightArea.Position.Y.Scale, rightArea.Position.Y.Offset),
-            })
-            rightSlide:Play()
-        end
-
-        for _, desc in ipairs(safeArea:GetDescendants()) do
-            if desc:IsA("TextLabel") then
-                TweenService:Create(desc, fadeInfo, { TextTransparency = 1 }):Play()
-            elseif desc:IsA("UIStroke") then
-                TweenService:Create(desc, fadeInfo, { Transparency = 1 }):Play()
-            elseif desc:IsA("Frame") or desc:IsA("TextButton") then
-                TweenService:Create(desc, fadeInfo, { BackgroundTransparency = 1 }):Play()
-            end
-        end
-
-        -- 2. Fade in Cinematic Loading Screen with Glowing Progress Bar
-        loadingScreen.Show({
-            Status = "CONNECTING TO FOREST SECTOR...",
-            Tip = "The campfire is your only safe haven. When it dies, the forest claims you.",
-            Progress = 0.05,
-            Detail = "Preloading environment assets & compiling shaders...",
-        })
-
-        -- 3. Run production-grade LoadingManager pipeline
-        LoadingManager.LoadGame(loadingScreen, function()
-            hasIntroCompleted = true
-            emberSystem:Destroy()
-            emblem:Destroy()
-            if bgVideo then
-                bgVideo:Pause()
-                bgVideo:Destroy()
-            end
-            screenGui:Destroy()
-            player:SetAttribute("IsInGameplay", true)
-            setCharacterControlsEnabled(true)
-            if camera then
-                camera.CameraType = Enum.CameraType.Custom
-            end
+        wardrobeScreen.Open(function()
+            isBusy = false
+        end, function(selection)
+            beginGame(selection)
         end)
     end,
 })
@@ -1109,13 +1106,7 @@ local function runCinematicIntro()
     ----------------------------------------------------------------------------
     leftArea.Visible = true
     if rightArea then
-        rightArea.Visible = true
-        local targetRightPos = rightArea.Position
-        local startRightPos = UDim2.new(targetRightPos.X.Scale, targetRightPos.X.Offset + 50, targetRightPos.Y.Scale, targetRightPos.Y.Offset)
-        rightArea.Position = startRightPos
-        TweenService:Create(rightArea, TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Position = targetRightPos,
-        }):Play()
+        rightArea.Visible = false
     end
 
     local targetLeftPos = leftArea.Position

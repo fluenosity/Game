@@ -127,7 +127,6 @@ function IconButton.Create(config: IconButtonConfig): ImageButton
         local Tooltip = require(script.Parent:WaitForChild("Tooltip"))
         Tooltip.Attach(button, {
             Title = config.Tooltip,
-            Width = 160,
         })
     end
 

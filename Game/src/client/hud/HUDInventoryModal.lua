@@ -862,7 +862,7 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
                 spotGlow.BackgroundTransparency = 0.86
                 local rarity = def.Rarity or "COMMON"
                 lblSubRow.Text = string.upper(def.Category) .. "  |  " .. rarity
-                lblDesc.Text = def.Description
+                lblDesc.Text = def.Description .. (def.IsProtected and "\n\nBOUND LOADOUT ITEM" or "")
 
                 if def.Stats then
                     statsContainer.Visible = true
@@ -893,7 +893,11 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
                 end
 
                 -- Secondary action row layout: 3 buttons if stack > 1, 2 buttons if stack == 1
-                secondaryRow.Visible = true
+                secondaryRow.Visible = not def.IsProtected
+                if def.IsProtected then
+                    btnSplit.Visible = false
+                    btnEquip.Visible = false
+                end
                 if item.Count > 1 then
                     btnSplit.Visible = true
                     btnDrop.Size = UDim2.new(0.36, -4, 1, 0)

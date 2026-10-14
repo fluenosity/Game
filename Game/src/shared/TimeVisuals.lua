@@ -266,11 +266,14 @@ function TimeVisuals.Apply(hour: number, day: number)
 		sunRays.Enabled = (raysInt > 0.01)
 	end
 
-	-- 6. Animated Volumetric Clouds
+	-- 6. Animated Volumetric Clouds (Dynamic shape shifting & organic flow)
 	if clouds then
-		clouds.Cover = cloudCover
+		local t = os.clock() * 0.05
+		local shapeNoise = math.sin(t) * 0.04 + math.sin(t * 2.3) * 0.02
+		local densityNoise = math.cos(t * 0.7) * 0.03
+		clouds.Cover = math.clamp(cloudCover + shapeNoise, 0.45, 0.85)
 		clouds.Color = cloudColor
-		clouds.Density = cloudDensity
+		clouds.Density = math.clamp(cloudDensity + densityNoise, 0.58, 0.88)
 	end
 
 	-- 7. Horizon Mist Atmosphere

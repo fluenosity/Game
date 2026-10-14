@@ -35,13 +35,13 @@ local GameConfig = {
     -- 2. SKIP MAIN MENU
     -- If true: Bypasses the Main Menu screen and proceeds straight into the world with preloading.
     -- If false: Displays the interactive Main Menu until the player clicks "START GAME".
-    SKIP_MAIN_MENU = true,
+    SKIP_MAIN_MENU = false,
 
     -- 3. DIRECT SPAWN
     -- If true: The server automatically spawns the player character into the world immediately on join
     -- (Players.CharacterAutoLoads = true / instant LoadCharacter()).
     -- If false: The character only spawns when explicitly requested by clicking "PLAY".
-    DIRECT_SPAWN = true,
+    DIRECT_SPAWN = false,
 
     -- 4. FAST LOADING SCREEN
     -- If true: Skips or shortens artificial loading screen transitions for rapid testing.
