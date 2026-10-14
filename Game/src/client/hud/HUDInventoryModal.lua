@@ -25,6 +25,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local InventoryConfig = require(sharedFolder:WaitForChild("InventoryConfig"))
 local IconPack = require(sharedFolder:WaitForChild("IconPack"))
 local AudioManager = require(script.Parent.Parent:WaitForChild("AudioManager"))
+local UI = require(script.Parent.Parent:WaitForChild("UI"))
 
 export type InventoryItemData = {
     Id: string,
@@ -67,31 +68,17 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
     card.Size = UDim2.fromOffset(760, 490)
     card.Position = UDim2.fromScale(0.5, 0.52)
     card.AnchorPoint = Vector2.new(0.5, 0.5)
-    card.BackgroundColor3 = Color3.fromRGB(18, 17, 21)
-    card.BackgroundTransparency = 0.16
+    card.BackgroundColor3 = Color3.fromRGB(16, 15, 20)
+    card.BackgroundTransparency = 0.15
     card.BorderSizePixel = 0
     card.ClipsDescendants = true
     card.ZIndex = 81
     card.Parent = veil
 
-    local cardCorner = Instance.new("UICorner")
-    cardCorner.CornerRadius = UDim.new(0, 18)
-    cardCorner.Parent = card
-
-    local cardStroke = Instance.new("UIStroke")
-    cardStroke.Color = Color3.fromRGB(255, 255, 255)
-    cardStroke.Transparency = 0.88
-    cardStroke.Thickness = 1
-    cardStroke.Parent = card
-
-    -- Subtle inner dark gradient
-    local cardGrad = Instance.new("UIGradient")
-    cardGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 22, 28)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(13, 12, 15)),
+    UI.Theme.ApplyGlass(card, {
+        CornerRadius = 18,
+        StrokeTransparency = 0.82,
     })
-    cardGrad.Rotation = 45
-    cardGrad.Parent = card
 
     ----------------------------------------------------------------------------
     -- 1. TOP HEADER (Icon + SURVIVAL BACKPACK | 9 / 12 + Close X)
@@ -157,30 +144,17 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
     lblSlotCount.ZIndex = 85
     lblSlotCount.Parent = headerRight
 
-    -- Close Button with vector X icon
-    local btnClose = Instance.new("TextButton")
-    btnClose.Name = "CloseButton"
-    btnClose.Size = UDim2.fromOffset(26, 26)
-    btnClose.BackgroundTransparency = 1
-    btnClose.Text = ""
-    btnClose.AutoButtonColor = false
+    -- Close Button with modular UI.IconButton
+    local btnClose = UI.IconButton.Create({
+        IconName = "x",
+        IconSize = 14,
+        Size = UDim2.fromOffset(28, 28),
+        CornerRadius = 8,
+        Tooltip = "Close (B / ESC)",
+        Parent = headerRight,
+    })
     btnClose.LayoutOrder = 2
     btnClose.ZIndex = 85
-    btnClose.Parent = headerRight
-
-    local closeIcon = IconPack.CreateIcon("x", 14, Color3.fromRGB(180, 185, 195))
-    closeIcon.Name = "CloseIcon"
-    closeIcon.Position = UDim2.fromScale(0.5, 0.5)
-    closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-    closeIcon.ZIndex = 86
-    closeIcon.Parent = btnClose
-
-    btnClose.MouseEnter:Connect(function()
-        TweenService:Create(closeIcon, TweenInfo.new(0.15), { ImageColor3 = Color3.fromRGB(245, 160, 40) }):Play()
-    end)
-    btnClose.MouseLeave:Connect(function()
-        TweenService:Create(closeIcon, TweenInfo.new(0.15), { ImageColor3 = Color3.fromRGB(180, 185, 195) }):Play()
-    end)
 
     ----------------------------------------------------------------------------
     -- 2. MAIN BODY (Left Grid + Divider + Right Inspector with Action Buttons)
@@ -265,6 +239,11 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
         sStroke.Thickness = 1
         sStroke.Parent = slotBtn
 
+        -- Tactile scale handle for click micro-compression
+        local slotScale = Instance.new("UIScale")
+        slotScale.Scale = 1.0
+        slotScale.Parent = slotBtn
+
         -- Warm selection halo glow (Active only for selected slot)
         local selGlow = Instance.new("Frame")
         selGlow.Name = "Glow"
@@ -324,13 +303,16 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
         if not isLocked then
             slotBtn.Activated:Connect(function()
                 AudioManager.Play("Click")
+                TweenService:Create(slotScale, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.94 }):Play()
+                task.delay(0.08, function()
+                    TweenService:Create(slotScale, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1.0 }):Play()
+                end)
                 selectedSlotIndex = i
                 updateSlotVisuals()
                 updateInspector(i)
             end)
 
             slotBtn.MouseEnter:Connect(function()
-                AudioManager.Play("Hover")
                 if selectedSlotIndex ~= i then
                     TweenService:Create(sStroke, TweenInfo.new(0.12), {
                         Transparency = 0.65,
@@ -381,27 +363,6 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
         end
     end
 
-    -- -------------------------------------------------------------------------
-    -- VERTICAL HAIRLINE DIVIDER
-    -- -------------------------------------------------------------------------
-    local divider = Instance.new("Frame")
-    divider.Name = "Divider"
-    divider.Size = UDim2.new(0, 1, 1, 0)
-    divider.Position = UDim2.fromOffset(336, 0)
-    divider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    divider.BackgroundTransparency = 0.90
-    divider.BorderSizePixel = 0
-    divider.ZIndex = 83
-    divider.Parent = body
-
-    local divGrad = Instance.new("UIGradient")
-    divGrad.Rotation = 90
-    divGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.96),
-        NumberSequenceKeypoint.new(0.5, 0.86),
-        NumberSequenceKeypoint.new(1, 0.96),
-    })
-    divGrad.Parent = divider
 
     -- -------------------------------------------------------------------------
     -- RIGHT COLUMN: ITEM INSPECTOR & BIG CLICKABLE ACTION BUTTONS
@@ -596,6 +557,10 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
     btnEquip.ZIndex = 85
     btnEquip.Parent = actionArea
 
+    local eqScale = Instance.new("UIScale")
+    eqScale.Scale = 1.0
+    eqScale.Parent = btnEquip
+
     local eqCorner = Instance.new("UICorner")
     eqCorner.CornerRadius = UDim.new(0, 10)
     eqCorner.Parent = btnEquip
@@ -670,6 +635,10 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
     btnDrop.Text = ""
     btnDrop.ZIndex = 86
     btnDrop.Parent = secondaryRow
+
+    local drScale = Instance.new("UIScale")
+    drScale.Scale = 1.0
+    drScale.Parent = btnDrop
 
     local drCorner = Instance.new("UICorner")
     drCorner.CornerRadius = UDim.new(0, 8)
@@ -759,6 +728,10 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
     btnSplit.ZIndex = 86
     btnSplit.Parent = secondaryRow
 
+    local spScale = Instance.new("UIScale")
+    spScale.Scale = 1.0
+    spScale.Parent = btnSplit
+
     local spCorner = Instance.new("UICorner")
     spCorner.CornerRadius = UDim.new(0, 8)
     spCorner.Parent = btnSplit
@@ -819,6 +792,10 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
     btnDiscard.Text = ""
     btnDiscard.ZIndex = 86
     btnDiscard.Parent = secondaryRow
+
+    local discScale = Instance.new("UIScale")
+    discScale.Scale = 1.0
+    discScale.Parent = btnDiscard
 
     local discCorner = Instance.new("UICorner")
     discCorner.CornerRadius = UDim.new(0, 8)
@@ -1023,6 +1000,10 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
 
     btnEquip.Activated:Connect(function()
         AudioManager.Play("ItemEquip")
+        TweenService:Create(eqScale, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.96 }):Play()
+        task.delay(0.08, function()
+            TweenService:Create(eqScale, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1.0 }):Play()
+        end)
         if onEquipCallback then
             onEquipCallback(selectedSlotIndex)
         end
@@ -1030,6 +1011,10 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
 
     btnDrop.Activated:Connect(function()
         AudioManager.Play("ItemDrop")
+        TweenService:Create(drScale, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.96 }):Play()
+        task.delay(0.08, function()
+            TweenService:Create(drScale, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1.0 }):Play()
+        end)
         if onDropCallback then
             onDropCallback(selectedSlotIndex)
         end
@@ -1037,6 +1022,10 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
 
     btnSplit.Activated:Connect(function()
         AudioManager.Play("ItemSplit")
+        TweenService:Create(spScale, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.96 }):Play()
+        task.delay(0.08, function()
+            TweenService:Create(spScale, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1.0 }):Play()
+        end)
         if onSplitCallback then
             onSplitCallback(selectedSlotIndex)
         end
@@ -1044,6 +1033,10 @@ function HUDInventoryModal.Create(parent: Instance): HUDInventoryModalInstance
 
     btnDiscard.Activated:Connect(function()
         AudioManager.Play("ItemDrop")
+        TweenService:Create(discScale, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.96 }):Play()
+        task.delay(0.08, function()
+            TweenService:Create(discScale, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1.0 }):Play()
+        end)
         if onDiscardCallback then
             onDiscardCallback(selectedSlotIndex)
         elseif onDropCallback then

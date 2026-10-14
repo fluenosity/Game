@@ -22,22 +22,21 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
 
--- UI Theme & Components
+-- UI Theme
 local UITheme = require(script.Parent:WaitForChild("UITheme"))
-local UIComponents = require(script.Parent:WaitForChild("UIComponents"))
 
 -- Ensure audio routing to MasterSoundGroup is initialized
 UITheme.InitAudioRouting()
 
 local hudFolder = script.Parent:WaitForChild("hud")
-local HUDClock = require(hudFolder:WaitForChild("HUDClock"))
-local HUDTopRightWidget = require(hudFolder:WaitForChild("HUDTopRightWidget"))
 local HUDCompass = require(hudFolder:WaitForChild("HUDCompass"))
+local HUDTopRightWidget = require(hudFolder:WaitForChild("HUDTopRightWidget"))
 local HUDHotbar = require(hudFolder:WaitForChild("HUDHotbar"))
 local HUDVitals = require(hudFolder:WaitForChild("HUDVitals"))
 local HUDInventoryModal = require(hudFolder:WaitForChild("HUDInventoryModal"))
 local HUDBarterModal = require(hudFolder:WaitForChild("HUDBarterModal"))
 local HUDCrosshair = require(hudFolder:WaitForChild("HUDCrosshair"))
+local UI = require(script.Parent:WaitForChild("UI"))
 
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local InventoryConfig = require(sharedFolder:WaitForChild("InventoryConfig"))
@@ -61,7 +60,7 @@ local maxHunger = 100.0
 local currentHunger = 78.0 -- Matches mockup baseline (Food 78)
 
 local normalWalkSpeed = 16
-local sprintWalkSpeed = 24
+local sprintWalkSpeed = 26
 local fatiguedWalkSpeed = 10
 local normalJumpPower = 50
 local fatiguedJumpPower = 0
@@ -101,14 +100,11 @@ hudGui.Parent = playerGui
 --------------------------------------------------------------------------------
 -- 1. INSTANTIATE MODULAR HUD COMPONENTS
 --------------------------------------------------------------------------------
--- Top-Center Celestial Clock & Day Tracker
-local clockInstance = HUDClock.Create(hudGui)
-
--- Top-Right Global Survival Component (Campfire Sanctuary, Day/Clock, Backpack [B], Settings [ESC])
-local topRightWidget = HUDTopRightWidget.Create(hudGui)
-
--- Top-Left Survival Compass (Dial, Degrees, Cardinal Direction, Sliding Tape & Beacon)
+-- Top-Center Minimal Horizon Tape Compass
 local compassInstance = HUDCompass.Create(hudGui)
+
+-- Top-Right Global Survival Component (Day/Clock, Backpack [B], Settings [ESC])
+local topRightWidget = HUDTopRightWidget.Create(hudGui)
 
 -- Bottom-Center 3-Slot Hotbar
 local hotbarInstance = HUDHotbar.Create(hudGui)
@@ -154,6 +150,7 @@ modalBypassBtn.ZIndex = 999
 modalBypassBtn.Parent = hudGui
 
 local isSystemMenuOpen = false
+local systemMenuInstance: any = nil
 
 local function isAnyModalOpen(): boolean
     local invOpen = (inventoryModal and inventoryModal.IsOpen and inventoryModal.IsOpen()) or false
@@ -166,16 +163,28 @@ local function isCursorFree(): boolean
     return isAltHeld or isAltToggled or isAnyModalOpen()
 end
 
-local function enforceFirstPerson()
+local isTPP = player:GetAttribute("IsTPP") ~= false -- Default to true for testing realistic 3D character!
+player:SetAttribute("IsTPP", isTPP)
+
+local function enforcePerspective()
     if player:GetAttribute("IsInGameplay") ~= true then return end
     if isCursorFree() then return end
 
-    player.CameraMode = Enum.CameraMode.LockFirstPerson
-    player.CameraMinZoomDistance = 0.5
-    player.CameraMaxZoomDistance = 0.5
     local cam = workspace.CurrentCamera
-    if cam and cam.CameraType ~= Enum.CameraType.Custom then
-        cam.CameraType = Enum.CameraType.Custom
+    if isTPP then
+        player.CameraMode = Enum.CameraMode.Classic
+        player.CameraMinZoomDistance = 7
+        player.CameraMaxZoomDistance = 22
+        if cam and cam.CameraType ~= Enum.CameraType.Custom then
+            cam.CameraType = Enum.CameraType.Custom
+        end
+    else
+        player.CameraMode = Enum.CameraMode.LockFirstPerson
+        player.CameraMinZoomDistance = 0.5
+        player.CameraMaxZoomDistance = 0.5
+        if cam and cam.CameraType ~= Enum.CameraType.Custom then
+            cam.CameraType = Enum.CameraType.Custom
+        end
     end
 end
 
@@ -218,6 +227,21 @@ local function updateMouseBehavior()
         if crosshairInstance then
             crosshairInstance.SetVisible(false)
         end
+    elseif isTPP then
+        -- Third-Person Perspective (TPP): Orbit camera with locked center mouse for smooth look
+        savedCameraRotation = nil
+        modalBypassBtn.Modal = false
+        player.CameraMode = Enum.CameraMode.Classic
+        player.CameraMinZoomDistance = 7
+        player.CameraMaxZoomDistance = 22
+        if cam and cam.CameraType ~= Enum.CameraType.Custom then
+            cam.CameraType = Enum.CameraType.Custom
+        end
+        UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+        UserInputService.MouseIconEnabled = false
+        if crosshairInstance then
+            crosshairInstance.SetVisible(false)
+        end
     else
         -- Active first-person gameplay: lock mouse to center, hide OS cursor, show GTA V reticle
         savedCameraRotation = nil
@@ -236,6 +260,20 @@ local function updateMouseBehavior()
     end
 end
 
+player:GetAttributeChangedSignal("IsInGameplay"):Connect(function()
+    updateMouseBehavior()
+end)
+
+-- Connect [V] keybind to toggle between Third-Person (TPP) and First-Person (FPP)
+UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.V then
+        isTPP = not isTPP
+        player:SetAttribute("IsTPP", isTPP)
+        updateMouseBehavior()
+    end
+end)
+
 -- Connect modal state change callbacks so closing via button/key instantly updates mouse
 inventoryModal.SetOnOpen(updateMouseBehavior)
 inventoryModal.SetOnClose(updateMouseBehavior)
@@ -245,7 +283,7 @@ barterModal.SetOnClose(updateMouseBehavior)
 -- Continuous guard for camera properties during active play
 local function onCameraPropChanged()
     if player:GetAttribute("IsInGameplay") == true and not isCursorFree() then
-        enforceFirstPerson()
+        enforcePerspective()
     end
 end
 
@@ -256,7 +294,7 @@ player:GetPropertyChangedSignal("CameraMinZoomDistance"):Connect(onCameraPropCha
 --------------------------------------------------------------------------------
 -- FULLSCREEN SETTINGS / ESC MENU
 --------------------------------------------------------------------------------
-systemMenuInstance = UIComponents.CreateSystemMenu(hudGui, {
+systemMenuInstance = UI.SystemMenu.Create(hudGui, {
     OnResume = function()
         isSystemMenuOpen = false
         ModalManager.NotifyStateChange()
@@ -524,6 +562,9 @@ task.spawn(function()
 end)
 
 local function dropActiveItem()
+    if _G.FluenosityAnimController and _G.FluenosityAnimController.TriggerItemThrow then
+        _G.FluenosityAnimController.TriggerItemThrow()
+    end
     if dropItemEvent then
         AudioManager.Play("ItemDrop")
         dropItemEvent:FireServer(selectedHotbarSlot)
@@ -603,8 +644,12 @@ if timeState then
         local phase = timeState:GetAttribute("CurrentPhase") or "Day"
         local progress = timeState:GetAttribute("PhaseProgress") or 0.5
 
-        clockInstance.SetTime(hour :: number, day :: number, phase :: string, progress :: number)
-        topRightWidget.SetTime(hour :: number, day :: number, phase :: string)
+        if clockInstance and clockInstance.SetTime then
+            clockInstance.SetTime(hour :: number, day :: number, phase :: string, progress :: number)
+        end
+        if topRightWidget and topRightWidget.SetTime then
+            topRightWidget.SetTime(hour :: number, day :: number, phase :: string)
+        end
     end
 
     syncTime()
@@ -622,7 +667,7 @@ local function syncCampfireStatus()
         if isLit == nil then isLit = true end
         topRightWidget.SetCampfireLit(isLit)
         if campfire.PrimaryPart then
-            compassInstance.SetCampfirePosition(campfire.PrimaryPart.Position)
+            topRightWidget.SetCampfirePosition(campfire.PrimaryPart.Position)
         end
     else
         topRightWidget.SetCampfireLit(true)
@@ -671,7 +716,15 @@ local function setupCharacter(character: Model)
     activeHumanoid.WalkSpeed = normalWalkSpeed
     activeHumanoid.UseJumpPower = true
     activeHumanoid.JumpPower = normalJumpPower
-    enforceFirstPerson()
+    if player:GetAttribute("IsTPP") == true then
+        player.CameraMode = Enum.CameraMode.Classic
+        player.CameraMinZoomDistance = 6
+        player.CameraMaxZoomDistance = 14
+    else
+        player.CameraMode = Enum.CameraMode.LockFirstPerson
+        player.CameraMinZoomDistance = 0.5
+        player.CameraMaxZoomDistance = 0.5
+    end
 
     -- Initial vitals sync
     vitalsInstance.SetHealth(activeHumanoid.Health, activeHumanoid.MaxHealth)
@@ -760,17 +813,30 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
         vitalsInstance.SetHunger(currentHunger, maxHunger)
     end
 
-    -- Sprint stamina drain / recovery
+    -- Movement speed arbitration (Crouch = 8, Walk = 16, Sprint = 26, Attacking = 0)
+    local isAttacking = (activeCharacter and activeCharacter:GetAttribute("IsAttacking") == true)
+    local isCrouched = (activeCharacter and activeCharacter:GetAttribute("IsCrouching") == true)
+
     if UNLIMITED_STAMINA_DEV then
         currentStamina = maxStamina
         isFatigued = false
         if activeHumanoid then
-            activeHumanoid.WalkSpeed = isSprinting and sprintWalkSpeed or normalWalkSpeed
+            local targetSpeed = normalWalkSpeed
+            if isAttacking then
+                targetSpeed = 0
+            elseif isCrouched then
+                targetSpeed = 8
+            elseif isSprinting then
+                targetSpeed = sprintWalkSpeed
+            else
+                targetSpeed = normalWalkSpeed
+            end
+            activeHumanoid.WalkSpeed = targetSpeed
             activeHumanoid.JumpPower = normalJumpPower
         end
         vitalsInstance.SetStamina(maxStamina, maxStamina)
     else
-        if isSprinting and isMoving and not isFatigued then
+        if isSprinting and isMoving and not isFatigued and not isCrouched and not isAttacking then
             currentStamina = math.max(0, currentStamina - (20 * deltaTime))
             lastSprintTime = os.clock()
 
@@ -783,7 +849,8 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
 
                 task.delay(1.2, function()
                     if activeHumanoid and not isSprinting and not isFatigued then
-                        activeHumanoid.WalkSpeed = normalWalkSpeed
+                        local cCrouched = activeCharacter and activeCharacter:GetAttribute("IsCrouching") == true
+                        activeHumanoid.WalkSpeed = cCrouched and 8 or normalWalkSpeed
                     end
                 end)
             end
@@ -797,11 +864,28 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
                 if isFatigued and currentStamina >= 25 then
                     isFatigued = false
                     if activeHumanoid and not isSprinting then
-                        activeHumanoid.WalkSpeed = normalWalkSpeed
+                        local cCrouched = activeCharacter and activeCharacter:GetAttribute("IsCrouching") == true
+                        activeHumanoid.WalkSpeed = cCrouched and 8 or normalWalkSpeed
                         activeHumanoid.JumpPower = normalJumpPower
                     end
                 end
             end
+        end
+
+        if activeHumanoid then
+            local targetSpeed = normalWalkSpeed
+            if isAttacking then
+                targetSpeed = 0
+            elseif isCrouched then
+                targetSpeed = 8
+            elseif isFatigued then
+                targetSpeed = fatiguedWalkSpeed
+            elseif isSprinting and isMoving then
+                targetSpeed = sprintWalkSpeed
+            else
+                targetSpeed = normalWalkSpeed
+            end
+            activeHumanoid.WalkSpeed = targetSpeed
         end
 
         -- Update vitals
@@ -893,9 +977,13 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
         if player:GetAttribute("IsInGameplay") == true then
             if UNLIMITED_STAMINA_DEV or (not isFatigued and currentStamina > 0) then
+                -- Sprinting automatically un-crouches the character
+                if activeCharacter and activeCharacter:GetAttribute("IsCrouching") == true then
+                    activeCharacter:SetAttribute("IsCrouching", false)
+                end
                 isSprinting = true
                 vitalsInstance.SetSprinting(true)
-                if activeHumanoid then
+                if activeHumanoid and not (activeCharacter and activeCharacter:GetAttribute("IsAttacking") == true) then
                     activeHumanoid.WalkSpeed = sprintWalkSpeed
                 end
             end
@@ -980,7 +1068,15 @@ UserInputService.InputEnded:Connect(function(input)
         isSprinting = false
         vitalsInstance.SetSprinting(false)
         if activeHumanoid and not isFatigued then
-            activeHumanoid.WalkSpeed = normalWalkSpeed
+            local isAttacking = activeCharacter and activeCharacter:GetAttribute("IsAttacking") == true
+            local isCrouched = activeCharacter and activeCharacter:GetAttribute("IsCrouching") == true
+            if isAttacking then
+                activeHumanoid.WalkSpeed = 0
+            elseif isCrouched then
+                activeHumanoid.WalkSpeed = 8
+            else
+                activeHumanoid.WalkSpeed = normalWalkSpeed
+            end
         end
     end
 end)

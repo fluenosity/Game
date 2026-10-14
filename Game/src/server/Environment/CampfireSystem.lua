@@ -308,7 +308,7 @@ function CampfireSystem.BuildCampfire(): Model
     -- Crackling Audio Loop
     local crackle = Instance.new("Sound")
     crackle.Name = "CrackleLoop"
-    crackle.SoundId = "rbxassetid://9114223171"
+    crackle.SoundId = "rbxassetid://1845942472"
     crackle.Volume = 0.65
     crackle.Looped = true
     crackle.RollOffMode = Enum.RollOffMode.InverseTapered
@@ -323,7 +323,7 @@ function CampfireSystem.BuildCampfire(): Model
     -- Ignition Sound
     local igniteSound = Instance.new("Sound")
     igniteSound.Name = "IgniteSound"
-    igniteSound.SoundId = "rbxassetid://9114223171"
+    igniteSound.SoundId = "rbxassetid://1845942472"
     igniteSound.Volume = 0.95
     igniteSound.Parent = firePart
     campfireState.IgniteAudio = igniteSound
@@ -331,7 +331,7 @@ function CampfireSystem.BuildCampfire(): Model
     -- Douse Sound
     local douseSound = Instance.new("Sound")
     douseSound.Name = "DouseSound"
-    douseSound.SoundId = "rbxassetid://9114223171"
+    douseSound.SoundId = "rbxassetid://1845942472"
     douseSound.Volume = 0.85
     douseSound.Parent = firePart
     campfireState.DouseAudio = douseSound
@@ -756,6 +756,7 @@ local function wireExistingModels(): boolean
     end
 
     if existingSeats then
+        local fireCenter = if campfireState.FirePart then campfireState.FirePart.Position else Vector3.new(3.0, 10.50, -430.0)
         for _, trunk in ipairs(existingSeats:GetChildren()) do
             local logPart = trunk:FindFirstChild("Log") :: BasePart?
             local logDiameter = (logPart and logPart.Size.Y) or 2.4
@@ -769,7 +770,7 @@ local function wireExistingModels(): boolean
                         local seatSpread = (logPart.Size.X * 0.24)
                         local seatSurfaceY = (logDiameter * 0.50) - 0.22
                         local seatPos = (logPart.CFrame * CFrame.new(sOffsetSign * seatSpread, seatSurfaceY, 0)).Position
-                        local lookTarget = Vector3.new(0, seatPos.Y, 0)
+                        local lookTarget = Vector3.new(fireCenter.X, seatPos.Y, fireCenter.Z)
                         child.CFrame = CFrame.lookAt(seatPos, lookTarget)
                     end
 

@@ -114,29 +114,22 @@ function HUDBarterModal.Create(parent: Instance): HUDBarterModalInstance
     subtitle.ZIndex = 87
     subtitle.Parent = headerFrame
 
-    -- Close Button [X]
-    local closeButton = Instance.new("TextButton")
-    closeButton.Name = "CloseButton"
-    closeButton.Size = UDim2.fromOffset(36, 36)
-    closeButton.Position = UDim2.new(1, 0, 0, 6)
-    closeButton.AnchorPoint = Vector2.new(1, 0)
-    closeButton.BackgroundColor3 = Color3.fromRGB(36, 28, 30)
-    closeButton.AutoButtonColor = false
-    closeButton.Text = "✕"
-    closeButton.TextColor3 = Color3.fromRGB(240, 210, 190)
-    closeButton.Font = Enum.Font.GothamBold
-    closeButton.TextSize = 16
-    closeButton.ZIndex = 88
-    closeButton.Parent = headerFrame
+    local UI = require(script.Parent.Parent:WaitForChild("UI"))
 
-    local closeCorner = Instance.new("UICorner")
-    closeCorner.CornerRadius = UDim.new(0, 8)
-    closeCorner.Parent = closeButton
-
-    local closeStroke = Instance.new("UIStroke")
-    closeStroke.Thickness = 1
-    closeStroke.Color = Color3.fromRGB(90, 60, 65)
-    closeStroke.Parent = closeButton
+    -- Close Button [X] using modular glassmorphic vector icon button
+    local closeButton = UI.IconButton.Create({
+        IconName = "x",
+        IconSize = 14,
+        Size = 34,
+        IsCloseButton = true,
+        Position = UDim2.new(1, 0, 0, 6),
+        AnchorPoint = Vector2.new(1, 0),
+        ZIndex = 88,
+        Parent = headerFrame,
+        OnClick = function()
+            -- closeModal connected later
+        end,
+    })
 
     -- Player Stock Ribbon
     local ribbon = Instance.new("Frame")
@@ -163,7 +156,7 @@ function HUDBarterModal.Create(parent: Instance): HUDBarterModalInstance
     ribbonText.Size = UDim2.new(1, -20, 1, 0)
     ribbonText.Position = UDim2.new(0, 10, 0, 0)
     ribbonText.BackgroundTransparency = 1
-    ribbonText.Text = "YOUR SUPPLIES: 🪵 Wood: 0/5  |  🔩 Scrap Metal: 0  |  🩹 Bandages: 0"
+    ribbonText.Text = "YOUR SUPPLIES:  Wood: 0/5  •  Scrap Metal: 0  •  Bandages: 0"
     ribbonText.TextColor3 = Color3.fromRGB(240, 225, 205)
     ribbonText.Font = Enum.Font.GothamBold
     ribbonText.TextSize = 13
@@ -265,17 +258,19 @@ function HUDBarterModal.Create(parent: Instance): HUDBarterModalInstance
         carryLabel.Parent = giveFrame
 
         -- Center Arrow
-        local arrow = Instance.new("TextLabel")
-        arrow.Name = "ExchangeArrow"
-        arrow.Size = UDim2.new(0, 36, 1, 0)
-        arrow.Position = UDim2.new(0.37, 0, 0, 0)
-        arrow.BackgroundTransparency = 1
-        arrow.Text = "➔"
-        arrow.TextColor3 = Color3.fromRGB(245, 185, 65)
-        arrow.Font = Enum.Font.GothamBold
-        arrow.TextSize = 22
-        arrow.ZIndex = 88
-        arrow.Parent = card
+        local arrowContainer = Instance.new("Frame")
+        arrowContainer.Name = "ExchangeArrow"
+        arrowContainer.Size = UDim2.new(0, 36, 1, 0)
+        arrowContainer.Position = UDim2.new(0.37, 0, 0, 0)
+        arrowContainer.BackgroundTransparency = 1
+        arrowContainer.ZIndex = 88
+        arrowContainer.Parent = card
+
+        local arrowIcon = IconPack.CreateIcon("arrow-right", 20, Color3.fromRGB(245, 185, 65), 0)
+        arrowIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+        arrowIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+        arrowIcon.ZIndex = 89
+        arrowIcon.Parent = arrowContainer
 
         -- Right Column: Output (YOU RECEIVE)
         local getFrame = Instance.new("Frame")
@@ -343,20 +338,28 @@ function HUDBarterModal.Create(parent: Instance): HUDBarterModalInstance
         btnCorner.CornerRadius = UDim.new(0, 8)
         btnCorner.Parent = btn
 
+        local bScale = Instance.new("UIScale")
+        bScale.Scale = 1.0
+        bScale.Parent = btn
+
         local btnStroke = Instance.new("UIStroke")
         btnStroke.Thickness = 1.2
         btnStroke.Color = Color3.fromRGB(60, 185, 95)
         btnStroke.Parent = btn
 
-        btn.MouseButton1Click:Connect(function()
+        btn.Activated:Connect(function()
             local curCount = currentItemCounts[recipe.InputItemId] or 0
+            TweenService:Create(bScale, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.95 }):Play()
+            task.delay(0.08, function()
+                TweenService:Create(bScale, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1.0 }):Play()
+            end)
             if curCount >= recipe.InputCount then
                 AudioManager.Play("Click")
                 if requestBarterEvent then
                     requestBarterEvent:FireServer(recipe.Id)
                 end
             else
-                AudioManager.Play("ButtonHover")
+                AudioManager.Play("Click")
             end
         end)
 
@@ -444,6 +447,7 @@ function HUDBarterModal.Create(parent: Instance): HUDBarterModalInstance
     end
 
     closeButton.MouseButton1Click:Connect(closeModal)
+    closeButton.Activated:Connect(closeModal)
 
     -- ESC / E Key to Close (with debounce so holding E on prompt doesn't instantly close)
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -469,7 +473,7 @@ function HUDBarterModal.Create(parent: Instance): HUDBarterModalInstance
         local scrapCount = currentItemCounts["metal_scrap"] or 0
         local bandageCount = currentItemCounts["bandage"] or 0
 
-        ribbonText.Text = string.format("YOUR SUPPLIES: 🪵 Wood: %d/5  |  🔩 Scrap Metal: %d  |  🩹 Bandages: %d", woodCount, scrapCount, bandageCount)
+        ribbonText.Text = string.format("YOUR SUPPLIES:  Wood: %d/5  •  Scrap Metal: %d  •  Bandages: %d", woodCount, scrapCount, bandageCount)
 
         for _, updateFn in ipairs(tradeCardUpdaters) do
             updateFn()

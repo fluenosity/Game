@@ -162,12 +162,13 @@ function LoadingManager.LoadGame(loadingScreen: any, onCompleted: (() -> ())?)
         -- 5. Phase 4: Character Physics & Spawn Stabilization (0.82 -> 0.96)
         loadingScreen.SetProgress(0.88, "CALIBRATING CHARACTER SURVIVAL STATE...", "Aligning camera & stabilizing character physics...")
         
-        -- Request spawn if character doesn't exist
+        -- Request spawn if character doesn't exist or gender changed
+        local selectedGender = player:GetAttribute("SelectedGender") or "Male"
+        local spawnEvent = sharedFolder:FindFirstChild("RequestSpawnCharacter") :: RemoteEvent?
         local character = player.Character
-        if not character then
-            local spawnEvent = sharedFolder:FindFirstChild("RequestSpawnCharacter") :: RemoteEvent?
+        if not character or player:GetAttribute("CurrentCharacterGender") ~= selectedGender then
             if spawnEvent then
-                spawnEvent:FireServer()
+                spawnEvent:FireServer(selectedGender)
             end
             character = player.CharacterAdded:Wait()
         end

@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "skills": {
+    "roblox-analytics": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/design/roblox-analytics/SKILL.md",
+      "computedHash": "797001f652dee8932407e8aba528f1e85506dc1ad90d0a846a8e731012988baf"
+    },
+    "roblox-animation-vfx": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/gameplay/roblox-animation-vfx/SKILL.md",
+      "computedHash": "cdba52d5f4b0698228e1f3b22fc81fb2f2d7fbe8b977cf0cdabcc42131383821"
+    },
+    "roblox-architecture": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/core/roblox-architecture/SKILL.md",
+      "computedHash": "7fe3226e76ffff94bc89833d6f5161e31259e606da84fce59da75390320ef40e"
+    },
+    "roblox-audio": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/gameplay/roblox-audio/SKILL.md",
+      "computedHash": "93577152e622e8dfeab53f12a05f6f6b04916e1c3617bd2dd735e283c2e8bcc2"
+    },
+    "roblox-building": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/gameplay/roblox-building/SKILL.md",
+      "computedHash": "a3b452b9692cf55bcd4ded86400812e1ed61d514c2b478035278c845ed6930d6"
+    },
+    "roblox-camera": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/gameplay/roblox-camera/SKILL.md",
+      "computedHash": "4a3e08183333ef8caa148d9b83399c1d22c3bbbd9dab0c0b5399434cc3c40bf6"
+    },
+    "roblox-cloud": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/tools/roblox-cloud/SKILL.md",
+      "computedHash": "3d933456c6f63120b5af2aa741ab55a041928939435ffc6b14653891472c661f"
+    },
+    "roblox-collaboration-mode": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/core/roblox-collaboration-mode/SKILL.md",
+      "computedHash": "4c90fd6e7acf0369c829a4f0ae706d85a6fc22d0feefa5a731a8befcd2dd38e7"
+    },
+    "roblox-data": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/core/roblox-data/SKILL.md",
+      "computedHash": "21312bde1120548ecd6b0cfacdcffcba86e4bf8da04dd2e4a08ccc651e35f0e5"
+    },
+    "roblox-game-design": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/design/roblox-game-design/SKILL.md",
+      "computedHash": "fe009dde0f5f3abc1b3e15aa892a91ec52bee6c3194279cf125030633283565f"
+    },
+    "roblox-growth-design": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/design/roblox-growth-design/SKILL.md",
+      "computedHash": "47b20641f1ad629aea886881c0ff8c6923e36f9f77dd563496c9955ee8795484"
+    },
+    "roblox-gui": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/gameplay/roblox-gui/SKILL.md",
+      "computedHash": "2c8452c8c9ce560d6346ff2838cdbf6ff74f27ca00a7f62fd24b029e2a172ae7"
+    },
+    "roblox-input": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/gameplay/roblox-input/SKILL.md",
+      "computedHash": "ce9784f573cc04a0d6dcebaa9cf56abbbbd965e26aaf3675b77be878d214ab11"
+    },
+    "roblox-lighting": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/gameplay/roblox-lighting/SKILL.md",
+      "computedHash": "e29a512bc75474785a970a52551052933c9c4b4c58b9ca9d235d91102d058551"
+    },
+    "roblox-localization": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/gameplay/roblox-localization/SKILL.md",
+      "computedHash": "c28b50ea92ed34d63236865190f6a19c009291018c77478add61f4383a6bf157"
+    },
+    "roblox-luau-core": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/core/roblox-luau-core/SKILL.md",
+      "computedHash": "1226210a57e2c960ce9f59fbe33be5052d8b47793002a10c4c536b2102087cda"
+    },
+    "roblox-luau-patterns": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/core/roblox-luau-patterns/SKILL.md",
+      "computedHash": "840c654725ee3bf63c7fa42cdcae58a7d01f4724d1b58c248e5b63ccef586b57"
+    },
+    "roblox-luau-types": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/core/roblox-luau-types/SKILL.md",
+      "computedHash": "e434838ed009f38e661bed3eb6ccab0b46e544e64bf83de4bc52ba473f47494c"
+    },
+    "roblox-monetization": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/design/roblox-monetization/SKILL.md",
+      "computedHash": "1f938bf1e36a4e7d3030f3e5a48af79133944b1854c250feac1c4cae058c1cd8"
+    },
+    "roblox-networking": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/core/roblox-networking/SKILL.md",
+      "computedHash": "218610b97e1346fa7ba01aea37a10c22e3ceff9b591361c74c0aa89e40dac062"
+    },
+    "roblox-npc-ai": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/gameplay/roblox-npc-ai/SKILL.md",
+      "computedHash": "72e9dc1b25afcc8942583be7e16ad6970299517e91fd63596efb8927231c5b14"
+    },
+    "roblox-performance": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/core/roblox-performance/SKILL.md",
+      "computedHash": "2523b4f82003e73f2c1d411761b0bb538ecc505b56e8a539abddfd92688adaf0"
+    },
+    "roblox-physics": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/gameplay/roblox-physics/SKILL.md",
+      "computedHash": "bcc8fb5175e27bfa2c8e18603edbb7ad6deedd56b3101b6d505e8b12b00cb1b6"
+    },
+    "roblox-player-psychology": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/design/roblox-player-psychology/SKILL.md",
+      "computedHash": "917244a5206af95b248a8cffc5ac96842a968ea4f37105f18f2160783b3b0ef3"
+    },
+    "roblox-publish-checklist": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/tools/roblox-publish-checklist/SKILL.md",
+      "computedHash": "1deee378dd4d99d8d19002dacec52a8f91f0b622158bc09c20678c7cff1173d0"
+    },
+    "roblox-security": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/core/roblox-security/SKILL.md",
+      "computedHash": "a401878f83f71b3ffafb71967c6435487c305e36bc5c38cdb27be5cdfdc917c7"
+    },
+    "roblox-server-data": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/core/roblox-server-data/SKILL.md",
+      "computedHash": "ff4bce79e5b3d6d94b8fd56f92c3afc105f3da3d2f2825f7a973dc829d359497"
+    },
+    "roblox-studio-mcp": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/tools/roblox-studio-mcp/SKILL.md",
+      "computedHash": "2add69ed8dab50242c8487adf4026ac4bd60d59c96f8128b5035405e43190660"
+    },
+    "roblox-tooling": {
+      "source": "TabooHarmony/roblox-brain",
+      "sourceType": "github",
+      "skillPath": "skills/tools/roblox-tooling/SKILL.md",
+      "computedHash": "38b708b9898d4a8c51822a5de5bcf2fee33ba06c88da44c28a9bbf16caa9db9a"
+    }
+  }
+}

@@ -15,6 +15,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local InventoryConfig = require(sharedFolder:WaitForChild("InventoryConfig"))
 local IconPack = require(sharedFolder:WaitForChild("IconPack"))
 local AudioManager = require(script.Parent.Parent:WaitForChild("AudioManager"))
+local UI = require(script.Parent.Parent:WaitForChild("UI"))
 
 export type HotbarSlotData = {
     Id: string,
@@ -203,6 +204,10 @@ function HUDHotbar.Create(parent: Instance): HUDHotbarInstance
         underlineCorner.CornerRadius = UDim.new(1, 0)
         underlineCorner.Parent = underline
 
+        local slotScale = Instance.new("UIScale")
+        slotScale.Scale = 1.0
+        slotScale.Parent = slotBtn
+
         slots[i] = {
             Frame = slotBtn,
             Stroke = slotStroke,
@@ -213,12 +218,12 @@ function HUDHotbar.Create(parent: Instance): HUDHotbarInstance
             Underline = underline,
         }
 
-        slotBtn.MouseEnter:Connect(function()
-            AudioManager.Play("Hover")
-        end)
-
         slotBtn.Activated:Connect(function()
             AudioManager.Play("ItemEquip")
+            TweenService:Create(slotScale, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.94 }):Play()
+            task.delay(0.08, function()
+                TweenService:Create(slotScale, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1.0 }):Play()
+            end)
             selectedSlot = i
             for s = 1, InventoryConfig.MAX_HOTBAR_SLOTS do
                 updateSlotVisuals(s)
@@ -243,13 +248,28 @@ function HUDHotbar.Create(parent: Instance): HUDHotbarInstance
             s.Icon.Visible = true
             if def then
                 IconPack.ApplyTo(s.Icon, def.IconName, def.AccentColor, 0, 48)
+                UI.Tooltip.Attach(s.Frame, {
+                    Title = def.Name,
+                    Category = def.Category or "ITEM",
+                    Description = def.Description or "Equip to use.",
+                    ActionHint = "Slot [" .. tostring(slotIdx) .. "] · Press key to equip",
+                    Width = 220,
+                })
             else
                 IconPack.ApplyTo(s.Icon, "package", Color3.fromRGB(240, 245, 255), 0, 48)
+                UI.Tooltip.Attach(s.Frame, {
+                    Title = item.Id,
+                    Category = "ITEM",
+                    Description = "Equip to use.",
+                    ActionHint = "Slot [" .. tostring(slotIdx) .. "] · Press key to equip",
+                    Width = 220,
+                })
             end
             s.Count.Text = (item.Count > 1) and ("x" .. tostring(item.Count)) or ""
         else
             s.Icon.Visible = false
             s.Count.Text = ""
+            UI.Tooltip.Detach(s.Frame)
         end
     end
 

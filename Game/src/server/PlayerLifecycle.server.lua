@@ -26,20 +26,54 @@ if not spawnEvent then
     spawnEvent = newEvent
 end
 
+local ServerStorage = game:GetService("ServerStorage")
+
 -- Track players that have clicked Play and entered active gameplay
 local playersInSession: { [Player]: boolean } = {}
 
 -- Spawns the character into the world on demand
-local function spawnCharacterForPlayer(player: Player)
+local function spawnCharacterForPlayer(player: Player, selectedGender: string?)
     if not player or not player.Parent then return end
     playersInSession[player] = true
-    player:LoadCharacter()
+
+    local gender = selectedGender or player:GetAttribute("SelectedGender") or "Male"
+    player:SetAttribute("SelectedGender", gender)
+    player:SetAttribute("CurrentCharacterGender", gender)
+
+    local characterPack = ServerStorage:FindFirstChild("RealismCharacterPack")
+    local template = characterPack and characterPack:FindFirstChild(gender)
+
+    if template then
+        -- Clean up previous character if present
+        if player.Character then
+            player.Character:Destroy()
+        end
+
+        local character = template:Clone()
+        character.Name = player.Name
+
+        local spawnLocation = workspace:FindFirstChildOfClass("SpawnLocation")
+        local spawnCFrame = spawnLocation and (spawnLocation.CFrame + Vector3.new(0, 4, 0)) or CFrame.new(0, 10, 0)
+        character:PivotTo(spawnCFrame)
+
+        character.Parent = workspace
+        player.Character = character
+
+        local hrp = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+        if hrp then
+            pcall(function()
+                hrp:SetNetworkOwner(player)
+            end)
+        end
+    else
+        player:LoadCharacter()
+    end
 end
 
 -- Client requests character spawn when clicking "PLAY" in the main menu
-(spawnEvent :: RemoteEvent).OnServerEvent:Connect(function(player: Player)
-    if not playersInSession[player] then
-        spawnCharacterForPlayer(player)
+(spawnEvent :: RemoteEvent).OnServerEvent:Connect(function(player: Player, selectedGender: string?)
+    if not playersInSession[player] or player:GetAttribute("CurrentCharacterGender") ~= selectedGender then
+        spawnCharacterForPlayer(player, selectedGender)
     end
 end)
 
@@ -52,7 +86,8 @@ local function onPlayerAdded(player: Player)
                 task.wait(Players.RespawnTime)
                 -- Only auto-respawn if the player has entered gameplay
                 if player.Parent and playersInSession[player] then
-                    player:LoadCharacter()
+                    local savedGender = player:GetAttribute("SelectedGender") :: string?
+                    spawnCharacterForPlayer(player, savedGender)
                 end
             end)
         end

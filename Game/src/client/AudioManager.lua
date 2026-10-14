@@ -179,6 +179,66 @@ local SOUND_PRESETS: { [string]: SoundConfig } = {
         PitchVariation = 0.03,
         MinInterval = 0.1,
     },
+
+    -- Peaceful, subtle melee movement swish (very soft, non-intrusive)
+    ["PunchSwing"] = {
+        SoundId = "rbxassetid://15675075163",
+        FallbackId = "rbxassetid://15675037413",
+        Volume = 0.05,
+        Pitch = 1.00,
+        PitchVariation = 0.03,
+        MinInterval = 0.12,
+    },
+
+    -- Soft, peaceful organic contact tap (muffled, zero gunshot pop)
+    ["PunchImpact"] = {
+        SoundId = "rbxassetid://10066914500",
+        FallbackId = "rbxassetid://15675075163",
+        Volume = 0.12,
+        Pitch = 0.95,
+        PitchVariation = 0.03,
+        MinInterval = 0.08,
+    },
+
+    -- Gentle heavy impact (soft low organic thud)
+    ["PunchHeavyImpact"] = {
+        SoundId = "rbxassetid://10066914500",
+        FallbackId = "rbxassetid://10066968815",
+        Volume = 0.16,
+        Pitch = 0.82,
+        PitchVariation = 0.03,
+        MinInterval = 0.10,
+    },
+
+    -- Soft defensive block tap
+    ["BlockImpact"] = {
+        SoundId = "rbxassetid://10066914500",
+        FallbackId = "rbxassetid://15675075163",
+        Volume = 0.14,
+        Pitch = 0.78,
+        PitchVariation = 0.03,
+        MinInterval = 0.08,
+    },
+
+    -- Heavy impact landing from height
+    ["HeavyLanding"] = {
+        SoundId = "rbxassetid://9120914426",
+        FallbackId = "rbxassetid://9120914426",
+        Volume = 0.45,
+        Pitch = 0.90,
+        PitchVariation = 0.04,
+        MinInterval = 0.15,
+    },
+
+    -- Rhythmic footstep crunch
+    ["Footstep"] = {
+        SoundId = "rbxassetid://10066968815",
+        FallbackId = "rbxassetid://10066968815",
+        Volume = 0.15,
+        Pitch = 1.25,
+        PitchVariation = 0.08,
+        MinInterval = 0.18,
+    },
 }
 
 -- -----------------------------------------------------------------------------
@@ -271,13 +331,13 @@ function AudioManager.AttachButton(
     hoverSound: string?,
     clickSound: string?
 ): ()
-    local hoverSfx = hoverSound or "Hover"
+    if hoverSound then
+        button.MouseEnter:Connect(function()
+            AudioManager.Play(hoverSound)
+        end)
+    end
+
     local clickSfx = clickSound or "Click"
-
-    button.MouseEnter:Connect(function()
-        AudioManager.Play(hoverSfx)
-    end)
-
     button.Activated:Connect(function()
         AudioManager.Play(clickSfx)
     end)
