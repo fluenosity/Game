@@ -1,108 +1,150 @@
 --!strict
--- Curated R15 survivor roster and wardrobe options. All source assets live in
--- ReplicatedStorage.FluenosityShared.SurvivorRoster.
+--[[
+    SurvivorWardrobeConfig.lua
+    Curated survivor roster configuration for the 4 imported characters:
+    - Sophie (Female, Agile Scout)
+    - Jody (Female, Combat Survivalist)
+    - Bryce (Male, Combat Engineer)
+    - Remy (Male, Frontline Defender)
+
+    All characters are complete custom skinned rigs stored in:
+    ReplicatedStorage.FluenosityShared.SurvivorRoster
+]]
 
 local Config = {}
 
-Config.CharacterOrder = { "Leo", "Marcus", "Kai", "Maya", "Elena", "Chloe" }
+export type SurvivorStats = {
+	Agility: number,
+	Combat: number,
+	Endurance: number,
+	Crafting: number,
+}
+
+export type SurvivorCharacter = {
+	Id: string,
+	DisplayName: string,
+	Gender: "Female" | "Male",
+	Role: string,
+	Tagline: string,
+	Description: string,
+	Stats: SurvivorStats,
+	Archetype: string,
+	RecommendedIdle: string,
+	AltIdles: { [string]: string },
+}
+
+Config.CharacterOrder = { "Sophie", "Jody", "Bryce" }
 
 Config.Characters = {
-	Leo = { Gender = "Male", DisplayName = "Leo", Role = "THE TRACKER", Default = { Top = "leo_top", Pants = "leo_bottom", Shoes = "leo_shoes", Head = "leo_hair" } },
-	Marcus = { Gender = "Male", DisplayName = "Marcus", Role = "THE LOOKOUT", Default = { Top = "marcus_top", Pants = "trail_pants", Shoes = "marcus_shoes", Head = "marcus_hair" } },
-	Kai = { Gender = "Male", DisplayName = "Kai", Role = "THE RUNNER", Default = { Top = "kai_top", Pants = "trail_pants", Shoes = "kai_shoes", Head = "kai_hair" } },
-	Maya = { Gender = "Female", DisplayName = "Maya", Role = "THE SCOUT", Default = { Top = "maya_top", Pants = "maya_bottom", Shoes = "maya_shoes", Head = "maya_hair" } },
-	Elena = { Gender = "Female", DisplayName = "Elena", Role = "THE MEDIC", Default = { Top = "elena_top", Pants = "elena_bottom", Shoes = "elena_shoes", Head = "elena_hair" } },
-	Chloe = { Gender = "Female", DisplayName = "Chloe", Role = "THE GUIDE", Default = { Top = "chloe_top", Pants = "chloe_bottom", Shoes = "chloe_shoes", Head = "chloe_hair" } },
+	Sophie = {
+		Id = "Sophie",
+		DisplayName = "Sophie",
+		Gender = "Female",
+		Role = "THE AGILE SCOUT",
+		Tagline = "Quick on her feet, alert to the whispering winds.",
+		Description = "Exceptional speed and wilderness awareness. Excels in foraging, reconnaissance, and evading forest threats before they strike.",
+		Stats = {
+			Agility = 95,
+			Combat = 60,
+			Endurance = 75,
+			Crafting = 70,
+		},
+		Archetype = "Female Athletic Rig • Living Posture • 0.75 Stud Stance",
+		RecommendedIdle = "rbxassetid://89629385542634", -- Slight Tilt Cute Idle
+		AltIdles = {
+			["Main Idle"] = "rbxassetid://79030538201747",
+			["Relaxed Tilt"] = "rbxassetid://89629385542634",
+			["Check Nails"] = "rbxassetid://81640445815841",
+		},
+	} :: SurvivorCharacter,
+
+	Jody = {
+		Id = "Jody",
+		DisplayName = "Jody",
+		Gender = "Female",
+		Role = "THE COMBAT SURVIVALIST",
+		Tagline = "Fierce guardian hardened by cold winters.",
+		Description = "Formidable close-quarters combatant with high resilience. Built to stand her ground and protect the team from lurking predators.",
+		Stats = {
+			Agility = 75,
+			Combat = 90,
+			Endurance = 85,
+			Crafting = 65,
+		},
+		Archetype = "Female Combat Rig • Reinforced Posture • Normalized Armature",
+		RecommendedIdle = "rbxassetid://89629385542634",
+		AltIdles = {
+			["Main Idle"] = "rbxassetid://79030538201747",
+			["Relaxed Tilt"] = "rbxassetid://89629385542634",
+			["Check Nails"] = "rbxassetid://81640445815841",
+		},
+	} :: SurvivorCharacter,
+
+	Bryce = {
+		Id = "Bryce",
+		DisplayName = "Bryce",
+		Gender = "Male",
+		Role = "THE COMBAT ENGINEER",
+		Tagline = "Resourceful builder who turns scraps into salvation.",
+		Description = "Specializes in tool craft, barrier reinforcement, and campfire efficiency. Keeps camp defenses robust when night falls.",
+		Stats = {
+			Agility = 70,
+			Combat = 75,
+			Endurance = 80,
+			Crafting = 95,
+		},
+		Archetype = "Male Athletic Rig • Calibrated 1.98 Stud Contact • Zero Slide",
+		RecommendedIdle = "rbxassetid://79030538201747",
+		AltIdles = {
+			["Main Idle"] = "rbxassetid://79030538201747",
+			["Relaxed Tilt"] = "rbxassetid://89629385542634",
+		},
+	} :: SurvivorCharacter,
+
+	Remy = {
+		Id = "Remy",
+		DisplayName = "Remy",
+		Gender = "Male",
+		Role = "THE FRONTLINE DEFENDER",
+		Tagline = "Unshakable pillar against the encroaching dark.",
+		Description = "Maximum physical resilience and defensive endurance. Capable of drawing predator aggro and carrying heavy supply loads.",
+		Stats = {
+			Agility = 60,
+			Combat = 85,
+			Endurance = 95,
+			Crafting = 65,
+		},
+		Archetype = "Male Heavy Rig • Athletic Stance • Calibrated Boot Contact",
+		RecommendedIdle = "rbxassetid://79030538201747",
+		AltIdles = {
+			["Main Idle"] = "rbxassetid://79030538201747",
+			["Relaxed Tilt"] = "rbxassetid://89629385542634",
+		},
+	} :: SurvivorCharacter,
 }
 
-Config.Categories = {
-	Top = {
-		Label = "TOP",
-		ManagedClasses = { "Shirt" },
-		ManagedNames = { "Shirt", "Hoodie", "Roblox T-Shirt", "T-Shirt-LongSleeve_Raglan-BlackWhite" },
-		Options = {
-			{ Id = "leo_top", Gender = "Male", Label = "FIELD SHIRT", Source = "Leo", Items = { "Shirt" } },
-			{ Id = "marcus_top", Gender = "Male", Label = "TRAIL HOODIE", Source = "Marcus", Items = { "Hoodie" } },
-			{ Id = "kai_top", Gender = "Male", Label = "CAMP TEE", Source = "Kai", Items = { "Roblox T-Shirt" } },
-			{ Id = "maya_top", Gender = "Female", Label = "RAGLAN TOP", Source = "Maya", Items = { "T-Shirt-LongSleeve_Raglan-BlackWhite" } },
-			{ Id = "elena_top", Gender = "Female", Label = "CAMP TEE", Source = "Elena", Items = { "Roblox T-Shirt" } },
-			{ Id = "chloe_top", Gender = "Female", Label = "CLASSIC TOP", Source = "Chloe", Items = { "Shirt" } },
-		},
-	},
-	Pants = {
-		Label = "PANTS",
-		ManagedClasses = { "Pants" },
-		ManagedNames = { "Shorts", "Pants-Sweatpants-Black_6984763785", "Shorts-Bermuda-Black_9174391966" },
-		Options = {
-			{ Id = "leo_bottom", Gender = "Male", Label = "FIELD SHORTS", Source = "Leo", Items = { "Shorts" } },
-			{ Id = "trail_pants", Gender = "Male", Label = "TRAIL PANTS", Source = "Marcus", Items = { "Pants-Sweatpants-Black_6984763785" } },
-			{ Id = "maya_bottom", Gender = "Female", Label = "CAMP SHORTS", Source = "Maya", Items = { "Shorts-Bermuda-Black_9174391966" } },
-			{ Id = "elena_bottom", Gender = "Female", Label = "TRAIL PANTS", Source = "Elena", Items = { "Pants-Sweatpants-Black_6984763785" } },
-			{ Id = "chloe_bottom", Gender = "Female", Label = "CLASSIC PANTS", Source = "Chloe", Items = { "Pants" } },
-		},
-	},
-	Shoes = {
-		Label = "SHOES",
-		ManagedClasses = {},
-		ManagedNames = { "LeftShoe", "RightShoe", "LeftFootwear", "RightFootwear", "Shoes-Sneakers-Gray_Left_7193165925", "Shoes-Sneakers-Gray_Right_7193166879" },
-		Options = {
-			{ Id = "leo_shoes", Gender = "Male", Label = "FIELD SNEAKERS", Source = "Leo", Items = { "LeftShoe", "RightShoe" } },
-			{ Id = "marcus_shoes", Gender = "Male", Label = "TRAIL SNEAKERS", Source = "Marcus", Items = { "LeftShoe", "RightShoe" } },
-			{ Id = "kai_shoes", Gender = "Male", Label = "LIGHT SNEAKERS", Source = "Kai", Items = { "LeftShoe", "RightShoe" } },
-			{ Id = "maya_shoes", Gender = "Female", Label = "GRAY SNEAKERS", Source = "Maya", Items = { "Shoes-Sneakers-Gray_Left_7193165925", "Shoes-Sneakers-Gray_Right_7193166879" } },
-			{ Id = "elena_shoes", Gender = "Female", Label = "FIELD SNEAKERS", Source = "Elena", Items = { "LeftShoe", "RightShoe" } },
-			{ Id = "chloe_shoes", Gender = "Female", Label = "LIGHT SNEAKERS", Source = "Chloe", Items = { "LeftShoe", "RightShoe" } },
-		},
-	},
-	Head = {
-		Label = "HEAD",
-		ManagedClasses = {},
-		ManagedNames = { "Hair", "GirlHair", "Hair-Female-003-Black", "ROBLOXCap" },
-		Options = {
-			{ Id = "leo_hair", Gender = "Male", Label = "SHORT HAIR", Source = "Leo", Items = { "Hair" } },
-			{ Id = "marcus_hair", Gender = "Male", Label = "TOUSLED HAIR", Source = "Marcus", Items = { "Hair" } },
-			{ Id = "kai_hair", Gender = "Male", Label = "DARK HAIR", Source = "Kai", Items = { "Hair" } },
-			{ Id = "maya_hair", Gender = "Female", Label = "BLACK HAIR", Source = "Maya", Items = { "Hair-Female-003-Black" } },
-			{ Id = "elena_hair", Gender = "Female", Label = "LONG HAIR", Source = "Elena", Items = { "GirlHair" } },
-			{ Id = "chloe_hair", Gender = "Female", Label = "LONG HAIR", Source = "Chloe", Items = { "GirlHair" } },
-			{ Id = "maya_cap", Gender = "Female", Label = "CAMP CAP", Source = "Maya", Items = { "Hair-Female-003-Black", "ROBLOXCap" } },
-		},
-	},
-}
-
-local optionById: { [string]: any } = {}
-for _, category in pairs(Config.Categories) do
-	for _, option in ipairs(category.Options) do
-		optionById[option.Id] = option
-	end
-end
+-- Backward-compatibility empty categories (models are self-contained skinned meshes)
+Config.Categories = {}
 
 function Config.GetDefaultSelection(characterId: string?): { [string]: string }
-	local safeCharacterId = if characterId and Config.Characters[characterId] then characterId else "Leo"
-	local definition = Config.Characters[safeCharacterId]
+	local safeId = "Sophie"
+	if characterId and Config.Characters[characterId] then
+		safeId = characterId
+	end
 	return {
-		CharacterId = safeCharacterId,
-		Top = definition.Default.Top,
-		Pants = definition.Default.Pants,
-		Shoes = definition.Default.Shoes,
-		Head = definition.Default.Head,
+		CharacterId = safeId,
 	}
 end
 
 function Config.ValidateSelection(value: any): { [string]: string }?
 	if typeof(value) ~= "table" then return nil end
 	local characterId = value.CharacterId
-	local character = if typeof(characterId) == "string" then Config.Characters[characterId] else nil
-	if not character then return nil end
-
-	local clean = { CharacterId = characterId }
-	for categoryName in pairs(Config.Categories) do
-		local optionId = value[categoryName]
-		local option = if typeof(optionId) == "string" then optionById[optionId] else nil
-		if not option or option.Gender ~= character.Gender then return nil end
-		clean[categoryName] = option.Id
+	if typeof(characterId) ~= "string" or not Config.Characters[characterId] then
+		return nil
 	end
-	return clean
+	return {
+		CharacterId = characterId,
+	}
 end
 
 return Config

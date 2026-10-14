@@ -373,6 +373,10 @@ end
 
 -- Attaches interaction prompt to any valid wood pile model or part
 local function setupWoodPilePrompt(woodPile: Instance)
+    if not woodPile:IsDescendantOf(workspace) then
+        return
+    end
+
     if registeredWoodPiles[woodPile] then
         return
     end
@@ -488,13 +492,6 @@ local function setupWoodPilePrompt(woodPile: Instance)
             end
         end)
     end
-
-    print(string.format("[InventorySystem] ✅ Wood Pile registered & prompt ready at: %s (Pos: %.1f, %.1f, %.1f)",
-        woodPile:GetFullName(),
-        interactionPart.Position.X,
-        interactionPart.Position.Y,
-        interactionPart.Position.Z
-    ))
 end
 
 -- Helper to locate and register the Trader House for upcoming objectives
@@ -535,62 +532,28 @@ local function locateTraderHouse(): Model?
     return nil
 end
 
+local ENABLE_WOOD_HARVEST_POINTS = false -- Disabled per user request (no wood harvest points across map)
+
 local function initProductionWoodSystem()
-    local function scanAndRegisterAll()
-        local count = 0
-        -- 1. Check all tagged WoodPile instances
-        for _, inst in ipairs(CollectionService:GetTagged("WoodPile")) do
-            if isCandidateWoodPile(inst) then
-                setupWoodPilePrompt(inst)
-                count += 1
-            end
+    -- Wood harvest points are currently disabled per user directive.
+    -- Purge any stray wood prompt parts, proximity prompts, and tags.
+    for _, prompt in ipairs(workspace:GetDescendants()) do
+        if prompt:IsA("ProximityPrompt") and isWoodPromptInstance(prompt) then
+            prompt:Destroy()
         end
-
-        -- 2. Scan workspace for candidate models/parts
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if (obj:IsA("Model") or obj:IsA("BasePart")) and not registeredWoodPiles[obj] then
-                if isCandidateWoodPile(obj) then
-                    setupWoodPilePrompt(obj)
-                    count += 1
-                end
-            end
+    end
+    for _, part in ipairs(workspace:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name == "WoodInteractionPromptPart" then
+            part:Destroy()
         end
-
-        -- 3. If no wood piles found anywhere on the map, generate fallback
-        if count == 0 and next(registeredWoodPiles) == nil then
-            local WoodPileBuilder = require(script.Parent.Environment:WaitForChild("WoodPileBuilder"))
-            local built = WoodPileBuilder.Build()
-            if built then
-                setupWoodPilePrompt(built)
-            end
-        end
-
-        -- 4. Clean stray prompts from barrels, tents, furniture
-        purgeStrayWoodPrompts()
+    end
+    for _, inst in ipairs(CollectionService:GetTagged("WoodPile")) do
+        CollectionService:RemoveTag(inst, "WoodPile")
     end
 
-    task.spawn(function()
-        scanAndRegisterAll()
-        -- Repeat scan after short delays to catch late-streaming models
-        task.wait(1.0)
-        scanAndRegisterAll()
-        task.wait(2.5)
-        scanAndRegisterAll()
-    end)
-
-    -- Listen for newly tagged or added wood piles dynamically
-    CollectionService:GetInstanceAddedSignal("WoodPile"):Connect(function(inst)
-        if isCandidateWoodPile(inst) then
-            setupWoodPilePrompt(inst)
-        end
-    end)
-
-    workspace.DescendantAdded:Connect(function(desc)
-        if desc:IsA("Model") and isCandidateWoodPile(desc) then
-            task.wait(0.1)
-            setupWoodPilePrompt(desc)
-        end
-    end)
+    if not ENABLE_WOOD_HARVEST_POINTS then
+        return
+    end
 end
 
 -- Run initial setup
@@ -865,4 +828,4 @@ task.defer(function()
     spawnCampMatchbox()
 end)
 
-print("[InventorySystem] Loaded: Wood Pile scanner & Camp Matchbox active.")
+print("[InventorySystem] Loaded: Camp Matchbox active (Wood harvest points disabled).")

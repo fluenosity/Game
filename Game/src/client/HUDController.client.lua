@@ -62,7 +62,7 @@ local currentHunger = 78.0 -- Matches mockup baseline (Food 78)
 local normalWalkSpeed = 16
 local sprintWalkSpeed = 26
 local fatiguedWalkSpeed = 10
-local normalJumpPower = 50
+local normalJumpPower = 38
 local fatiguedJumpPower = 0
 
 local selectedHotbarSlot = 1
@@ -70,6 +70,18 @@ local activeCharacter: Model? = nil
 local activeHumanoid: Humanoid? = nil
 local characterJumpConn: RBXScriptConnection? = nil
 local characterHealthConn: RBXScriptConnection? = nil
+local jumpCooldownThread: thread? = nil
+local isJumpInputHeld = false
+local JUMP_RECOVERY_GAP = 0.10 -- Snappy 100ms grounded recovery gap (prevents hold-to-bunnyhop & mid-air spam)
+
+local function isJumpPhysicallyHeld(): boolean
+    if isJumpInputHeld then return true end
+    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then return true end
+    local ok, isDown = pcall(function()
+        return UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonA)
+    end)
+    return ok and isDown == true
+end
 
 -- Client inventory state (12 slots)
 local currentInventory: { [number]: { Id: string, Count: number }? } = {}
@@ -705,6 +717,11 @@ local function setupCharacter(character: Model)
         characterJumpConn = nil
     end
 
+    if jumpCooldownThread then
+        task.cancel(jumpCooldownThread)
+        jumpCooldownThread = nil
+    end
+
     if characterHealthConn then
         characterHealthConn:Disconnect()
         characterHealthConn = nil
@@ -716,6 +733,7 @@ local function setupCharacter(character: Model)
     activeHumanoid.WalkSpeed = normalWalkSpeed
     activeHumanoid.UseJumpPower = true
     activeHumanoid.JumpPower = normalJumpPower
+    activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
     if player:GetAttribute("IsTPP") == true then
         player.CameraMode = Enum.CameraMode.Classic
         player.CameraMinZoomDistance = 6
@@ -738,9 +756,46 @@ local function setupCharacter(character: Model)
         end
     end)
 
-    -- Jump stamina consumption & feedback (tracks player jump smoothly)
+    -- Jump debounce & hold-prevention coordinator:
+    -- 1. One Space = One Jump (no continuous bunny-hopping when holding Space).
+    -- 2. Spam Prevention: Character must complete the jump, land, and finish the recovery gap
+    --    before another jump can ever trigger.
     characterJumpConn = activeHumanoid.Jumping:Connect(function(isActive: boolean)
         if isActive and activeHumanoid.Health > 0 then
+            -- Immediately lock jumping state so mid-air spam or holding space is blocked
+            activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+
+            if jumpCooldownThread then
+                task.cancel(jumpCooldownThread)
+            end
+
+            jumpCooldownThread = task.spawn(function()
+                -- 1. Wait until character leaves the ground (becomes airborne)
+                local t0 = os.clock()
+                while activeHumanoid and activeHumanoid.FloorMaterial ~= Enum.Material.Air and (os.clock() - t0 < 0.35) do
+                    task.wait()
+                end
+
+                -- 2. Wait until character lands back on the ground
+                t0 = os.clock()
+                while activeHumanoid and activeHumanoid.FloorMaterial == Enum.Material.Air and (os.clock() - t0 < 8.0) do
+                    task.wait()
+                end
+
+                -- 3. Recovery gap: Let the landing animation & physical compression finish cleanly
+                task.wait(JUMP_RECOVERY_GAP)
+
+                -- 4. Hold prevention: Wait until player releases the jump key
+                while isJumpPhysicallyHeld() do
+                    task.wait()
+                end
+
+                -- 5. Re-enable jumping for the next fresh jump press
+                if activeHumanoid and not isFatigued then
+                    activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+                end
+            end)
+
             if not UNLIMITED_STAMINA_DEV then
                 if not isFatigued then
                     currentStamina = math.max(0, currentStamina - 8)
@@ -1010,6 +1065,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         return
     end
 
+    if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.ButtonA then
+        isJumpInputHeld = true
+    end
+
     if gameProcessed then return end
 
     if input.KeyCode == Enum.KeyCode.One then
@@ -1034,6 +1093,11 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         isAltHeld = false
         inventoryModal.Toggle()
         updateMouseBehavior()
+    elseif input.KeyCode == Enum.KeyCode.V then
+        isTPP = not isTPP
+        player:SetAttribute("IsTPP", isTPP)
+        enforcePerspective()
+        updateMouseBehavior()
     elseif input.KeyCode == Enum.KeyCode.M or input.KeyCode == Enum.KeyCode.P then
         toggleSystemMenu()
     elseif input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 then
@@ -1048,6 +1112,11 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.ButtonA then
+        isJumpInputHeld = false
+        return
+    end
+
     if input.KeyCode == Enum.KeyCode.LeftAlt or input.KeyCode == Enum.KeyCode.RightAlt then
         if player:GetAttribute("IsInGameplay") == true then
             local heldDuration = os.clock() - altPressTime

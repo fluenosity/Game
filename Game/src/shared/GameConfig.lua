@@ -20,6 +20,7 @@ export type GameConfigType = {
     SKIP_MAIN_MENU: boolean,
     DIRECT_SPAWN: boolean,
     FAST_LOADING_SCREEN: boolean,
+    USE_STARTER_CHARACTER: boolean,
 }
 
 local GameConfig = {
@@ -30,7 +31,7 @@ local GameConfig = {
     -- 1. SKIP SPLASH SCREEN
     -- If true: Skips the white "A FLUENOSITY STUDIO PRODUCTION" intro screen entirely.
     -- If false: Displays the full cinematic white studio splash sequence.
-    SKIP_SPLASH_SCREEN = false,
+    SKIP_SPLASH_SCREEN = true,
 
     -- 2. SKIP MAIN MENU
     -- If true: Bypasses the Main Menu screen and proceeds straight into the world with preloading.
@@ -38,14 +39,18 @@ local GameConfig = {
     SKIP_MAIN_MENU = false,
 
     -- 3. DIRECT SPAWN
-    -- If true: The server automatically spawns the player character into the world immediately on join
-    -- (Players.CharacterAutoLoads = true / instant LoadCharacter()).
+    -- If true: The server automatically spawns the player character into the world immediately on join.
     -- If false: The character only spawns when explicitly requested by clicking "PLAY".
     DIRECT_SPAWN = false,
 
     -- 4. FAST LOADING SCREEN
     -- If true: Skips or shortens artificial loading screen transitions for rapid testing.
     FAST_LOADING_SCREEN = true,
+
+    -- 5. USE STARTER CHARACTER DEV OVERRIDE
+    -- If true: Spawns the player using StarterPlayer.StarterCharacter directly,
+    -- allowing developers to test custom rigs and Mixamo animations without going through the wardrobe roster.
+    USE_STARTER_CHARACTER = false,
 }
 
 -- Safe query methods that take DEV_MODE into account
@@ -63,6 +68,11 @@ end
 
 function GameConfig.ShouldFastLoad(): boolean
     return GameConfig.DEV_MODE and GameConfig.FAST_LOADING_SCREEN
+end
+
+function GameConfig.ShouldUseStarterCharacter(): boolean
+    local StarterPlayer = game:GetService("StarterPlayer")
+    return GameConfig.DEV_MODE and (GameConfig.USE_STARTER_CHARACTER == true) and (StarterPlayer:FindFirstChild("StarterCharacter") ~= nil)
 end
 
 return GameConfig

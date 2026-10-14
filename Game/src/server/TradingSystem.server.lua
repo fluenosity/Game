@@ -143,14 +143,11 @@ requestBarterEvent.OnServerEvent:Connect(function(player: Player, recipeId: unkn
     print(string.format("🤝 [TradingSystem] %s completed barter '%s'", player.Name, targetRecipe.Name))
 end)
 
--- Startup: Clean & Build Custom Wood Pile and Spawn Silas
+-- Startup: Spawn Silas
 task.defer(function()
     task.wait(0.5)
 
-    -- 1. Build custom clean AAA wood pile at Vector3.new(188.3, 33.8, -39.7)
-    WoodPileBuilder.Build()
-
-    -- 2. Spawn Silas the Ash Trader inside the Trader House
+    -- 1. Spawn Silas the Ash Trader inside the Trader House
     TraderNPCSpawner.Spawn()
 end)
 

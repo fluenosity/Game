@@ -19,6 +19,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
+local SurvivorWardrobeConfig = require(sharedFolder:WaitForChild("SurvivorWardrobeConfig"))
+local SurvivorWardrobeApplier = require(sharedFolder:WaitForChild("SurvivorWardrobeApplier"))
 
 -- -----------------------------------------------------------------------------
 -- 1. REMOTE COMMUNICATION SETUP
@@ -398,17 +400,44 @@ end
 -- 5. R15 FEMALE COMBAT TEST CHARACTER
 -- -----------------------------------------------------------------------------
 local function createCombatTestCharacter()
-    if workspace:FindFirstChild("CombatTestFemale") then return end
-
     local roster = sharedFolder:FindFirstChild("SurvivorRoster")
-    local femaleTemplate = roster and roster:FindFirstChild("Maya")
+    if not roster or not roster:IsA("Folder") then
+        warn("Combat test character not spawned: SurvivorRoster is unavailable")
+        return
+    end
+    local femaleTemplate = roster:FindFirstChild("Sophie")
     if not femaleTemplate or not femaleTemplate:IsA("Model") then
-        warn("Combat test character not spawned: SurvivorRoster.Maya is unavailable")
+        warn("Combat test character not spawned: SurvivorRoster.Sophie is unavailable")
         return
     end
 
-    local character = femaleTemplate:Clone()
-    character.Name = "CombatTestFemale"
+    local existing = workspace:FindFirstChild("CombatTestFemale")
+    if existing and not existing:IsA("Model") then return end
+    local reuseExisting = existing ~= nil
+    local character = if existing and existing:IsA("Model") then existing else femaleTemplate:Clone()
+    if not reuseExisting then character.Name = "CombatTestFemale" end
+
+    local templateAnimate = femaleTemplate:FindFirstChild("Animate")
+    local templateIdle = templateAnimate and templateAnimate:FindFirstChild("idle")
+    local templateIdleAnimation = templateIdle and (
+        templateIdle:FindFirstChild("Animation1")
+            or templateIdle:FindFirstChildWhichIsA("Animation", true)
+    )
+    local idleAnimationId = if templateIdleAnimation and templateIdleAnimation:IsA("Animation")
+        then templateIdleAnimation.AnimationId
+        else ""
+
+    local applied, applyError = SurvivorWardrobeApplier.Apply(
+        character,
+        SurvivorWardrobeConfig.GetDefaultSelection("Sophie"),
+        roster
+    )
+    if not applied then
+        if not reuseExisting then character:Destroy() end
+        warn("Combat test character wardrobe failed: " .. tostring(applyError))
+        return
+    end
+
     local animateScript = character:FindFirstChild("Animate")
     if animateScript and animateScript:IsA("BaseScript") then
         animateScript:Destroy()
@@ -420,7 +449,7 @@ local function createCombatTestCharacter()
 
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if not humanoid then
-        character:Destroy()
+        if not reuseExisting then character:Destroy() end
         warn("Combat test character not spawned: Maya has no Humanoid")
         return
     end
@@ -434,9 +463,30 @@ local function createCombatTestCharacter()
     humanoid.BreakJointsOnDeath = false
     humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
     humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if not animator then
+        animator = Instance.new("Animator")
+        animator.Parent = humanoid
+    end
+    if idleAnimationId ~= "" and #animator:GetPlayingAnimationTracks() == 0 then
+        local numericId = string.match(idleAnimationId, "id=(%d+)")
+        local idleAsset = Instance.new("Animation")
+        idleAsset.AnimationId = if numericId then "rbxassetid://" .. numericId else idleAnimationId
+        idleAsset.Parent = character
+        local loaded, idleTrack = pcall(function()
+            return animator:LoadAnimation(idleAsset)
+        end)
+        if loaded and idleTrack then
+            idleTrack.Priority = Enum.AnimationPriority.Idle
+            idleTrack.Looped = true
+            idleTrack:Play(0.25)
+        end
+    end
 
-    character:PivotTo(CFrame.new(10, 13.5, -420) * CFrame.Angles(0, math.rad(-75), 0))
-    character.Parent = workspace
+    if not reuseExisting then
+        character:PivotTo(CFrame.new(10, 13.5, -420) * CFrame.Angles(0, math.rad(-75), 0))
+        character.Parent = workspace
+    end
 end
 
 task.defer(createCombatTestCharacter)

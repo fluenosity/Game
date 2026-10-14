@@ -16,9 +16,13 @@ UITheme.Colors = {
     -- True Glassmorphism Surfaces (Translucent Obsidian & Deep Frost)
     GlassBackground = Color3.fromRGB(12, 16, 22),
     GlassElevated   = Color3.fromRGB(18, 24, 34),
+    SurfaceElevated = Color3.fromRGB(18, 24, 34),
     GlassSurface    = Color3.fromRGB(14, 18, 26),
     GlassModal      = Color3.fromRGB(10, 14, 20),
     GlassBackdrop   = Color3.fromRGB(4, 6, 10),
+    Void            = Color3.fromRGB(4, 6, 10),
+    PureBlack       = Color3.fromRGB(0, 0, 0),
+    PureWhite       = Color3.fromRGB(255, 255, 255),
     GlassCardHover  = Color3.fromRGB(24, 32, 46),
     GlassActive     = Color3.fromRGB(30, 24, 20),
 
@@ -38,6 +42,7 @@ UITheme.Colors = {
     TextGold        = Color3.fromRGB(255, 215, 85),
     TextDanger      = Color3.fromRGB(255, 85, 85),
     TextSuccess     = Color3.fromRGB(90, 230, 145),
+    TextStudioSplash= Color3.fromRGB(245, 248, 255),
 
     -- Ember & Atmosphere
     EmberPrimary    = Color3.fromRGB(245, 125, 30),
@@ -54,6 +59,14 @@ UITheme.Colors = {
     ButtonDangerStroke = Color3.fromRGB(220, 55, 55),
     ButtonGhostBg     = Color3.fromRGB(255, 255, 255),
 }
+
+-- Safe color fallback metatable so missing color keys never crash property assignments
+setmetatable(UITheme.Colors, {
+    __index = function(_, key)
+        warn("[UITheme] Missing color token accessed:", tostring(key))
+        return Color3.fromRGB(12, 16, 22) -- Return safe dark glass fallback
+    end
+})
 
 --------------------------------------------------------------------------------
 -- 2. GLASS TRANSPARENCIES
@@ -85,7 +98,15 @@ UITheme.Fonts = {
     Tag         = Enum.Font.GothamMedium,
     Code        = Enum.Font.Code,
     Mono        = Enum.Font.RobotoMono,
+    Studio      = Enum.Font.GothamMedium,
 }
+
+setmetatable(UITheme.Fonts, {
+    __index = function(_, key)
+        warn("[UITheme] Missing font token accessed:", tostring(key))
+        return Enum.Font.Gotham
+    end
+})
 
 UITheme.FontSizes = {
     Hero        = 34,
@@ -97,6 +118,12 @@ UITheme.FontSizes = {
     Caption     = 11,
     Badge       = 10,
 }
+
+setmetatable(UITheme.FontSizes, {
+    __index = function(_, key)
+        return 14
+    end
+})
 
 --------------------------------------------------------------------------------
 -- 4. TWEEN PROFILES

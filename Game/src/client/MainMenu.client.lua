@@ -72,7 +72,7 @@ local function setCharacterControlsEnabled(enabled: boolean)
         local humanoid = character:FindFirstChildOfClass("Humanoid")
         if humanoid then
             humanoid.WalkSpeed = enabled and 16 or 0
-            humanoid.JumpPower = enabled and 50 or 0
+            humanoid.JumpPower = enabled and 38 or 0
         end
     end
 end
@@ -137,7 +137,7 @@ screenGui.Parent = playerGui
 local background = Instance.new("Frame")
 background.Name = "Background"
 background.Size = UDim2.fromScale(1, 1)
-background.BackgroundColor3 = UITheme.Colors.Void
+background.BackgroundColor3 = (UITheme.Colors and UITheme.Colors.Void) or Color3.fromRGB(4, 6, 10)
 background.BorderSizePixel = 0
 background.ZIndex = 1
 background.Parent = screenGui
@@ -178,16 +178,16 @@ end
 local ambientFirelight = Instance.new("Frame")
 ambientFirelight.Name = "AmbientFirelight"
 ambientFirelight.Size = UDim2.fromScale(1, 1)
-ambientFirelight.BackgroundColor3 = UITheme.Colors.EmberCrimson
+ambientFirelight.BackgroundColor3 = (UITheme.Colors and UITheme.Colors.EmberCrimson) or Color3.fromRGB(205, 45, 25)
 ambientFirelight.BackgroundTransparency = 0.94
 ambientFirelight.BorderSizePixel = 0
 ambientFirelight.ZIndex = 3
 
 local fireGrad = Instance.new("UIGradient")
 fireGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, UITheme.Colors.EmberHot),
-    ColorSequenceKeypoint.new(0.5, UITheme.Colors.EmberCrimson),
-    ColorSequenceKeypoint.new(1, UITheme.Colors.Void),
+    ColorSequenceKeypoint.new(0, (UITheme.Colors and UITheme.Colors.EmberHot) or Color3.fromRGB(255, 160, 45)),
+    ColorSequenceKeypoint.new(0.5, (UITheme.Colors and UITheme.Colors.EmberCrimson) or Color3.fromRGB(205, 45, 25)),
+    ColorSequenceKeypoint.new(1, (UITheme.Colors and UITheme.Colors.Void) or Color3.fromRGB(4, 6, 10)),
 })
 fireGrad.Transparency = NumberSequence.new({
     NumberSequenceKeypoint.new(0, 0.76),
@@ -202,7 +202,7 @@ ambientFirelight.Parent = background
 local vignette = Instance.new("Frame")
 vignette.Name = "Vignette"
 vignette.Size = UDim2.fromScale(1, 1)
-vignette.BackgroundColor3 = UITheme.Colors.PureBlack
+vignette.BackgroundColor3 = (UITheme.Colors and UITheme.Colors.PureBlack) or Color3.fromRGB(0, 0, 0)
 vignette.BackgroundTransparency = 0.8
 vignette.BorderSizePixel = 0
 vignette.ZIndex = 3
@@ -978,7 +978,28 @@ local navPlay = UI.Button.Create({
     end,
 })
 
--- 2. SETTINGS Action (Secondary Glassmorphic button with Lucide Settings Icon)
+-- 2. SURVIVOR WARDROBE Action (Dedicated button to inspect and choose survivors)
+local navWardrobe = UI.Button.Create({
+    Text = "SURVIVORS",
+    Subtext = "ROSTER & PREVIEW",
+    Variant = "Secondary",
+    IconName = "user",
+    IconSize = 16,
+    Size = UDim2.new(1, 0, 0, 46),
+    LayoutOrder = 2,
+    Parent = navContainer,
+    OnClick = function()
+        if isBusy then return end
+        isBusy = true
+        wardrobeScreen.Open(function()
+            isBusy = false
+        end, function(selection)
+            beginGame(selection)
+        end)
+    end,
+})
+
+-- 3. SETTINGS Action (Secondary Glassmorphic button with Lucide Settings Icon)
 local navSettings = UI.Button.Create({
     Text = "SETTINGS",
     Subtext = "AUDIO & CONTROLS",
@@ -986,14 +1007,14 @@ local navSettings = UI.Button.Create({
     IconName = "settings",
     IconSize = 16,
     Size = UDim2.new(1, 0, 0, 46),
-    LayoutOrder = 2,
+    LayoutOrder = 3,
     Parent = navContainer,
     OnClick = function()
         settingsModal.Open()
     end,
 })
 
--- 3. CREDITS Action (Secondary Glassmorphic button with Lucide Sparkles Icon)
+-- 4. CREDITS Action (Secondary Glassmorphic button with Lucide Sparkles Icon)
 local navCredits = UI.Button.Create({
     Text = "CREDITS",
     Subtext = "FLUENOSITY STUDIO",
@@ -1001,7 +1022,7 @@ local navCredits = UI.Button.Create({
     IconName = "sparkles",
     IconSize = 16,
     Size = UDim2.new(1, 0, 0, 46),
-    LayoutOrder = 3,
+    LayoutOrder = 4,
     Parent = navContainer,
     OnClick = function()
         creditsModal.Open()
@@ -1021,7 +1042,7 @@ local function runCinematicIntro()
         local splashScreen = Instance.new("Frame")
         splashScreen.Name = "StudioSplash"
         splashScreen.Size = UDim2.fromScale(1, 1)
-        splashScreen.BackgroundColor3 = UITheme.Colors.PureWhite
+        splashScreen.BackgroundColor3 = (UITheme.Colors and UITheme.Colors.PureWhite) or Color3.fromRGB(255, 255, 255)
         splashScreen.BorderSizePixel = 0
         splashScreen.ZIndex = 60
         splashScreen.Parent = screenGui
@@ -1032,9 +1053,9 @@ local function runCinematicIntro()
         studioTitle.Position = UDim2.fromScale(0.5, 0.5)
         studioTitle.AnchorPoint = Vector2.new(0.5, 0.5)
         studioTitle.BackgroundTransparency = 1
-        studioTitle.Font = UITheme.Fonts.Studio
+        studioTitle.Font = (UITheme.Fonts and UITheme.Fonts.Studio) or Enum.Font.GothamMedium
         studioTitle.Text = "A  F L U E N O S I T Y   S T U D I O   P R O D U C T I O N"
-        studioTitle.TextColor3 = UITheme.Colors.TextStudioSplash
+        studioTitle.TextColor3 = (UITheme.Colors and UITheme.Colors.TextStudioSplash) or Color3.fromRGB(245, 248, 255)
         studioTitle.TextScaled = true
         studioTitle.TextWrapped = true
         studioTitle.TextSize = 18

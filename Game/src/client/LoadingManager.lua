@@ -165,9 +165,10 @@ function LoadingManager.LoadGame(loadingScreen: any, onCompleted: (() -> ())?, s
         
         -- The server validates the roster ID and every wardrobe item before spawning.
         local cleanSelection = WardrobeConfig.ValidateSelection(selection)
-            or WardrobeConfig.GetDefaultSelection("Leo")
+            or WardrobeConfig.GetDefaultSelection("Sophie")
         local character = player.Character
-        if not character or player:GetAttribute("CurrentCharacterId") ~= cleanSelection.CharacterId then
+        local alreadyHasStarter = GameConfig.ShouldUseStarterCharacter() and character ~= nil and character:FindFirstChildOfClass("Humanoid") ~= nil
+        if not alreadyHasStarter and (not character or player:GetAttribute("CurrentCharacterId") ~= cleanSelection.CharacterId) then
             local spawnFunction = sharedFolder:WaitForChild("RequestSpawnCharacter", 10)
             if not spawnFunction or not spawnFunction:IsA("RemoteFunction") then
                 warn("[LoadingManager] RequestSpawnCharacter RemoteFunction is unavailable")
@@ -178,14 +179,18 @@ function LoadingManager.LoadGame(loadingScreen: any, onCompleted: (() -> ())?, s
                 return spawnFunction:InvokeServer(cleanSelection)
             end)
             if not ok or spawned ~= true then
-                warn("[LoadingManager] Survivor spawn was rejected: " .. tostring(reason or spawned))
-                return
-            end
-
-            local previousCharacter = character
-            character = player.Character
-            if not character or character == previousCharacter then
-                character = player.CharacterAdded:Wait()
+                if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+                    character = player.Character
+                else
+                    warn("[LoadingManager] Survivor spawn was rejected: " .. tostring(reason or spawned))
+                    return
+                end
+            else
+                local previousCharacter = character
+                character = player.Character
+                if not character or character == previousCharacter then
+                    character = player.CharacterAdded:Wait()
+                end
             end
         end
         
@@ -215,7 +220,7 @@ function LoadingManager.LoadGame(loadingScreen: any, onCompleted: (() -> ())?, s
         -- Restore character controls
         if humanoid then
             humanoid.WalkSpeed = 16
-            humanoid.JumpPower = 50
+            humanoid.JumpPower = 38
         end
         
         -- Smoothly dissolve loading curtain

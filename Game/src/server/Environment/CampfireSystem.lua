@@ -229,16 +229,34 @@ function CampfireSystem.BuildCampfire(): Model
     model.PrimaryPart = firePart
     campfireState.FirePart = firePart
 
-    -- Fire Object
-    local fire = Instance.new("Fire")
-    fire.Name = "Flame"
-    fire.Size = 5.8
-    fire.Heat = 14
-    fire.Color = Color3.fromRGB(255, 140, 32)
-    fire.SecondaryColor = Color3.fromRGB(215, 45, 14)
-    fire.Enabled = true
-    fire.Parent = firePart
-    campfireState.Fire = fire
+    -- Stylized Flame Particle Emitter (Avoids legacy Fire engine wav lookup)
+    local flameEmitter = Instance.new("ParticleEmitter")
+    flameEmitter.Name = "Flame"
+    flameEmitter.Texture = "rbxasset://textures/particles/fire_main.dds"
+    flameEmitter.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 230, 110)),
+        ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 140, 32)),
+        ColorSequenceKeypoint.new(1.0, Color3.fromRGB(215, 45, 14)),
+    })
+    flameEmitter.Size = NumberSequence.new({
+        NumberSequenceKeypoint.new(0.0, 1.2),
+        NumberSequenceKeypoint.new(0.5, 2.2),
+        NumberSequenceKeypoint.new(1.0, 0.4),
+    })
+    flameEmitter.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0.0, 0.1),
+        NumberSequenceKeypoint.new(0.7, 0.3),
+        NumberSequenceKeypoint.new(1.0, 1.0),
+    })
+    flameEmitter.Lifetime = NumberRange.new(0.6, 1.1)
+    flameEmitter.Rate = 28
+    flameEmitter.Speed = NumberRange.new(2.8, 5.2)
+    flameEmitter.SpreadAngle = Vector2.new(15, 15)
+    flameEmitter.Acceleration = Vector3.new(0, 4.0, 0)
+    flameEmitter.LightEmission = 0.9
+    flameEmitter.Enabled = true
+    flameEmitter.Parent = firePart
+    campfireState.Fire = flameEmitter
 
     -- Ember Sparks Particle Emitter
     local embers = Instance.new("ParticleEmitter")
@@ -308,7 +326,7 @@ function CampfireSystem.BuildCampfire(): Model
     -- Crackling Audio Loop
     local crackle = Instance.new("Sound")
     crackle.Name = "CrackleLoop"
-    crackle.SoundId = "rbxassetid://1845942472"
+    crackle.SoundId = "rbxassetid://150367086"
     crackle.Volume = 0.65
     crackle.Looped = true
     crackle.RollOffMode = Enum.RollOffMode.InverseTapered
@@ -323,16 +341,16 @@ function CampfireSystem.BuildCampfire(): Model
     -- Ignition Sound
     local igniteSound = Instance.new("Sound")
     igniteSound.Name = "IgniteSound"
-    igniteSound.SoundId = "rbxassetid://1845942472"
-    igniteSound.Volume = 0.95
+    igniteSound.SoundId = "rbxassetid://9114446852"
+    igniteSound.Volume = 0.85
     igniteSound.Parent = firePart
     campfireState.IgniteAudio = igniteSound
 
     -- Douse Sound
     local douseSound = Instance.new("Sound")
     douseSound.Name = "DouseSound"
-    douseSound.SoundId = "rbxassetid://1845942472"
-    douseSound.Volume = 0.85
+    douseSound.SoundId = "rbxassetid://9114446852"
+    douseSound.Volume = 0.70
     douseSound.Parent = firePart
     campfireState.DouseAudio = douseSound
 

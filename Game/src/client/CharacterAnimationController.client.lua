@@ -29,6 +29,7 @@ local camera = workspace.CurrentCamera
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local AudioManager = require(script.Parent:WaitForChild("AudioManager"))
 local ModalManager = require(script.Parent:WaitForChild("ModalManager"))
+local SurvivorRigConfig = require(sharedFolder:WaitForChild("SurvivorRigConfig"))
 
 -- -----------------------------------------------------------------------------
 -- 1. REMOTE COMMUNICATION
@@ -137,6 +138,7 @@ local attackToken = 0
 local activeCharacter: Model? = nil
 local activeHumanoid: Humanoid? = nil
 local activeHRP: BasePart? = nil
+local activeBoneSyncPairs: { { Source: Bone, Target: Bone } } = {}
 
 type JointSet = {
     RightShoulder: Instance?,
@@ -154,6 +156,8 @@ type JointSet = {
     LeftKnee: Instance?,
     RightAnkle: Instance?,
     LeftAnkle: Instance?,
+    HipsBone: Instance?,
+    HeadBone: Instance?,
 }
 
 local joints: JointSet = {
@@ -172,6 +176,8 @@ local joints: JointSet = {
     LeftKnee = nil,
     RightAnkle = nil,
     LeftAnkle = nil,
+    HipsBone = nil,
+    HeadBone = nil,
 }
 
 local LIGHT_ATTACK_DURATION = 0.50
@@ -306,6 +312,20 @@ local function cacheCharacterJoints(char: Model)
     joints.LeftKnee = char:FindFirstChild("LeftKnee", true)
     joints.RightAnkle = char:FindFirstChild("RightAnkle", true)
     joints.LeftAnkle = char:FindFirstChild("LeftAnkle", true)
+    joints.HipsBone = char:FindFirstChild("mixamorig:Hips", true)
+    joints.HeadBone = char:FindFirstChild("mixamorig:Head", true)
+
+    -- Discover secondary deformer bones (e.g. mixamorig6 for Jody)
+    table.clear(activeBoneSyncPairs)
+    for _, d in ipairs(char:GetDescendants()) do
+        if d:IsA("Bone") and string.find(d.Name, "^mixamorig6:") then
+            local baseName = string.gsub(d.Name, "^mixamorig6:", "mixamorig:")
+            local sourceBone = char:FindFirstChild(baseName, true)
+            if sourceBone and sourceBone:IsA("Bone") then
+                table.insert(activeBoneSyncPairs, { Source = sourceBone, Target = d })
+            end
+        end
+    end
 
     -- Cache arms for FPP viewmodel unmasking
     for _, partName in ipairs({ "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm", "RightLowerArm", "RightHand" }) do
@@ -652,7 +672,64 @@ end
 RunService.PreSimulation:Connect(function(dt: number)
     if not activeCharacter or not activeHumanoid or not activeHRP then return end
 
+    -- Skinned Mesh Jump Root-Motion Stabilizer:
+    -- Mixamo airborne animations contain massive vertical root displacement (+3.0 studs) on mixamorig:Hips.
+    -- When airborne or while the jump animation is blending out on landing, clamp positive Y displacement
+    -- to 0 so the character never flickers or pops upward on landing. Ground gait (Y <= 0) remains unaffected.
+    if not joints.HipsBone and activeCharacter then
+        joints.HipsBone = activeCharacter:FindFirstChild("mixamorig:Hips", true)
+    end
+    if joints.HipsBone and joints.HipsBone:IsA("Bone") then
+        local hipsBone = joints.HipsBone :: Bone
+        local t = hipsBone.Transform
+        if state.IsAirborne or t.Position.Y > 0 then
+            hipsBone.Transform = CFrame.new(t.Position.X, math.min(0, t.Position.Y), t.Position.Z) * t.Rotation
+        end
+    end
+
+    -- Stabilize remote players so everyone sees realistic grounded jumps in multiplayer
+    for _, otherPlayer in ipairs(Players:GetPlayers()) do
+        if otherPlayer ~= player and otherPlayer.Character then
+            local otherHips = otherPlayer.Character:FindFirstChild("mixamorig:Hips", true)
+            if otherHips and otherHips:IsA("Bone") then
+                local ot = otherHips.Transform
+                if ot.Position.Y > 0 then
+                    otherHips.Transform = CFrame.new(ot.Position.X, math.min(0, ot.Position.Y), ot.Position.Z) * ot.Rotation
+                end
+            end
+        end
+    end
+
     local now = os.clock()
+
+    -- Living Head Gaze & Eye Saccade Presence:
+    -- Organic micro-glance saccades (subtle eye focus drift) with gentle warm rest tilt
+    if not joints.HeadBone and activeCharacter then
+        joints.HeadBone = activeCharacter:FindFirstChild("mixamorig:Head", true)
+    end
+    if joints.HeadBone and joints.HeadBone:IsA("Bone") then
+        local headBone = joints.HeadBone :: Bone
+        local profileId = (activeCharacter:GetAttribute("SurvivorProfileId") or activeCharacter.Name) :: string
+        local profile = SurvivorRigConfig.GetProfile(profileId)
+        local gazeRange = profile.Facial and profile.Facial.MicroGazeRangeDeg or 1.0
+        local restTilt = profile.Facial and profile.Facial.HeadRestTiltDeg or 0.0
+
+        local saccadeClock = now * 0.42
+        local gazeYaw = math.sin(saccadeClock * 0.75 + math.sin(saccadeClock * 1.4)) * math.rad(gazeRange)
+        local gazePitch = math.cos(saccadeClock * 0.85) * math.rad(gazeRange * 0.6)
+        local friendlyTilt = math.rad(restTilt)
+
+        local gazeOffset = CFrame.Angles(gazePitch, gazeYaw, friendlyTilt)
+        headBone.Transform = headBone.Transform * gazeOffset
+    end
+
+    -- Synchronize secondary deformer bones (e.g. mixamorig6 for Jody) so skinned mesh follows Animator
+    if #activeBoneSyncPairs > 0 then
+        for _, pair in ipairs(activeBoneSyncPairs) do
+            pair.Target.Transform = pair.Source.Transform
+        end
+    end
+
     local moveVel = activeHRP.AssemblyLinearVelocity
     local horizontalSpeed = Vector3.new(moveVel.X, 0, moveVel.Z).Magnitude
     state.LastVerticalVelocity = moveVel.Y

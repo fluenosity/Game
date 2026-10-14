@@ -3,6 +3,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterPlayer = game:GetService("StarterPlayer")
 
 Players.CharacterAutoLoads = false
 
@@ -28,15 +29,49 @@ local playersInSession: { [Player]: boolean } = {}
 local savedSelections: { [Player]: { [string]: string } } = {}
 local lastSpawnRequest: { [Player]: number } = {}
 
+local function getGroundedSpawnCFrame(character: Model, spawnLocation: SpawnLocation?): CFrame
+	if not spawnLocation then return CFrame.new(0, 10, 0) end
+
+	local pivot = character:GetPivot()
+	local lowestFootOffset = math.huge
+	for _, footName in ipairs({ "LeftFoot", "RightFoot" }) do
+		local foot = character:FindFirstChild(footName)
+		if foot and foot:IsA("BasePart") then
+			local bottom = foot.CFrame:PointToWorldSpace(Vector3.new(0, -foot.Size.Y * 0.5, 0))
+			lowestFootOffset = math.min(lowestFootOffset, (bottom - pivot.Position):Dot(pivot.UpVector))
+		end
+	end
+	if lowestFootOffset == math.huge then lowestFootOffset = 0 end
+
+	local up = spawnLocation.CFrame.UpVector
+	local spawnSurface = spawnLocation.Position + up * (spawnLocation.Size.Y * 0.5)
+	local targetPivot = spawnSurface + up * (0.06 - lowestFootOffset)
+	return CFrame.new(targetPivot) * spawnLocation.CFrame.Rotation
+end
+
 local function spawnCharacterForPlayer(player: Player, requestedSelection: any): (boolean, string?)
 	if not player.Parent then return false, "Player left before spawn" end
 
-	local selection = WardrobeConfig.ValidateSelection(requestedSelection)
-	if not selection then return false, "Invalid survivor or wardrobe selection" end
-	local template = roster:FindFirstChild(selection.CharacterId)
-	if not template or not template:IsA("Model") then
-		return false, "Selected R15 survivor is missing from the roster"
+	local useStarterCharacter = GameConfig.ShouldUseStarterCharacter()
+	local template: Model? = nil
+	local selection = nil
+
+	if useStarterCharacter then
+		local sc = StarterPlayer:FindFirstChild("StarterCharacter")
+		if sc and sc:IsA("Model") then
+			template = sc
+		end
 	end
+
+	if not template then
+		selection = WardrobeConfig.ValidateSelection(requestedSelection)
+		if not selection then return false, "Invalid survivor or wardrobe selection" end
+		template = roster:FindFirstChild(selection.CharacterId) :: Model?
+		if not template or not template:IsA("Model") then
+			return false, "Selected R15 survivor is missing from the roster"
+		end
+	end
+
 	local templateHumanoid = template:FindFirstChildOfClass("Humanoid")
 	if not templateHumanoid or templateHumanoid.RigType ~= Enum.HumanoidRigType.R15 then
 		return false, "Selected survivor is not a valid R15 character"
@@ -44,10 +79,13 @@ local function spawnCharacterForPlayer(player: Player, requestedSelection: any):
 
 	local character = template:Clone()
 	character.Name = player.Name
-	local applied, applyError = WardrobeApplier.Apply(character, selection, roster)
-	if not applied then
-		character:Destroy()
-		return false, applyError
+
+	if not useStarterCharacter and selection then
+		local applied, applyError = WardrobeApplier.Apply(character, selection, roster)
+		if not applied then
+			character:Destroy()
+			return false, applyError
+		end
 	end
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -57,8 +95,44 @@ local function spawnCharacterForPlayer(player: Player, requestedSelection: any):
 		return false, "Selected R15 survivor is missing core rig parts"
 	end
 
-	local spawnLocation = workspace:FindFirstChildOfClass("SpawnLocation")
-	local spawnCFrame = if spawnLocation then spawnLocation.CFrame + Vector3.new(0, 4, 0) else CFrame.new(0, 10, 0)
+	if not humanoid:FindFirstChildOfClass("Animator") then
+		local animator = Instance.new("Animator")
+		animator.Parent = humanoid
+	end
+
+	local animateScript = character:FindFirstChild("Animate")
+	if not animateScript or not animateScript:IsA("LocalScript") then
+		if animateScript then animateScript:Destroy() end
+		local scs = StarterPlayer:FindFirstChild("StarterCharacterScripts")
+		local standardAnimate = scs and scs:FindFirstChild("Animate")
+		if not standardAnimate then
+			local starterCharacter = StarterPlayer:FindFirstChild("StarterCharacter")
+			standardAnimate = starterCharacter and starterCharacter:FindFirstChild("Animate")
+		end
+		if standardAnimate and standardAnimate:IsA("LocalScript") then
+			animateScript = standardAnimate:Clone()
+			animateScript.Parent = character
+		end
+	end
+	if animateScript and animateScript:IsA("LocalScript") then
+		animateScript.Enabled = true
+		for _, descendant in ipairs(animateScript:GetDescendants()) do
+			if descendant:IsA("Animation") then
+				local numericId = string.match(descendant.AnimationId, "(%d+)")
+				if numericId then descendant.AnimationId = "rbxassetid://" .. numericId end
+			end
+		end
+	end
+
+	humanoid.AutoRotate = true
+	humanoid.PlatformStand = false
+	humanoid.Sit = false
+	if humanoid.WalkSpeed <= 0 then humanoid.WalkSpeed = 16 end
+	if humanoid.UseJumpPower and humanoid.JumpPower <= 0 then humanoid.JumpPower = 38 end
+	if humanoid.HipHeight < 1 and not humanoid.AutomaticScalingEnabled then humanoid.HipHeight = 2.5 end
+
+	local spawnLocation = workspace:FindFirstChildOfClass("SpawnLocation") :: SpawnLocation?
+	local spawnCFrame = getGroundedSpawnCFrame(character, spawnLocation)
 	character:PivotTo(spawnCFrame)
 
 	local previousCharacter = player.Character
@@ -67,18 +141,32 @@ local function spawnCharacterForPlayer(player: Player, requestedSelection: any):
 	if previousCharacter and previousCharacter ~= character then
 		previousCharacter:Destroy()
 	end
+	task.defer(function()
+		if humanoid.Parent == character then
+			humanoid:ChangeState(Enum.HumanoidStateType.Running)
+		end
+	end)
 	pcall(function()
 		rootPart:SetNetworkOwner(player)
 	end)
 
-	local definition = WardrobeConfig.Characters[selection.CharacterId]
-	humanoid.DisplayName = definition.DisplayName
-	player:SetAttribute("SelectedGender", definition.Gender)
-	player:SetAttribute("CurrentCharacterGender", definition.Gender)
-	player:SetAttribute("SelectedCharacterId", selection.CharacterId)
-	player:SetAttribute("CurrentCharacterId", selection.CharacterId)
+	local charId = selection and selection.CharacterId or "StarterCharacter"
+	local definition = WardrobeConfig.Characters[charId]
+	if definition then
+		humanoid.DisplayName = definition.DisplayName
+		player:SetAttribute("SelectedGender", definition.Gender)
+		player:SetAttribute("CurrentCharacterGender", definition.Gender)
+		player:SetAttribute("SelectedCharacterId", charId)
+		player:SetAttribute("CurrentCharacterId", charId)
+	else
+		humanoid.DisplayName = "StarterCharacter"
+		player:SetAttribute("SelectedGender", "Female")
+		player:SetAttribute("CurrentCharacterGender", "Female")
+		player:SetAttribute("SelectedCharacterId", "StarterCharacter")
+		player:SetAttribute("CurrentCharacterId", "StarterCharacter")
+	end
 	playersInSession[player] = true
-	savedSelections[player] = selection
+	savedSelections[player] = selection or WardrobeConfig.GetDefaultSelection("Sophie")
 	return true, nil
 end
 
@@ -91,6 +179,9 @@ remoteFunction.OnServerInvoke = function(player: Player, payload: any): (boolean
 	end
 	lastSpawnRequest[player] = now
 	if playersInSession[player] then
+		if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+			return true, nil
+		end
 		return false, "Survivor selection is locked after entering the wilderness"
 	end
 	return spawnCharacterForPlayer(player, payload)
@@ -103,7 +194,7 @@ local function onPlayerAdded(player: Player)
 			humanoid.Died:Connect(function()
 				task.wait(Players.RespawnTime)
 				if player.Parent and playersInSession[player] then
-					local selection = savedSelections[player] or WardrobeConfig.GetDefaultSelection("Leo")
+					local selection = savedSelections[player] or WardrobeConfig.GetDefaultSelection("Sophie")
 					local ok, err = spawnCharacterForPlayer(player, selection)
 					if not ok then warn("[PlayerLifecycle] Respawn failed: " .. tostring(err)) end
 				end
@@ -114,7 +205,7 @@ local function onPlayerAdded(player: Player)
 	if GameConfig.ShouldDirectSpawn() then
 		task.defer(function()
 			if player.Parent and not playersInSession[player] then
-				local selection = WardrobeConfig.GetDefaultSelection("Leo")
+				local selection = WardrobeConfig.GetDefaultSelection("Sophie")
 				local ok, err = spawnCharacterForPlayer(player, selection)
 				if not ok then warn("[PlayerLifecycle] Direct spawn failed: " .. tostring(err)) end
 			end
