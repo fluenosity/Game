@@ -1,17 +1,14 @@
 # Active Locomotion Animations (Current Roster)
-- **FemaleWalk**: `115531053004010` (Calibrated Walk @ 12 studs/s for Sophie & Jody)
-- **MaleWalk**: `70412449762831` (Calibrated Walk @ 12 studs/s for Bryce & Remy)
-- **RunningNewMain**: `99676638771528` (Sprint Run @ 24 studs/s, all characters)
-- **RunningJumpMain**: `103074489051723` (Moving Jump & Fall leap arc, JumpPower = 38, active when moving)
-- **IdleJump**: `100945085841175` (Stationary In-Place Jump & Fall arc, JumpPower = 38, active when standing still)
-- **MainIdle**: `79030538201747` (Male resting idle)
-- **SlightTiltIdle**: `89629385542634` (Sophie female signature idle)
-- **SittingMain**: `98264175486814`
-- **SitToStandMain**: `97271955482381`
-- **Stand to Sit Main**: `99867494141148`
-- **SwimmingMain** = `117791765615739`
-- **SwimmingIdleMain** = `122627851214967`
-
+- **FemaleWalk**: `115531053004010` (Calibrated Walk @ 6 studs/s for Sophie & Jody)
+- **MaleWalk**: `70412449762831` (Calibrated Walk @ 6 studs/s for Bryce & Remy)
+- **RunningNewMain**: `99676638771528` (Sprint Run @ 16 studs/s, all characters)
+- **RunningJumpMain**: `103074489051723` (Moving Jump & Fall leap arc, JumpPower = 38, requires active movement / sprint)
+- **IdleJump**: *BLOCKED* (Characters cannot jump while standing still; must be actively moving or running)
+- **Crouch**: *REMOVED* (Streamlined locomotion: Walk @ 6 studs/s, Sprint @ 16 studs/s)
+- **StaticIDLEMAIND**: `103828063959982` (Primary Static Breathing Idle ~10.0s, anchor stance, played between flavor idles)
+- **IDLEMAIN2**: `132876566376642` (Flavor Idle Variant 2 ~4.0s, breathing posture shift)
+- **IDLEMAIN3**: `137772468102995` (Flavor Idle Variant 3 ~3.27s, observant subtle gaze shift)
+- **Idle Sequence Cycle**: `{ 1, 2, 1, 3 }` (`StaticIDLEMAIND (10s)` -> `IDLEMAIN2 (4s)` -> `StaticIDLEMAIND (10s)` -> `IDLEMAIN3 (3.3s)` -> repeat, with smooth 0.35s crossfade and instant movement cancel)
 ### Secondary / Overlay / Emote Animations:
 - Movementoractiontoidle: `134245085026778`
 - Repelling Insects idle: `105216910523835` (upper-body overlay)

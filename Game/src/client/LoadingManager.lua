@@ -170,31 +170,41 @@ function LoadingManager.LoadGame(loadingScreen: any, onCompleted: (() -> ())?, s
         local alreadyHasStarter = GameConfig.ShouldUseStarterCharacter() and character ~= nil and character:FindFirstChildOfClass("Humanoid") ~= nil
         if not alreadyHasStarter and (not character or player:GetAttribute("CurrentCharacterId") ~= cleanSelection.CharacterId) then
             local spawnFunction = sharedFolder:WaitForChild("RequestSpawnCharacter", 10)
-            if not spawnFunction or not spawnFunction:IsA("RemoteFunction") then
-                warn("[LoadingManager] RequestSpawnCharacter RemoteFunction is unavailable")
-                return
-            end
-
-            local ok, spawned, reason = pcall(function()
-                return spawnFunction:InvokeServer(cleanSelection)
-            end)
-            if not ok or spawned ~= true then
-                if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
-                    character = player.Character
+            if spawnFunction and spawnFunction:IsA("RemoteFunction") then
+                local previousCharacter = character
+                local ok, spawned, reason = pcall(function()
+                    return spawnFunction:InvokeServer(cleanSelection)
+                end)
+                if ok and spawned == true then
+                    local deadline = os.clock() + 3.0
+                    while os.clock() < deadline do
+                        if player.Character and player.Character ~= previousCharacter then
+                            character = player.Character
+                            break
+                        end
+                        task.wait(0.05)
+                    end
                 else
-                    warn("[LoadingManager] Survivor spawn was rejected: " .. tostring(reason or spawned))
-                    return
+                    warn("[LoadingManager] Survivor spawn info: " .. tostring(reason or spawned))
                 end
             else
-                local previousCharacter = character
-                character = player.Character
-                if not character or character == previousCharacter then
-                    character = player.CharacterAdded:Wait()
-                end
+                warn("[LoadingManager] RequestSpawnCharacter RemoteFunction is unavailable")
             end
         end
         
-        local humanoid = character:WaitForChild("Humanoid", 10) :: Humanoid?
+        character = character or player.Character
+        if not character then
+            local deadline = os.clock() + 3.0
+            while os.clock() < deadline do
+                if player.Character then
+                    character = player.Character
+                    break
+                end
+                task.wait(0.05)
+            end
+        end
+        
+        local humanoid = character and (character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 3)) :: Humanoid?
         
         -- Temporarily freeze character movement while screen is covered
         if humanoid then

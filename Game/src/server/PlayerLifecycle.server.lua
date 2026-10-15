@@ -101,19 +101,20 @@ local function spawnCharacterForPlayer(player: Player, requestedSelection: any):
 		animator.Parent = humanoid
 	end
 
+	local scs = StarterPlayer:FindFirstChild("StarterCharacterScripts")
+	local standardAnimate = scs and scs:FindFirstChild("Animate")
+	if not standardAnimate then
+		local starterCharacter = StarterPlayer:FindFirstChild("StarterCharacter")
+		standardAnimate = starterCharacter and starterCharacter:FindFirstChild("Animate")
+	end
+
 	local animateScript = character:FindFirstChild("Animate")
-	if not animateScript or not animateScript:IsA("LocalScript") then
-		if animateScript then animateScript:Destroy() end
-		local scs = StarterPlayer:FindFirstChild("StarterCharacterScripts")
-		local standardAnimate = scs and scs:FindFirstChild("Animate")
-		if not standardAnimate then
-			local starterCharacter = StarterPlayer:FindFirstChild("StarterCharacter")
-			standardAnimate = starterCharacter and starterCharacter:FindFirstChild("Animate")
+	if standardAnimate and standardAnimate:IsA("LocalScript") then
+		if animateScript then
+			animateScript:Destroy()
 		end
-		if standardAnimate and standardAnimate:IsA("LocalScript") then
-			animateScript = standardAnimate:Clone()
-			animateScript.Parent = character
-		end
+		animateScript = standardAnimate:Clone()
+		animateScript.Parent = character
 	end
 	if animateScript and animateScript:IsA("LocalScript") then
 		animateScript.Enabled = true
@@ -129,13 +130,35 @@ local function spawnCharacterForPlayer(player: Player, requestedSelection: any):
 		local profileId = (charDef and charDef.ProfileId) or (selection and selection.CharacterId) or "SOPHIE"
 		character:SetAttribute("SurvivorProfileId", profileId)
 		local profile = SurvivorRigConfig.GetProfile(profileId, character)
-		local recommendedIdle = (charDef and charDef.RecommendedIdle) or (profile and profile.Gender == "Female" and "rbxassetid://89629385542634") or "rbxassetid://79030538201747"
-
 		local idleContainer = animateScript:FindFirstChild("idle")
-		local anim1 = idleContainer and idleContainer:FindFirstChild("Animation1")
-		if anim1 and anim1:IsA("Animation") then
-			anim1.AnimationId = recommendedIdle
+		if not idleContainer then
+			idleContainer = Instance.new("StringValue")
+			idleContainer.Name = "idle"
+			idleContainer.Parent = animateScript
 		end
+		local anim1 = idleContainer:FindFirstChild("Animation1")
+		if not anim1 then
+			anim1 = Instance.new("Animation")
+			anim1.Name = "Animation1"
+			anim1.Parent = idleContainer
+		end
+		anim1.AnimationId = "rbxassetid://103828063959982" -- StaticIDLEMAIND (10s primary static resting idle)
+
+		local anim2 = idleContainer:FindFirstChild("Animation2")
+		if not anim2 then
+			anim2 = Instance.new("Animation")
+			anim2.Name = "Animation2"
+			anim2.Parent = idleContainer
+		end
+		anim2.AnimationId = "rbxassetid://132876566376642" -- IDLEMAIN2 (4s flavor idle)
+
+		local anim3 = idleContainer:FindFirstChild("Animation3")
+		if not anim3 then
+			anim3 = Instance.new("Animation")
+			anim3.Name = "Animation3"
+			anim3.Parent = idleContainer
+		end
+		anim3.AnimationId = "rbxassetid://137772468102995" -- IDLEMAIN3 (3.27s flavor idle)
 
 		local locomotion = profile and profile.Locomotion
 		local isFemale = (profile and profile.Gender == "Female") or (charDef and charDef.Gender == "Female")
@@ -170,27 +193,28 @@ local function spawnCharacterForPlayer(player: Player, requestedSelection: any):
 			fallAnim.AnimationId = fallId
 		end
 
+		local swimContainer = animateScript:FindFirstChild("swim")
+		local swimAnim = swimContainer and (swimContainer:FindFirstChild("Swim") or swimContainer:FindFirstChildOfClass("Animation"))
+		if swimAnim and swimAnim:IsA("Animation") then
+			swimAnim.AnimationId = "rbxassetid://117791765615739"
+		end
+
+		local swimIdleContainer = animateScript:FindFirstChild("swimidle")
+		local swimIdleAnim = swimIdleContainer and (swimIdleContainer:FindFirstChild("SwimIdle") or swimIdleContainer:FindFirstChildOfClass("Animation"))
+		if swimIdleAnim and swimIdleAnim:IsA("Animation") then
+			swimIdleAnim.AnimationId = "rbxassetid://122627851214967"
+		end
+
 		local idleJumpContainer = animateScript:FindFirstChild("idlejump")
-		if not idleJumpContainer then
-			local sv = Instance.new("StringValue")
-			sv.Name = "idlejump"
-			local a = Instance.new("Animation")
-			a.Name = "IdleJumpAnim"
-			a.AnimationId = "rbxassetid://100945085841175"
-			a.Parent = sv
-			sv.Parent = animateScript
-		else
-			local a = idleJumpContainer:FindFirstChild("IdleJumpAnim") or idleJumpContainer:FindFirstChildOfClass("Animation")
-			if a and a:IsA("Animation") then
-				a.AnimationId = "rbxassetid://100945085841175"
-			end
+		if idleJumpContainer then
+			idleJumpContainer:Destroy()
 		end
 	end
 
 	humanoid.AutoRotate = true
 	humanoid.PlatformStand = false
 	humanoid.Sit = false
-	humanoid.WalkSpeed = 12
+	humanoid.WalkSpeed = 6
 	humanoid.UseJumpPower = true
 	humanoid.JumpPower = 38
 	if humanoid.HipHeight < 1 and not humanoid.AutomaticScalingEnabled then humanoid.HipHeight = 2.5 end

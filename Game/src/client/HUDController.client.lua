@@ -59,9 +59,9 @@ local lastSprintTime = 0.0
 local maxHunger = 100.0
 local currentHunger = 78.0 -- Matches mockup baseline (Food 78)
 
-local normalWalkSpeed = 12
-local sprintWalkSpeed = 24
-local fatiguedWalkSpeed = 8
+local normalWalkSpeed = 6
+local sprintWalkSpeed = 16
+local fatiguedWalkSpeed = 4
 local normalJumpPower = 38
 local fatiguedJumpPower = 0
 
@@ -209,9 +209,6 @@ local function updateMouseBehavior()
         modalBypassBtn.Modal = false
         savedCameraRotation = nil
         player.CameraMode = Enum.CameraMode.Classic
-        if cam and cam.CameraType ~= Enum.CameraType.Custom then
-            cam.CameraType = Enum.CameraType.Custom
-        end
         UserInputService.MouseBehavior = Enum.MouseBehavior.Default
         UserInputService.MouseIconEnabled = true
         if crosshairInstance then
@@ -762,6 +759,20 @@ local function setupCharacter(character: Model)
     --    before another jump can ever trigger.
     characterJumpConn = activeHumanoid.Jumping:Connect(function(isActive: boolean)
         if isActive and activeHumanoid.Health > 0 then
+            -- Verify active movement intent: idle jumping is strictly blocked
+            local moveMag = activeHumanoid.MoveDirection.Magnitude
+            local hSpeed = 0
+            if activeCharacter and activeCharacter.PrimaryPart then
+                local vel = activeCharacter.PrimaryPart.AssemblyLinearVelocity
+                hSpeed = Vector3.new(vel.X, 0, vel.Z).Magnitude
+            end
+            if moveMag <= 0.05 and hSpeed <= 1.2 then
+                -- Player is standing still: abort jump immediately
+                activeHumanoid:ChangeState(Enum.HumanoidStateType.Running)
+                activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+                return
+            end
+
             -- Immediately lock jumping state so mid-air spam or holding space is blocked
             activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
 
@@ -868,28 +879,32 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
         vitalsInstance.SetHunger(currentHunger, maxHunger)
     end
 
-    -- Movement speed arbitration (attacks stay mobile; Crouch = 8, Walk = 16, Sprint = 26)
+    -- Movement speed arbitration (attacks stay mobile; Walk = 6, Sprint = 16)
     local isAttacking = (activeCharacter and activeCharacter:GetAttribute("IsAttacking") == true)
-    local isCrouched = (activeCharacter and activeCharacter:GetAttribute("IsCrouching") == true)
 
     if UNLIMITED_STAMINA_DEV then
         currentStamina = maxStamina
         isFatigued = false
         if activeHumanoid then
-            local targetSpeed = normalWalkSpeed
-            if isCrouched then
-                targetSpeed = 8
-            elseif isSprinting then
-                targetSpeed = sprintWalkSpeed
-            else
-                targetSpeed = normalWalkSpeed
-            end
+            local targetSpeed = isSprinting and sprintWalkSpeed or normalWalkSpeed
             activeHumanoid.WalkSpeed = targetSpeed
             activeHumanoid.JumpPower = normalJumpPower
+
+            -- Continuously enforce: jumping requires active movement (idle jump strictly blocked)
+            if jumpCooldownThread == nil then
+                local moveMag = activeHumanoid.MoveDirection.Magnitude
+                local hSpeed = 0
+                if activeCharacter and activeCharacter.PrimaryPart then
+                    local vel = activeCharacter.PrimaryPart.AssemblyLinearVelocity
+                    hSpeed = Vector3.new(vel.X, 0, vel.Z).Magnitude
+                end
+                local isMovingOrRunning = (moveMag > 0.05) or (hSpeed > 1.2)
+                activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, isMovingOrRunning and not isFatigued)
+            end
         end
         vitalsInstance.SetStamina(maxStamina, maxStamina)
     else
-        if isSprinting and isMoving and not isFatigued and not isCrouched and not isAttacking then
+        if isSprinting and isMoving and not isFatigued and not isAttacking then
             currentStamina = math.max(0, currentStamina - (20 * deltaTime))
             lastSprintTime = os.clock()
 
@@ -902,8 +917,7 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
 
                 task.delay(1.2, function()
                     if activeHumanoid and not isSprinting and not isFatigued then
-                        local cCrouched = activeCharacter and activeCharacter:GetAttribute("IsCrouching") == true
-                        activeHumanoid.WalkSpeed = cCrouched and 8 or normalWalkSpeed
+                        activeHumanoid.WalkSpeed = normalWalkSpeed
                     end
                 end)
             end
@@ -917,8 +931,7 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
                 if isFatigued and currentStamina >= 25 then
                     isFatigued = false
                     if activeHumanoid and not isSprinting then
-                        local cCrouched = activeCharacter and activeCharacter:GetAttribute("IsCrouching") == true
-                        activeHumanoid.WalkSpeed = cCrouched and 8 or normalWalkSpeed
+                        activeHumanoid.WalkSpeed = normalWalkSpeed
                         activeHumanoid.JumpPower = normalJumpPower
                     end
                 end
@@ -927,9 +940,7 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
 
         if activeHumanoid then
             local targetSpeed = normalWalkSpeed
-            if isCrouched then
-                targetSpeed = 8
-            elseif isFatigued then
+            if isFatigued then
                 targetSpeed = fatiguedWalkSpeed
             elseif isSprinting and isMoving then
                 targetSpeed = sprintWalkSpeed
@@ -1028,10 +1039,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
         if player:GetAttribute("IsInGameplay") == true then
             if UNLIMITED_STAMINA_DEV or (not isFatigued and currentStamina > 0) then
-                -- Sprinting automatically un-crouches the character
-                if activeCharacter and activeCharacter:GetAttribute("IsCrouching") == true then
-                    activeCharacter:SetAttribute("IsCrouching", false)
-                end
                 isSprinting = true
                 vitalsInstance.SetSprinting(true)
                 if activeHumanoid and not (activeCharacter and activeCharacter:GetAttribute("IsAttacking") == true) then
@@ -1133,8 +1140,7 @@ UserInputService.InputEnded:Connect(function(input)
         isSprinting = false
         vitalsInstance.SetSprinting(false)
         if activeHumanoid and not isFatigued then
-            local isCrouched = activeCharacter and activeCharacter:GetAttribute("IsCrouching") == true
-            activeHumanoid.WalkSpeed = isCrouched and 8 or normalWalkSpeed
+            activeHumanoid.WalkSpeed = normalWalkSpeed
         end
     end
 end)

@@ -29,7 +29,11 @@ export type CharacterRigData = {
     Hips: Bone?,
     LeftUpLeg: Bone?,
     RightUpLeg: Bone?,
+    Neck: Bone?,
+    Head: Bone?,
     LegClearanceAngleDeg: number,
+    NeckPostureBackDeg: number,
+    HeadPostureBackDeg: number,
 }
 
 local SurvivorBoneSync = {}
@@ -59,7 +63,11 @@ function SurvivorBoneSync.RegisterCharacter(char: Model): CharacterRigData?
         Hips = char:FindFirstChild("mixamorig:Hips", true) :: Bone?,
         LeftUpLeg = char:FindFirstChild("mixamorig:LeftUpLeg", true) :: Bone?,
         RightUpLeg = char:FindFirstChild("mixamorig:RightUpLeg", true) :: Bone?,
+        Neck = char:FindFirstChild("mixamorig:Neck", true) :: Bone?,
+        Head = char:FindFirstChild("mixamorig:Head", true) :: Bone?,
         LegClearanceAngleDeg = profile and profile.LegClearanceAngleDeg or 0,
+        NeckPostureBackDeg = profile and profile.Facial and profile.Facial.NeckPostureBackDeg or 0,
+        HeadPostureBackDeg = profile and profile.Facial and profile.Facial.HeadPostureBackDeg or 0,
     }
 
     trackedRigs[char] = rigData
@@ -83,9 +91,22 @@ function SurvivorBoneSync.StepCharacter(rig: CharacterRigData)
     -- perfect in-place locomotion without forward-and-back rubberbanding or forward jump throw.
     if rig.Hips then
         local t = rig.Hips.Transform
-        if math.abs(t.Position.Z) > 0.001 then
-            rig.Hips.Transform = CFrame.new(t.Position.X, t.Position.Y, 0) * t.Rotation
+        local clampedY = t.Position.Y
+        if clampedY > 0.05 then
+            clampedY = clampedY * 0.15
         end
+        if math.abs(t.Position.Z) > 0.001 or clampedY ~= t.Position.Y then
+            rig.Hips.Transform = CFrame.new(t.Position.X, clampedY, 0) * t.Rotation
+        end
+    end
+
+    -- Head & Neck Upright Posture Correction:
+    -- Counteracts Mixamo forward head hunch in walk and idle poses by tilting cervical spine and head back
+    if rig.Neck and rig.NeckPostureBackDeg ~= 0 then
+        rig.Neck.Transform = rig.Neck.Transform * CFrame.Angles(math.rad(rig.NeckPostureBackDeg), 0, 0)
+    end
+    if rig.Head and rig.HeadPostureBackDeg ~= 0 then
+        rig.Head.Transform = rig.Head.Transform * CFrame.Angles(math.rad(rig.HeadPostureBackDeg), 0, 0)
     end
 
     -- Leg Stance Clearance:

@@ -32,9 +32,9 @@ local roster = sharedFolder:WaitForChild("SurvivorRoster")
 local Wardrobe = {}
 
 local IDLE_ANIMATIONS: { [string]: string } = {
-	["Relaxed Tilt"] = "rbxassetid://89629385542634",
-	["Main Idle"] = "rbxassetid://79030538201747",
-	["Check Nails"] = "rbxassetid://81640445815841",
+	["Static Resting Idle"] = "rbxassetid://103828063959982",
+	["Breathing Shift"] = "rbxassetid://132876566376642",
+	["Observant Gaze"] = "rbxassetid://137772468102995",
 }
 
 local function makeText(
@@ -107,7 +107,7 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	local state = {
 		SelectedCharacterId = "Sophie",
 		SelectedFilter = "ALL", -- "ALL" | "FEMALE" | "MALE"
-		CurrentIdleName = "Relaxed Tilt",
+		CurrentIdleName = "Static Resting Idle",
 		RotationY = math.rad(15),
 		TargetRotationY = math.rad(15),
 		IsDragging = false,
@@ -145,7 +145,7 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	overlay.Name = "SurvivorWardrobe"
 	overlay.Size = UDim2.fromScale(1, 1)
 	overlay.BackgroundColor3 = UI.Theme.Colors.GlassBackdrop
-	overlay.BackgroundTransparency = 0.16
+	overlay.BackgroundTransparency = 0.52 -- Transparent so 3D campfire at night is visible
 	overlay.BorderSizePixel = 0
 	overlay.Visible = false
 	overlay.ZIndex = 70
@@ -158,7 +158,7 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.BackgroundColor3 = UI.Theme.Colors.GlassModal
-	panel.BackgroundTransparency = 0.08
+	panel.BackgroundTransparency = 0.28
 	panel.BorderSizePixel = 0
 	panel.ZIndex = 71
 	panel.Parent = overlay
@@ -790,7 +790,7 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	----------------------------------------------------------------------------
 	-- POSE SWITCHER BUTTONS SETUP
 	----------------------------------------------------------------------------
-	local poseOptions = { "Relaxed Tilt", "Main Idle", "Check Nails" }
+	local poseOptions = { "Static Resting Idle", "Breathing Shift", "Observant Gaze" }
 	for _, poseName in ipairs(poseOptions) do
 		local btn = Instance.new("TextButton")
 		btn.Name = "PoseBtn_" .. string.gsub(poseName, "%s+", "")
@@ -1139,6 +1139,7 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 			local neck = previewClone:FindFirstChild("mixamorig:Neck", true)
 			local lSh = previewClone:FindFirstChild("mixamorig:LeftShoulder", true)
 			local rSh = previewClone:FindFirstChild("mixamorig:RightShoulder", true)
+			local head = previewClone:FindFirstChild("mixamorig:Head", true)
 
 			if s1 and s1:IsA("Bone") and posture.Spine1ArchDeg then
 				s1.Transform = s1.Transform * CFrame.Angles(math.rad(posture.Spine1ArchDeg), 0, 0)
@@ -1148,6 +1149,12 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 			end
 			if neck and neck:IsA("Bone") and posture.NeckCounterDeg then
 				neck.Transform = neck.Transform * CFrame.Angles(math.rad(posture.NeckCounterDeg), 0, 0)
+			end
+			if neck and neck:IsA("Bone") and posture.NeckPostureBackDeg then
+				neck.Transform = neck.Transform * CFrame.Angles(math.rad(posture.NeckPostureBackDeg), 0, 0)
+			end
+			if head and head:IsA("Bone") and posture.HeadPostureBackDeg then
+				head.Transform = head.Transform * CFrame.Angles(math.rad(posture.HeadPostureBackDeg), 0, 0)
 			end
 			if lSh and lSh:IsA("Bone") and posture.ShoulderRetractDeg then
 				lSh.Transform = lSh.Transform * CFrame.Angles(0, math.rad(-posture.ShoulderRetractDeg), math.rad(posture.ShoulderRetractDeg * 0.8))
@@ -1211,11 +1218,25 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 		refreshUI()
 		refreshPreview()
 		UI.Theme.PlayClick()
+
+		local cam = workspace.CurrentCamera
+		if cam and not player:GetAttribute("IsInGameplay") then
+			TweenService:Create(cam, TweenInfo.new(0.85, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				CFrame = CFrame.lookAt(Vector3.new(10, 24, -392), Vector3.new(2.5, 12, -430)),
+			}):Play()
+		end
 	end
 
 	Wardrobe.Close = function()
 		state.IsOpen = false
 		overlay.Visible = false
+
+		local cam = workspace.CurrentCamera
+		if cam and not player:GetAttribute("IsInGameplay") then
+			TweenService:Create(cam, TweenInfo.new(0.85, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				CFrame = CFrame.lookAt(Vector3.new(0, 26, -385), Vector3.new(2.5, 12, -430)),
+			}):Play()
+		end
 	end
 
 	Wardrobe.Destroy = function()

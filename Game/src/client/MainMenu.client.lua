@@ -21,6 +21,8 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
@@ -112,13 +114,70 @@ if GameConfig.ShouldSkipMainMenu() then
 end
 
 player:SetAttribute("IsInGameplay", false)
-if camera then
-    camera.CameraType = Enum.CameraType.Scriptable
-end
 setCharacterControlsEnabled(false)
 UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 UserInputService.MouseIconEnabled = true
 
+--------------------------------------------------------------------------------
+-- LIVE 3D FOREST CAMPFIRE SIMULATION AT NIGHT (Reference Image Alignment)
+--------------------------------------------------------------------------------
+local campCenter = Vector3.new(2.5, 12, -430)
+local baseCamPos = Vector3.new(0, 26, -385)
+local menuCameraConn: RBXScriptConnection? = nil
+local menuStartTime = os.clock()
+
+local function setMenuNightLighting()
+    pcall(function()
+        Lighting.ClockTime = 22.0
+        Lighting.Brightness = 0.8
+        Lighting.FogEnd = 400
+        Lighting.OutdoorAmbient = Color3.fromRGB(22, 28, 45)
+    end)
+end
+
+setMenuNightLighting()
+
+if camera then
+    camera.CameraType = Enum.CameraType.Scriptable
+    camera.FieldOfView = 65
+    camera.CFrame = CFrame.lookAt(baseCamPos, campCenter)
+end
+
+local function startMenuCameraSimulation()
+    if menuCameraConn then
+        menuCameraConn:Disconnect()
+    end
+    menuStartTime = os.clock()
+    menuCameraConn = RunService.RenderStepped:Connect(function()
+        if player:GetAttribute("IsInGameplay") == true then
+            if menuCameraConn then
+                menuCameraConn:Disconnect()
+                menuCameraConn = nil
+            end
+            return
+        end
+
+        local elapsed = os.clock() - menuStartTime
+
+        -- Keep live 3D campfire scene at night while in main menu
+        if Lighting.ClockTime ~= 22.0 then
+            Lighting.ClockTime = 22.0
+            Lighting.Brightness = 0.8
+            Lighting.FogEnd = 400
+        end
+
+        -- Gentle cinematic drone drift across the high 3/4 camp perspective
+        local driftX = math.sin(elapsed * 0.22) * 2.2
+        local driftY = math.cos(elapsed * 0.35) * 0.7
+        local driftZ = math.sin(elapsed * 0.18) * 1.5
+
+        local camPos = baseCamPos + Vector3.new(driftX, driftY, driftZ)
+        local target = campCenter + Vector3.new(math.sin(elapsed * 0.15) * 0.5, 0, 0)
+        camera.CFrame = CFrame.lookAt(camPos, target)
+    end)
+end
+
+startMenuCameraSimulation()
 
 --------------------------------------------------------------------------------
 -- ROOT SCREEN GUI CREATION
@@ -132,54 +191,26 @@ screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = playerGui
 
 --------------------------------------------------------------------------------
--- ATMOSPHERIC BACKGROUND & CINEMATIC WALLPAPER
+-- ATMOSPHERIC GLASS & VIGNETTE (Live 3D World Visible Behind Glassmorphic UI)
 --------------------------------------------------------------------------------
 local background = Instance.new("Frame")
 background.Name = "Background"
 background.Size = UDim2.fromScale(1, 1)
-background.BackgroundColor3 = (UITheme.Colors and UITheme.Colors.Void) or Color3.fromRGB(4, 6, 10)
+background.BackgroundTransparency = 1 -- Fully transparent so live 3D forest simulation is clear
 background.BorderSizePixel = 0
 background.ZIndex = 1
 background.Parent = screenGui
 
--- Main Menu Wallpaper Image (I:\RobloxDev\image\mainmenubg.png)
-local bgImage = Instance.new("ImageLabel")
-bgImage.Name = "BackgroundImage"
-bgImage.Size = UDim2.fromScale(1, 1)
-bgImage.Position = UDim2.fromScale(0.5, 0.5)
-bgImage.AnchorPoint = Vector2.new(0.5, 0.5)
-bgImage.BackgroundTransparency = 1
-bgImage.Image = UITheme.GetBackgroundAsset()
-bgImage.ScaleType = Enum.ScaleType.Crop
-bgImage.ImageTransparency = 0.15
-bgImage.ZIndex = 2
-bgImage.Parent = background
-
--- Main Menu Live Video Background (I:\RobloxDev\video\MainMenuMp4.mp4)
+-- Static bgImage and bgVideo removed: live 3D world rendered in real-time beneath UI!
+local bgImage: ImageLabel? = nil
 local bgVideo: VideoFrame? = nil
-local videoAsset = UITheme.GetBackgroundVideo()
-if videoAsset and videoAsset ~= "" then
-    local vf = Instance.new("VideoFrame")
-    vf.Name = "BackgroundVideo"
-    vf.Size = UDim2.fromScale(1, 1)
-    vf.Position = UDim2.fromScale(0.5, 0.5)
-    vf.AnchorPoint = Vector2.new(0.5, 0.5)
-    vf.BackgroundTransparency = 1
-    vf.Video = videoAsset
-    vf.Looped = true
-    vf.Volume = 0 -- Audio handled by atmospheric SoundGroups
-    vf.ZIndex = 2
-    vf.Parent = background
-    bgVideo = vf
-    vf:Play()
-end
 
--- Ambient warm firelight radial gradient (biased to left where fire burns)
+-- Ambient warm firelight radial gradient (biased to center-left where fire burns)
 local ambientFirelight = Instance.new("Frame")
 ambientFirelight.Name = "AmbientFirelight"
 ambientFirelight.Size = UDim2.fromScale(1, 1)
 ambientFirelight.BackgroundColor3 = (UITheme.Colors and UITheme.Colors.EmberCrimson) or Color3.fromRGB(205, 45, 25)
-ambientFirelight.BackgroundTransparency = 0.94
+ambientFirelight.BackgroundTransparency = 0.95
 ambientFirelight.BorderSizePixel = 0
 ambientFirelight.ZIndex = 3
 
@@ -190,27 +221,27 @@ fireGrad.Color = ColorSequence.new({
     ColorSequenceKeypoint.new(1, (UITheme.Colors and UITheme.Colors.Void) or Color3.fromRGB(4, 6, 10)),
 })
 fireGrad.Transparency = NumberSequence.new({
-    NumberSequenceKeypoint.new(0, 0.76),
-    NumberSequenceKeypoint.new(0.6, 0.92),
+    NumberSequenceKeypoint.new(0, 0.85),
+    NumberSequenceKeypoint.new(0.6, 0.96),
     NumberSequenceKeypoint.new(1, 1),
 })
 fireGrad.Rotation = 45
 fireGrad.Parent = ambientFirelight
 ambientFirelight.Parent = background
 
--- Vignette Border Shadow
+-- Vignette Border Shadow (Cinematic lens framing)
 local vignette = Instance.new("Frame")
 vignette.Name = "Vignette"
 vignette.Size = UDim2.fromScale(1, 1)
 vignette.BackgroundColor3 = (UITheme.Colors and UITheme.Colors.PureBlack) or Color3.fromRGB(0, 0, 0)
-vignette.BackgroundTransparency = 0.8
+vignette.BackgroundTransparency = 0.85
 vignette.BorderSizePixel = 0
 vignette.ZIndex = 3
 
 local vigGrad = Instance.new("UIGradient")
 vigGrad.Transparency = NumberSequence.new({
-    NumberSequenceKeypoint.new(0, 0.3),
-    NumberSequenceKeypoint.new(0.8, 0.85),
+    NumberSequenceKeypoint.new(0, 0.4),
+    NumberSequenceKeypoint.new(0.8, 0.92),
     NumberSequenceKeypoint.new(1, 1),
 })
 vigGrad.Parent = vignette
@@ -912,12 +943,24 @@ wireCardEvents(femaleCard, "Female")
 --------------------------------------------------------------------------------
 -- INTERACTIVE NAV ACTIONS (ORDER: 1. PLAY, 2. SETTINGS, 3. CREDITS)
 --------------------------------------------------------------------------------
--- 1. PLAY Action (Primary Glassmorphic button with Lucide Flame Icon)
 local function beginGame(selection: any)
-    local fadeTime = reducedMotionEnabled and 0.25 or 0.4
+    if menuCameraConn then
+        menuCameraConn:Disconnect()
+        menuCameraConn = nil
+    end
+
+    local fadeTime = reducedMotionEnabled and 0.25 or 0.45
     local fadeInfo = TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
-    -- Fade the main menu navigation after the wardrobe has been confirmed.
+    -- Smooth cinematic camera glide down from high 3/4 crane into the campsite
+    if camera then
+        local glideTargetCFrame = CFrame.lookAt(Vector3.new(1.5, 14.5, -408), campCenter)
+        TweenService:Create(camera, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+            CFrame = glideTargetCFrame,
+        }):Play()
+    end
+
+    -- Fade the main menu navigation cleanly
     local leftSlide = TweenService:Create(leftArea, fadeInfo, {
         Position = UDim2.new(leftArea.Position.X.Scale, leftArea.Position.X.Offset - 60, leftArea.Position.Y.Scale, leftArea.Position.Y.Offset),
     })

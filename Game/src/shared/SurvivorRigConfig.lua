@@ -14,6 +14,11 @@ export type LocomotionConfig = {
     Run: string,
     Jump: string,
     Fall: string,
+    Swim: string?,
+    SwimIdle: string?,
+    IdleStatic: string?,
+    Idle2: string?,
+    Idle3: string?,
 }
 
 export type SurvivorProfile = {
@@ -33,6 +38,8 @@ export type SurvivorProfile = {
         HasSmile: boolean,
         MicroGazeRangeDeg: number, -- Subtle living eye/head saccade range in degrees
         HeadRestTiltDeg: number,   -- Subtle gentle resting tilt (warm, natural posture)
+        NeckPostureBackDeg: number?, -- Cervical spine pitch correction to pull neck back
+        HeadPostureBackDeg: number?, -- Head pitch correction to pull head back (neutralizes forward hunched posture)
     },
 }
 
@@ -51,11 +58,18 @@ local FemaleBase = {
         Run = "rbxassetid://99676638771528",   -- RunningNewMain
         Jump = "rbxassetid://103074489051723", -- RunningJumpMain (moving jump)
         Fall = "rbxassetid://103074489051723", -- RunningJumpMain (moving fall)
+        Swim = "rbxassetid://117791765615739", -- SwimmingMain
+        SwimIdle = "rbxassetid://122627851214967", -- SwimmingIdleMain
+        IdleStatic = "rbxassetid://103828063959982", -- StaticIDLEMAIND (10s resting idle)
+        Idle2 = "rbxassetid://132876566376642",      -- IDLEMAIN2 (4s flavor idle)
+        Idle3 = "rbxassetid://137772468102995",      -- IDLEMAIN3 (3.27s flavor idle)
     } :: LocomotionConfig,
     Facial = {
         HasSmile = true,
         MicroGazeRangeDeg = 1.2,
-        HeadRestTiltDeg = 1.5,     -- Gentle warm posture
+        HeadRestTiltDeg = 1.0,
+        NeckPostureBackDeg = 6.0,   -- Aligns neck straight and back
+        HeadPostureBackDeg = 9.0,   -- Pulls head back, eliminating forward hunch
     },
 }
 
@@ -71,11 +85,18 @@ local MaleBase = {
         Run = "rbxassetid://99676638771528",   -- RunningNewMain
         Jump = "rbxassetid://103074489051723", -- RunningJumpMain (moving jump)
         Fall = "rbxassetid://103074489051723", -- RunningJumpMain (moving fall)
+        Swim = "rbxassetid://117791765615739", -- SwimmingMain
+        SwimIdle = "rbxassetid://122627851214967", -- SwimmingIdleMain
+        IdleStatic = "rbxassetid://103828063959982", -- StaticIDLEMAIND (10s resting idle)
+        Idle2 = "rbxassetid://132876566376642",      -- IDLEMAIN2 (4s flavor idle)
+        Idle3 = "rbxassetid://137772468102995",      -- IDLEMAIN3 (3.27s flavor idle)
     } :: LocomotionConfig,
     Facial = {
         HasSmile = false,
         MicroGazeRangeDeg = 1.0,
         HeadRestTiltDeg = 0.5,
+        NeckPostureBackDeg = 4.5,
+        HeadPostureBackDeg = 7.0,
     },
 }
 

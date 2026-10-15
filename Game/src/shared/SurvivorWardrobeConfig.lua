@@ -50,11 +50,11 @@ Config.Characters = {
 			Crafting = 70,
 		},
 		Archetype = "Female Athletic Rig • Living Posture • 0.75 Stud Stance",
-		RecommendedIdle = "rbxassetid://89629385542634", -- Slight Tilt Cute Idle
+		RecommendedIdle = "rbxassetid://103828063959982", -- StaticIDLEMAIND (10s resting idle)
 		AltIdles = {
-			["Main Idle"] = "rbxassetid://79030538201747",
-			["Relaxed Tilt"] = "rbxassetid://89629385542634",
-			["Check Nails"] = "rbxassetid://81640445815841",
+			["Static Resting Idle"] = "rbxassetid://103828063959982",
+			["Breathing Shift"] = "rbxassetid://132876566376642",
+			["Observant Gaze"] = "rbxassetid://137772468102995",
 		},
 	} :: SurvivorCharacter,
 
@@ -72,11 +72,11 @@ Config.Characters = {
 			Crafting = 65,
 		},
 		Archetype = "Female Combat Rig • Reinforced Posture • Normalized Armature",
-		RecommendedIdle = "rbxassetid://89629385542634",
+		RecommendedIdle = "rbxassetid://103828063959982",
 		AltIdles = {
-			["Main Idle"] = "rbxassetid://79030538201747",
-			["Relaxed Tilt"] = "rbxassetid://89629385542634",
-			["Check Nails"] = "rbxassetid://81640445815841",
+			["Static Resting Idle"] = "rbxassetid://103828063959982",
+			["Breathing Shift"] = "rbxassetid://132876566376642",
+			["Observant Gaze"] = "rbxassetid://137772468102995",
 		},
 	} :: SurvivorCharacter,
 
@@ -94,10 +94,11 @@ Config.Characters = {
 			Crafting = 95,
 		},
 		Archetype = "Male Athletic Rig • Calibrated 1.98 Stud Contact • Zero Slide",
-		RecommendedIdle = "rbxassetid://79030538201747",
+		RecommendedIdle = "rbxassetid://103828063959982",
 		AltIdles = {
-			["Main Idle"] = "rbxassetid://79030538201747",
-			["Relaxed Tilt"] = "rbxassetid://89629385542634",
+			["Static Resting Idle"] = "rbxassetid://103828063959982",
+			["Breathing Shift"] = "rbxassetid://132876566376642",
+			["Observant Gaze"] = "rbxassetid://137772468102995",
 		},
 	} :: SurvivorCharacter,
 
@@ -115,10 +116,11 @@ Config.Characters = {
 			Crafting = 65,
 		},
 		Archetype = "Male Heavy Rig • Athletic Stance • Calibrated Boot Contact",
-		RecommendedIdle = "rbxassetid://79030538201747",
+		RecommendedIdle = "rbxassetid://103828063959982",
 		AltIdles = {
-			["Main Idle"] = "rbxassetid://79030538201747",
-			["Relaxed Tilt"] = "rbxassetid://89629385542634",
+			["Static Resting Idle"] = "rbxassetid://103828063959982",
+			["Breathing Shift"] = "rbxassetid://132876566376642",
+			["Observant Gaze"] = "rbxassetid://137772468102995",
 		},
 	} :: SurvivorCharacter,
 }

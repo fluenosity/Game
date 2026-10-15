@@ -89,11 +89,9 @@ end
 
 -- Camera Springs for visceral recoil and procedural bob
 local camRecoilSpring = createSpring(280, 26) -- Weapon impact recoil (Pitch, Yaw, Roll)
-local camDipSpring = createSpring(180, 18)    -- Vertical landing/crouch dip
 local camSwaySpring = createSpring(140, 16)   -- Horizontal locomotion sway
 
 -- Euphoria-Level Physical Springs
-local crouchSpring = createSpring(140, 18)    -- 0 = standing, 1 = fully crouched
 local landingSpring = createSpring(130, 15)   -- Y-compression impulse on touchdown
 local leanSpring = createSpring(95, 14)       -- X = forward lean, Z = centrifugal turn banking
 local sprintSpring = createSpring(120, 16)    -- 0 = walk/idle, 1 = full sprint
@@ -107,7 +105,6 @@ type CombatAction = "None" | "WeaponLightA" | "WeaponLightB" | "WeaponHeavy" | "
 type SpecialAction = "None" | "GroundPickup" | "CampfireLight" | "ItemThrow" | "GuardBreak" | "Died"
 
 local state = {
-    IsCrouching = false,
     IsSprinting = false,
     IsGrounded = true,
     IsAirborne = false,
@@ -261,7 +258,6 @@ local function cacheCharacterJoints(char: Model)
     end
     table.clear(characterConnections)
 
-    state.IsCrouching = char:GetAttribute("IsCrouching") == true
     state.IsSprinting = false
     state.IsGrounded = true
     state.IsAirborne = false
@@ -279,7 +275,6 @@ local function cacheCharacterJoints(char: Model)
     end
     table.clear(locomotionTracks)
     activeLocomotionName = nil
-    crouchSpring:Reset(Vector3.new(state.IsCrouching and 1 or 0, 0, 0))
     sprintSpring:Reset(Vector3.zero)
     landingSpring:Reset(Vector3.zero)
 
@@ -316,8 +311,8 @@ local function cacheCharacterJoints(char: Model)
     joints.RightKnee = char:FindFirstChild("RightKnee", true)
     joints.LeftKnee = char:FindFirstChild("LeftKnee", true)
     joints.RightAnkle = char:FindFirstChild("RightAnkle", true)
-    joints.LeftAnkle = char:FindFirstChild("LeftAnkle", true)
     joints.HipsBone = char:FindFirstChild("mixamorig:Hips", true)
+    joints.NeckBone = char:FindFirstChild("mixamorig:Neck", true)
     joints.HeadBone = char:FindFirstChild("mixamorig:Head", true)
     joints.LeftUpLeg = char:FindFirstChild("mixamorig:LeftUpLeg", true)
     joints.RightUpLeg = char:FindFirstChild("mixamorig:RightUpLeg", true)
@@ -376,15 +371,6 @@ local function cacheCharacterJoints(char: Model)
             AudioManager.Play("HeavyLanding")
         end))
 
-        -- Synchronize crouch state if HUDController or sprint alters it
-        table.insert(characterConnections, char:GetAttributeChangedSignal("IsCrouching"):Connect(function()
-            local isC = char:GetAttribute("IsCrouching") == true
-            if state.IsCrouching ~= isC then
-                state.IsCrouching = isC
-                crouchSpring.Target = Vector3.new(isC and 1 or 0, 0, 0)
-            end
-        end))
-
         table.insert(characterConnections, activeHumanoid.StateChanged:Connect(function(oldState, newState)
             if newState == Enum.HumanoidStateType.Jumping or newState == Enum.HumanoidStateType.Freefall then
                 state.IsAirborne = true
@@ -398,7 +384,6 @@ local function cacheCharacterJoints(char: Model)
                 if impactSpeed > 6 then
                     local force = math.clamp(impactSpeed * 0.12, 0.8, 3.5)
                     landingSpring.Velocity = Vector3.new(0, force, 0)
-                    camDipSpring.Velocity = Vector3.new(0, -force * 0.16, 0)
                     AudioManager.Play("Footstep")
                 end
             end
@@ -593,19 +578,6 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
         return
     end
 
-    -- Crouch / Sneak [C] or [LeftControl]
-    if input.KeyCode == Enum.KeyCode.C or input.KeyCode == Enum.KeyCode.LeftControl then
-        state.IsCrouching = not state.IsCrouching
-        if activeCharacter then
-            activeCharacter:SetAttribute("IsCrouching", state.IsCrouching)
-        end
-        crouchSpring.Target = Vector3.new(state.IsCrouching and 1 or 0, 0, 0)
-        if activeHumanoid and state.CombatAction == "None" then
-            activeHumanoid.WalkSpeed = state.IsCrouching and 8 or (state.IsSprinting and 26 or 16)
-        end
-        return
-    end
-
     -- M1: one quick, equipped weapon swing while movement continues.
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         triggerLightAttack()
@@ -696,11 +668,22 @@ RunService.PreSimulation:Connect(function(dt: number)
     end
     SurvivorBoneSync.StepAll()
 
-    -- Living Head Gaze & Eye Saccade Presence on local character:
-    -- Organic micro-glance saccades (subtle eye focus drift) with gentle warm rest tilt
+    -- Upright Head & Neck Posture Alignment (pulls head and neck back to eliminate hunched posture):
+    if not joints.NeckBone and activeCharacter then
+        joints.NeckBone = activeCharacter:FindFirstChild("mixamorig:Neck", true)
+    end
     if not joints.HeadBone and activeCharacter then
         joints.HeadBone = activeCharacter:FindFirstChild("mixamorig:Head", true)
     end
+
+    local neckBack = profile.Facial and profile.Facial.NeckPostureBackDeg or 6.0
+    local headBack = profile.Facial and profile.Facial.HeadPostureBackDeg or 9.0
+
+    if joints.NeckBone and joints.NeckBone:IsA("Bone") and neckBack ~= 0 then
+        local neckBone = joints.NeckBone :: Bone
+        neckBone.Transform = neckBone.Transform * CFrame.Angles(math.rad(neckBack), 0, 0)
+    end
+
     if joints.HeadBone and joints.HeadBone:IsA("Bone") then
         local headBone = joints.HeadBone :: Bone
         local gazeRange = profile.Facial and profile.Facial.MicroGazeRangeDeg or 1.0
@@ -711,7 +694,8 @@ RunService.PreSimulation:Connect(function(dt: number)
         local gazePitch = math.cos(saccadeClock * 0.85) * math.rad(gazeRange * 0.6)
         local friendlyTilt = math.rad(restTilt)
 
-        local gazeOffset = CFrame.Angles(gazePitch, gazeYaw, friendlyTilt)
+        local totalPitch = math.rad(headBack) + gazePitch
+        local gazeOffset = CFrame.Angles(totalPitch, gazeYaw, friendlyTilt)
         headBone.Transform = headBone.Transform * gazeOffset
     end
 
@@ -721,7 +705,7 @@ RunService.PreSimulation:Connect(function(dt: number)
 
     local isMovingIntent = activeHumanoid.MoveDirection.Magnitude > 0.05
     local isMoving = (horizontalSpeed > 1.0 or isMovingIntent) and state.IsGrounded
-    local wantsSprint = (activeHumanoid.WalkSpeed >= 22 or UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)) and isMoving and not state.IsCrouching
+    local wantsSprint = (activeHumanoid.WalkSpeed >= 12 or UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)) and isMoving
     state.IsSprinting = wantsSprint
 
     -- Smooth spring for walk <-> sprint transitions
@@ -732,14 +716,11 @@ RunService.PreSimulation:Connect(function(dt: number)
 
     -- Keep the locomotion clock moving through weapon swings so the stride never snaps.
     if isMoving then
-        local strideFreq = 7.5 + (currentSprintAlpha * 4.0) -- Smooth 7.5 -> 11.5 rad/s
+        local strideFreq = 4.0 + (currentSprintAlpha * 3.8) -- Smooth 4.0 -> 7.8 rad/s for 6 -> 16 studs/s
         state.WalkCycleClock = state.WalkCycleClock + dt * strideFreq
 
-        -- Dynamic footstep cadence (slower stealth cadence when crouched)
-        local footstepInterval = 0.42 - (currentSprintAlpha * 0.15)
-        if state.IsCrouching then
-            footstepInterval = 0.52
-        end
+        -- Dynamic footstep cadence
+        local footstepInterval = 0.65 - (currentSprintAlpha * 0.32)
         if now - state.LastFootstepClock > footstepInterval then
             state.LastFootstepClock = now
             AudioManager.Play("Footstep")
@@ -767,16 +748,8 @@ RunService.PreSimulation:Connect(function(dt: number)
     ----------------------------------------------------------------------------
     -- EUPHORIA-LEVEL PHYSICAL SPRINGS EVALUATION
     ----------------------------------------------------------------------------
-    local crouchVal = crouchSpring:Update(dt).X
-    local crouchAlpha = math.clamp(crouchVal, 0, 1)
-
     local landingVal = landingSpring:Update(dt).Y
     local landingComp = math.clamp(landingVal * 0.08, 0, 0.85)
-
-    -- Dynamic capsule height matching visual body during crouch
-    if activeHumanoid and defaultHipHeight > 0 then
-        activeHumanoid.HipHeight = defaultHipHeight * (1 - 0.45 * crouchAlpha)
-    end
 
     -- Centripetal banking into turns (lean)
     local currentLook = activeHRP.CFrame.LookVector
@@ -815,7 +788,7 @@ RunService.PreSimulation:Connect(function(dt: number)
             -- Let the character's original Animate script handle the air states.
             nextLocomotion = nil
         elseif isMoving then
-            nextLocomotion = (wantsSprint or horizontalSpeed >= 19) and "Run" or "Walk"
+            nextLocomotion = (wantsSprint or horizontalSpeed >= 9.5) and "Run" or "Walk"
         else
             nextLocomotion = nil
         end
@@ -831,9 +804,9 @@ RunService.PreSimulation:Connect(function(dt: number)
         local activeTrack = selectedLocomotionTrack :: AnimationTrack
         local playbackSpeed = 1
         if nextLocomotion == "Walk" then
-            playbackSpeed = math.clamp(horizontalSpeed / 14.5, 0.78, 1.45)
+            playbackSpeed = math.clamp(horizontalSpeed / 6.0, 0.70, 1.35)
         elseif nextLocomotion == "Run" then
-            playbackSpeed = math.clamp(horizontalSpeed / 20, 0.9, 1.45)
+            playbackSpeed = math.clamp(horizontalSpeed / 12.0, 0.75, 1.35)
         end
         activeTrack:AdjustSpeed(playbackSpeed)
     else
@@ -881,19 +854,7 @@ RunService.PreSimulation:Connect(function(dt: number)
     local lAnkleOffset = CFrame.identity
     local waistOffset = isTPP and CFrame.Angles(leanPos.X, 0, leanPos.Z) or CFrame.identity
 
-    -- 1. Athletic Crouch Flexion (Hips, Knees, Ankles, Torso)
-    if crouchAlpha > 0.001 then
-        rootOffset = rootOffset * CFrame.new(0, -1.15 * crouchAlpha, 0) * CFrame.Angles(math.rad(6 * crouchAlpha), 0, 0)
-        waistOffset = waistOffset * CFrame.Angles(math.rad(18 * crouchAlpha), 0, 0)
-        rHipOffset = rHipOffset * CFrame.Angles(math.rad(46 * crouchAlpha), math.rad(4 * crouchAlpha), math.rad(4 * crouchAlpha))
-        lHipOffset = lHipOffset * CFrame.Angles(math.rad(46 * crouchAlpha), math.rad(-4 * crouchAlpha), math.rad(-4 * crouchAlpha))
-        rKneeOffset = rKneeOffset * CFrame.Angles(math.rad(-74 * crouchAlpha), 0, 0)
-        lKneeOffset = lKneeOffset * CFrame.Angles(math.rad(-74 * crouchAlpha), 0, 0)
-        rAnkleOffset = rAnkleOffset * CFrame.Angles(math.rad(28 * crouchAlpha), 0, 0)
-        lAnkleOffset = lAnkleOffset * CFrame.Angles(math.rad(28 * crouchAlpha), 0, 0)
-    end
-
-    -- 2. Soft landing compression; it fades immediately and never blocks movement.
+    -- 1. Soft landing compression; it fades immediately and never blocks movement.
     if landingComp > 0.001 then
         rootOffset = rootOffset * CFrame.new(0, -landingComp * 0.18, 0)
         rKneeOffset = rKneeOffset * CFrame.Angles(math.rad(-landingComp * 12), 0, 0)
@@ -971,7 +932,7 @@ RunService.PreSimulation:Connect(function(dt: number)
     ----------------------------------------------------------------------------
     -- APPLY PROCEDURAL ARM TRANSFORMS
     ----------------------------------------------------------------------------
-    if not isTPP or crouchAlpha > 0.001 then
+    if not isTPP then
         setJointTransform(joints.RightShoulder, rShoulderBase)
         setJointTransform(joints.RightElbow, rElbowBase)
         setJointTransform(joints.RightWrist, rWristBase)
@@ -1008,7 +969,6 @@ RunService.RenderStepped:Connect(function(dt: number)
 
     -- 2. Update Spring Dampers
     local recoil = camRecoilSpring:Update(dt)
-    local dip = camDipSpring:Update(dt)
     local sway = camSwaySpring:Update(dt)
 
     -- Dynamic sprint FOV expansion (smoothly ramp from 70 up to 76 for speed sensation)
@@ -1016,20 +976,17 @@ RunService.RenderStepped:Connect(function(dt: number)
         camera.FieldOfView = 70 + (currentSprintAlpha * 6)
     end
 
-    -- 3. Camera Offset adjustments (Crouch / Landing / Death)
+    -- 3. Camera Offset adjustments (Death & Campfire)
     if activeHumanoid then
         local targetYOffset = 0.0
-        local crouchAlpha = math.clamp(crouchSpring.Position.X, 0, 1)
         if state.SpecialAction == "Died" then
             targetYOffset = -2.8 -- Collapse into snow
         elseif state.SpecialAction == "CampfireLight" then
             targetYOffset = -1.6 -- Kneel at campfire
-        elseif crouchAlpha > 0.001 then
-            targetYOffset = -1.5 * crouchAlpha -- Smooth sneak crouch eye-level drop
         end
 
         local currentOffset = activeHumanoid.CameraOffset
-        local newY = currentOffset.Y + (targetYOffset - currentOffset.Y) * math.clamp(dt * 12, 0, 1) + (dip.Y * 0.05)
+        local newY = currentOffset.Y + (targetYOffset - currentOffset.Y) * math.clamp(dt * 12, 0, 1)
         activeHumanoid.CameraOffset = Vector3.new(0, newY, 0)
     end
 
