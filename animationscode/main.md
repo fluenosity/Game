@@ -1,21 +1,26 @@
 # Active Locomotion Animations (Current Roster)
-- **FemaleWalk**: `115531053004010` (Default Walk @ 16 studs/s for Sophie & Jody)
-- **MaleWalk**: `70412449762831` (Default Walk @ 16 studs/s for Bryce & Remy)
-- **RunningNewMain**: `99676638771528` (Sprint Run @ 26 studs/s, all characters)
-- **RunningJumpMain**: `103074489051723` (Jump & Fall arc, JumpPower = 38, all characters)
+- **FemaleWalk**: `115531053004010` (Calibrated Walk @ 12 studs/s for Sophie & Jody)
+- **MaleWalk**: `70412449762831` (Calibrated Walk @ 12 studs/s for Bryce & Remy)
+- **RunningNewMain**: `99676638771528` (Sprint Run @ 24 studs/s, all characters)
+- **RunningJumpMain**: `103074489051723` (Moving Jump & Fall leap arc, JumpPower = 38, active when moving)
+- **IdleJump**: `100945085841175` (Stationary In-Place Jump & Fall arc, JumpPower = 38, active when standing still)
 - **MainIdle**: `79030538201747` (Male resting idle)
 - **SlightTiltIdle**: `89629385542634` (Sophie female signature idle)
 - **SittingMain**: `98264175486814`
 - **SitToStandMain**: `97271955482381`
 - **Stand to Sit Main**: `99867494141148`
+- **SwimmingMain** = `117791765615739`
+- **SwimmingIdleMain** = `122627851214967`
+
 ### Secondary / Overlay / Emote Animations:
 - Movementoractiontoidle: `134245085026778`
 - Repelling Insects idle: `105216910523835` (upper-body overlay)
 - checking nails idle: `81640445815841`
 
 ## Character Rig Registry & Archetype System (`SurvivorRigConfig.lua`)
-- **Archetype: FemaleBase** (LegCorrection: `9.5° inward`, ArmClearance: `4.0° outward`, HipHeight: `1.90`, Living Gaze: `1.2°`)
-- **Archetype: MaleBase** (LegCorrection: `3.5° inward`, ArmClearance: `3.0° outward`, HipHeight: `1.98`, Living Gaze: `1.0°`)
+- **Archetype: FemaleBase** (LegClearance: `-5.5° outward flare` (0 crossing frames, parallel strides), LegCorrection: `0.0° neutral`, ArmClearance: `4.0° outward`, HipHeight: `1.90`, Living Gaze: `1.2°`)
+- **Archetype: MaleBase** (LegClearance: `0.0° neutral` (+0.325 studs natural clearance), ArmClearance: `3.0° outward`, HipHeight: `1.98`, Living Gaze: `1.0°`)
+- **Pelvic Root Motion Stabilizer**: `mixamorig:Hips.Transform.Z = 0` on `PreSimulation` (anchors pelvis to HumanoidRootPart, eliminating forward rubberbanding and horizontal air fling).
 
 ### Active Character:
 - **`SOPHIE` (Female Survivor - Active `StarterCharacter`)**:

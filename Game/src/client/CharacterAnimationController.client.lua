@@ -655,7 +655,7 @@ RunService.PreSimulation:Connect(function(dt: number)
 
     local now = os.clock()
     local profileId = (activeCharacter:GetAttribute("SurvivorProfileId") or activeCharacter.Name) :: string
-    local profile = SurvivorRigConfig.GetProfile(profileId)
+    local profile = SurvivorRigConfig.GetProfile(profileId, activeCharacter)
 
     -- In-Place Pelvic Root Stabilizer:
     -- Mixamo animations without 'In Place' checked (FemaleWalk, MaleWalk, RunningJumpMain)
@@ -675,7 +675,11 @@ RunService.PreSimulation:Connect(function(dt: number)
 
     -- Leg Stance Clearance:
     -- Prevents catwalk scissor-crossing (X-legs) on feminine walk animations by applying
-    -- subtle outward flare (-3.0°) to LeftUpLeg / RightUpLeg so feet step parallel with natural clearance.
+    -- subtle outward flare (-5.5°) to LeftUpLeg / RightUpLeg so feet step parallel with natural clearance.
+    if not joints.LeftUpLeg and activeCharacter then
+        joints.LeftUpLeg = activeCharacter:FindFirstChild("mixamorig:LeftUpLeg", true)
+        joints.RightUpLeg = activeCharacter:FindFirstChild("mixamorig:RightUpLeg", true)
+    end
     if joints.LeftUpLeg and joints.RightUpLeg then
         local flare = profile.LegClearanceAngleDeg or 0
         if flare ~= 0 then

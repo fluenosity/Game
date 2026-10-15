@@ -44,7 +44,7 @@ local FemaleBase = {
     TargetHeight = 5.970,
     HipHeight = 1.90,              -- Calibrated for sneakers/shoes with zero hover
     LegCorrectionAngleDeg = 0.0,   -- Neutralized so legs don't scissor-cross
-    LegClearanceAngleDeg = -3.0,   -- Subtle outward stance flare so feet stride parallel without X-crossing
+    LegClearanceAngleDeg = -5.5,   -- Athletic stance flare so feet stride parallel with 0 crossing frames
     ArmClearanceAngleDeg = 4.0,    -- Gives hands comfortable 2-inch clearance from shorts/hips
     Locomotion = {
         Walk = "rbxassetid://115531053004010", -- FemaleWalk
@@ -175,42 +175,32 @@ SurvivorRigConfig.Profiles = {
     } :: SurvivorProfile,
 }
 
-function SurvivorRigConfig.GetProfile(nameOrId: string): SurvivorProfile
-    local clean = string.gsub(nameOrId, "%s+", "")
+function SurvivorRigConfig.GetProfile(nameOrId: string, model: Model?): SurvivorProfile
+    local clean = string.gsub(nameOrId or "", "%s+", "")
+    if clean == "" or string.lower(clean) == "startercharacter" then
+        return SurvivorRigConfig.Profiles.SOPHIE
+    end
     for id, profile in pairs(SurvivorRigConfig.Profiles) do
         if string.lower(id) == string.lower(clean) or string.lower(profile.DisplayName) == string.lower(clean) then
             return profile
         end
     end
-    -- Fallback to Male or Female base depending on detection
-    if string.find(string.lower(clean), "female") or string.find(string.lower(clean), "girl") then
-        return {
-            Id = clean,
-            DisplayName = clean,
-            Gender = FemaleBase.Gender,
-            Description = "Custom Female Survivor",
-            TargetHeight = FemaleBase.TargetHeight,
-            HipHeight = FemaleBase.HipHeight,
-            LegCorrectionAngleDeg = FemaleBase.LegCorrectionAngleDeg,
-            LegClearanceAngleDeg = FemaleBase.LegClearanceAngleDeg,
-            ArmClearanceAngleDeg = FemaleBase.ArmClearanceAngleDeg,
-            Locomotion = FemaleBase.Locomotion,
-            Facial = FemaleBase.Facial,
-        }
+    -- Check model meshes if available
+    if model and model:IsA("Model") then
+        if model:FindFirstChild("Ch02_Body") or model:FindFirstChild("Ch37_Body") or model:FindFirstChild("mixamorig6:Hips", true) then
+            return SurvivorRigConfig.Profiles.SOPHIE
+        elseif model:FindFirstChild("Ch42_Body") or model:FindFirstChild("Ch18") then
+            return SurvivorRigConfig.Profiles.BRYCE
+        end
     end
-    return {
-        Id = clean,
-        DisplayName = clean,
-        Gender = MaleBase.Gender,
-        Description = "Custom Male Survivor",
-        TargetHeight = MaleBase.TargetHeight,
-        HipHeight = MaleBase.HipHeight,
-        LegCorrectionAngleDeg = MaleBase.LegCorrectionAngleDeg,
-        LegClearanceAngleDeg = MaleBase.LegClearanceAngleDeg,
-        ArmClearanceAngleDeg = MaleBase.ArmClearanceAngleDeg,
-        Locomotion = MaleBase.Locomotion,
-        Facial = MaleBase.Facial,
-    }
+    -- Fallback to Male or Female base depending on detection
+    if string.find(string.lower(clean), "female") or string.find(string.lower(clean), "girl") or string.find(string.lower(clean), "sophie") or string.find(string.lower(clean), "jody") then
+        return SurvivorRigConfig.Profiles.SOPHIE
+    elseif string.find(string.lower(clean), "male") or string.find(string.lower(clean), "boy") or string.find(string.lower(clean), "bryce") or string.find(string.lower(clean), "remy") then
+        return SurvivorRigConfig.Profiles.BRYCE
+    end
+    -- Default to active game survivor (Sophie)
+    return SurvivorRigConfig.Profiles.SOPHIE
 end
 
 return SurvivorRigConfig

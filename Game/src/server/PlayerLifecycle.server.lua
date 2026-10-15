@@ -127,7 +127,8 @@ local function spawnCharacterForPlayer(player: Player, requestedSelection: any):
 		-- Set survivor-specific signature idle and official Mixamo locomotion assets
 		local charDef = selection and WardrobeConfig.Characters[selection.CharacterId]
 		local profileId = (charDef and charDef.ProfileId) or (selection and selection.CharacterId) or "SOPHIE"
-		local profile = SurvivorRigConfig.GetProfile(profileId)
+		character:SetAttribute("SurvivorProfileId", profileId)
+		local profile = SurvivorRigConfig.GetProfile(profileId, character)
 		local recommendedIdle = (charDef and charDef.RecommendedIdle) or (profile and profile.Gender == "Female" and "rbxassetid://89629385542634") or "rbxassetid://79030538201747"
 
 		local idleContainer = animateScript:FindFirstChild("idle")

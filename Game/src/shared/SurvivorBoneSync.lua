@@ -51,7 +51,7 @@ function SurvivorBoneSync.RegisterCharacter(char: Model): CharacterRigData?
     end
 
     local profileId = (char:GetAttribute("SurvivorProfileId") or char.Name) :: string
-    local profile = SurvivorRigConfig.GetProfile(profileId)
+    local profile = SurvivorRigConfig.GetProfile(profileId, char)
 
     local rigData: CharacterRigData = {
         Character = char,
