@@ -11,6 +11,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local GameConfig = require(sharedFolder:WaitForChild("GameConfig"))
 local WardrobeConfig = require(sharedFolder:WaitForChild("SurvivorWardrobeConfig"))
 local WardrobeApplier = require(sharedFolder:WaitForChild("SurvivorWardrobeApplier"))
+local SurvivorRigConfig = require(sharedFolder:WaitForChild("SurvivorRigConfig"))
 local roster = sharedFolder:WaitForChild("SurvivorRoster")
 
 local spawnRequest = sharedFolder:FindFirstChild("RequestSpawnCharacter")
@@ -122,13 +123,75 @@ local function spawnCharacterForPlayer(player: Player, requestedSelection: any):
 				if numericId then descendant.AnimationId = "rbxassetid://" .. numericId end
 			end
 		end
+
+		-- Set survivor-specific signature idle and official Mixamo locomotion assets
+		local charDef = selection and WardrobeConfig.Characters[selection.CharacterId]
+		local profileId = (charDef and charDef.ProfileId) or (selection and selection.CharacterId) or "SOPHIE"
+		local profile = SurvivorRigConfig.GetProfile(profileId)
+		local recommendedIdle = (charDef and charDef.RecommendedIdle) or (profile and profile.Gender == "Female" and "rbxassetid://89629385542634") or "rbxassetid://79030538201747"
+
+		local idleContainer = animateScript:FindFirstChild("idle")
+		local anim1 = idleContainer and idleContainer:FindFirstChild("Animation1")
+		if anim1 and anim1:IsA("Animation") then
+			anim1.AnimationId = recommendedIdle
+		end
+
+		local locomotion = profile and profile.Locomotion
+		local isFemale = (profile and profile.Gender == "Female") or (charDef and charDef.Gender == "Female")
+		if isFemale == nil then isFemale = true end
+
+		local walkId = (locomotion and locomotion.Walk) or (isFemale and "rbxassetid://115531053004010" or "rbxassetid://70412449762831")
+		local runId = (locomotion and locomotion.Run) or "rbxassetid://99676638771528"
+		local jumpId = (locomotion and locomotion.Jump) or "rbxassetid://103074489051723"
+		local fallId = (locomotion and locomotion.Fall) or "rbxassetid://103074489051723"
+
+		local walkContainer = animateScript:FindFirstChild("walk")
+		local walkAnim = walkContainer and walkContainer:FindFirstChild("WalkAnim")
+		if walkAnim and walkAnim:IsA("Animation") then
+			walkAnim.AnimationId = walkId
+		end
+
+		local runContainer = animateScript:FindFirstChild("run")
+		local runAnim = runContainer and runContainer:FindFirstChild("RunAnim")
+		if runAnim and runAnim:IsA("Animation") then
+			runAnim.AnimationId = runId
+		end
+
+		local jumpContainer = animateScript:FindFirstChild("jump")
+		local jumpAnim = jumpContainer and jumpContainer:FindFirstChild("JumpAnim")
+		if jumpAnim and jumpAnim:IsA("Animation") then
+			jumpAnim.AnimationId = jumpId
+		end
+
+		local fallContainer = animateScript:FindFirstChild("fall")
+		local fallAnim = fallContainer and fallContainer:FindFirstChild("FallAnim")
+		if fallAnim and fallAnim:IsA("Animation") then
+			fallAnim.AnimationId = fallId
+		end
+
+		local idleJumpContainer = animateScript:FindFirstChild("idlejump")
+		if not idleJumpContainer then
+			local sv = Instance.new("StringValue")
+			sv.Name = "idlejump"
+			local a = Instance.new("Animation")
+			a.Name = "IdleJumpAnim"
+			a.AnimationId = "rbxassetid://100945085841175"
+			a.Parent = sv
+			sv.Parent = animateScript
+		else
+			local a = idleJumpContainer:FindFirstChild("IdleJumpAnim") or idleJumpContainer:FindFirstChildOfClass("Animation")
+			if a and a:IsA("Animation") then
+				a.AnimationId = "rbxassetid://100945085841175"
+			end
+		end
 	end
 
 	humanoid.AutoRotate = true
 	humanoid.PlatformStand = false
 	humanoid.Sit = false
-	if humanoid.WalkSpeed <= 0 then humanoid.WalkSpeed = 16 end
-	if humanoid.UseJumpPower and humanoid.JumpPower <= 0 then humanoid.JumpPower = 38 end
+	humanoid.WalkSpeed = 12
+	humanoid.UseJumpPower = true
+	humanoid.JumpPower = 38
 	if humanoid.HipHeight < 1 and not humanoid.AutomaticScalingEnabled then humanoid.HipHeight = 2.5 end
 
 	local spawnLocation = workspace:FindFirstChildOfClass("SpawnLocation") :: SpawnLocation?

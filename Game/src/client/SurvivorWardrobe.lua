@@ -1121,14 +1121,40 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 		end
 
 		-- 3. Step animator so animations update with 100% reliability in ViewportFrame
+		local profile = SurvivorRigConfig.GetProfile(state.SelectedCharacterId)
 		if previewAnimator and previewTrack and previewTrack.IsPlaying then
 			pcall(function()
 				previewAnimator:StepAnimations(dt)
 			end)
 		else
 			-- If animation track is loading or not playing, maintain natural relaxed stance every frame (Anti-T-Pose)
-			local profile = SurvivorRigConfig.GetProfile(state.SelectedCharacterId)
 			applyAntiZombiePose(previewClone, profile)
+		end
+
+		-- Posture adjustment: Arch thoracic spine to elaborate chest, level gaze, and retract shoulders
+		if profile and profile.Posture then
+			local posture = profile.Posture
+			local s1 = previewClone:FindFirstChild("mixamorig:Spine1", true)
+			local s2 = previewClone:FindFirstChild("mixamorig:Spine2", true)
+			local neck = previewClone:FindFirstChild("mixamorig:Neck", true)
+			local lSh = previewClone:FindFirstChild("mixamorig:LeftShoulder", true)
+			local rSh = previewClone:FindFirstChild("mixamorig:RightShoulder", true)
+
+			if s1 and s1:IsA("Bone") and posture.Spine1ArchDeg then
+				s1.Transform = s1.Transform * CFrame.Angles(math.rad(posture.Spine1ArchDeg), 0, 0)
+			end
+			if s2 and s2:IsA("Bone") and posture.Spine2ArchDeg then
+				s2.Transform = s2.Transform * CFrame.Angles(math.rad(posture.Spine2ArchDeg), 0, 0)
+			end
+			if neck and neck:IsA("Bone") and posture.NeckCounterDeg then
+				neck.Transform = neck.Transform * CFrame.Angles(math.rad(posture.NeckCounterDeg), 0, 0)
+			end
+			if lSh and lSh:IsA("Bone") and posture.ShoulderRetractDeg then
+				lSh.Transform = lSh.Transform * CFrame.Angles(0, math.rad(-posture.ShoulderRetractDeg), math.rad(posture.ShoulderRetractDeg * 0.8))
+			end
+			if rSh and rSh:IsA("Bone") and posture.ShoulderRetractDeg then
+				rSh.Transform = rSh.Transform * CFrame.Angles(0, math.rad(posture.ShoulderRetractDeg), math.rad(-posture.ShoulderRetractDeg * 0.8))
+			end
 		end
 
 		-- 4. Continuous bone synchronization for aliased deformer rigs (e.g. mixamorig6 for Jody)

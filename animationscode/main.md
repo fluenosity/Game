@@ -1,11 +1,17 @@
-running - 113383796790893
-jumping - 100945085841175
-walking - 135082077656079
-MainIdle- 79030538201747
-Movementoractiontoidle - 134245085026778
-Repelling Insects idl - 105216910523835 (upper-body overlay)
-checking nails idle - 81640445815841
-slight title idle - 89629385542634
+# Active Locomotion Animations (Current Roster)
+- **FemaleWalk**: `115531053004010` (Default Walk @ 16 studs/s for Sophie & Jody)
+- **MaleWalk**: `70412449762831` (Default Walk @ 16 studs/s for Bryce & Remy)
+- **RunningNewMain**: `99676638771528` (Sprint Run @ 26 studs/s, all characters)
+- **RunningJumpMain**: `103074489051723` (Jump & Fall arc, JumpPower = 38, all characters)
+- **MainIdle**: `79030538201747` (Male resting idle)
+- **SlightTiltIdle**: `89629385542634` (Sophie female signature idle)
+- **SittingMain**: `98264175486814`
+- **SitToStandMain**: `97271955482381`
+- **Stand to Sit Main**: `99867494141148`
+### Secondary / Overlay / Emote Animations:
+- Movementoractiontoidle: `134245085026778`
+- Repelling Insects idle: `105216910523835` (upper-body overlay)
+- checking nails idle: `81640445815841`
 
 ## Character Rig Registry & Archetype System (`SurvivorRigConfig.lua`)
 - **Archetype: FemaleBase** (LegCorrection: `9.5° inward`, ArmClearance: `4.0° outward`, HipHeight: `1.90`, Living Gaze: `1.2°`)

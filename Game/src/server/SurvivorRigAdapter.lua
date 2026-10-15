@@ -146,7 +146,7 @@ function SurvivorRigAdapter.AdaptModel(rawModel: Model, characterId: string?): M
     hum.HipHeight = profile.HipHeight
     hum.JumpPower = 38
     hum.UseJumpPower = true
-    hum.WalkSpeed = 16
+    hum.WalkSpeed = 12
     hum.Parent = char
 
     local animator = Instance.new("Animator")

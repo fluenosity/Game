@@ -59,9 +59,9 @@ local lastSprintTime = 0.0
 local maxHunger = 100.0
 local currentHunger = 78.0 -- Matches mockup baseline (Food 78)
 
-local normalWalkSpeed = 16
-local sprintWalkSpeed = 26
-local fatiguedWalkSpeed = 10
+local normalWalkSpeed = 12
+local sprintWalkSpeed = 24
+local fatiguedWalkSpeed = 8
 local normalJumpPower = 38
 local fatiguedJumpPower = 0
 

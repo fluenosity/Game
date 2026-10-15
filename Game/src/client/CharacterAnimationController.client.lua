@@ -30,6 +30,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local AudioManager = require(script.Parent:WaitForChild("AudioManager"))
 local ModalManager = require(script.Parent:WaitForChild("ModalManager"))
 local SurvivorRigConfig = require(sharedFolder:WaitForChild("SurvivorRigConfig"))
+local SurvivorBoneSync = require(sharedFolder:WaitForChild("SurvivorBoneSync"))
 
 -- -----------------------------------------------------------------------------
 -- 1. REMOTE COMMUNICATION
@@ -158,6 +159,8 @@ type JointSet = {
     LeftAnkle: Instance?,
     HipsBone: Instance?,
     HeadBone: Instance?,
+    LeftUpLeg: Instance?,
+    RightUpLeg: Instance?,
 }
 
 local joints: JointSet = {
@@ -178,6 +181,8 @@ local joints: JointSet = {
     LeftAnkle = nil,
     HipsBone = nil,
     HeadBone = nil,
+    LeftUpLeg = nil,
+    RightUpLeg = nil,
 }
 
 local LIGHT_ATTACK_DURATION = 0.50
@@ -314,6 +319,8 @@ local function cacheCharacterJoints(char: Model)
     joints.LeftAnkle = char:FindFirstChild("LeftAnkle", true)
     joints.HipsBone = char:FindFirstChild("mixamorig:Hips", true)
     joints.HeadBone = char:FindFirstChild("mixamorig:Head", true)
+    joints.LeftUpLeg = char:FindFirstChild("mixamorig:LeftUpLeg", true)
+    joints.RightUpLeg = char:FindFirstChild("mixamorig:RightUpLeg", true)
 
     -- Discover secondary deformer bones (e.g. mixamorig6 for Jody)
     table.clear(activeBoneSyncPairs)
@@ -352,32 +359,6 @@ local function cacheCharacterJoints(char: Model)
     -- Humanoid state listeners
     if activeHumanoid then
         defaultHipHeight = activeHumanoid.HipHeight > 0 and activeHumanoid.HipHeight or 2.0
-
-        local animator = activeHumanoid:WaitForChild("Animator", 5) :: Animator?
-        local kfsProvider = game:GetService("KeyframeSequenceProvider")
-        -- Locomotion KeyframeSequences are stored in Workspace so Rojo won't drop the
-        -- Studio-imported source clips. Only named movement tracks are played below.
-        local locoFolder = sharedFolder:FindFirstChild("LocomotionAnimations")
-            or workspace:FindFirstChild("LocomotionAnimations")
-        if animator and locoFolder then
-            for _, item in ipairs(locoFolder:GetChildren()) do
-                pcall(function()
-                    local track: AnimationTrack? = nil
-                    if item:IsA("Animation") then
-                        track = animator:LoadAnimation(item)
-                    elseif item:IsA("KeyframeSequence") then
-                        local url = kfsProvider:RegisterKeyframeSequence(item)
-                        local anim = Instance.new("Animation")
-                        anim.AnimationId = url
-                        track = animator:LoadAnimation(anim)
-                    end
-                    if track then
-                        track.Priority = Enum.AnimationPriority.Movement
-                        locomotionTracks[item.Name] = track
-                    end
-                end)
-            end
-        end
 
         -- Ensure natural human skin tone on skin mesh parts
         local skinTone = Color3.fromRGB(222, 178, 148)
@@ -672,45 +653,52 @@ end
 RunService.PreSimulation:Connect(function(dt: number)
     if not activeCharacter or not activeHumanoid or not activeHRP then return end
 
-    -- Skinned Mesh Jump Root-Motion Stabilizer:
-    -- Mixamo airborne animations contain massive vertical root displacement (+3.0 studs) on mixamorig:Hips.
-    -- When airborne or while the jump animation is blending out on landing, clamp positive Y displacement
-    -- to 0 so the character never flickers or pops upward on landing. Ground gait (Y <= 0) remains unaffected.
+    local now = os.clock()
+    local profileId = (activeCharacter:GetAttribute("SurvivorProfileId") or activeCharacter.Name) :: string
+    local profile = SurvivorRigConfig.GetProfile(profileId)
+
+    -- In-Place Pelvic Root Stabilizer:
+    -- Mixamo animations without 'In Place' checked (FemaleWalk, MaleWalk, RunningJumpMain)
+    -- translate -5.1 to -14.1 studs forward along Z on mixamorig:Hips.
+    -- Locking Z = 0 keeps the pelvis anchored to HumanoidRootPart, producing clean,
+    -- perfect in-place locomotion without forward-and-back rubberbanding or forward jump throw.
     if not joints.HipsBone and activeCharacter then
         joints.HipsBone = activeCharacter:FindFirstChild("mixamorig:Hips", true)
     end
     if joints.HipsBone and joints.HipsBone:IsA("Bone") then
         local hipsBone = joints.HipsBone :: Bone
         local t = hipsBone.Transform
-        if state.IsAirborne or t.Position.Y > 0 then
-            hipsBone.Transform = CFrame.new(t.Position.X, math.min(0, t.Position.Y), t.Position.Z) * t.Rotation
+        if math.abs(t.Position.Z) > 0.001 then
+            hipsBone.Transform = CFrame.new(t.Position.X, t.Position.Y, 0) * t.Rotation
         end
     end
 
-    -- Stabilize remote players so everyone sees realistic grounded jumps in multiplayer
+    -- Leg Stance Clearance:
+    -- Prevents catwalk scissor-crossing (X-legs) on feminine walk animations by applying
+    -- subtle outward flare (-3.0°) to LeftUpLeg / RightUpLeg so feet step parallel with natural clearance.
+    if joints.LeftUpLeg and joints.RightUpLeg then
+        local flare = profile.LegClearanceAngleDeg or 0
+        if flare ~= 0 then
+            joints.LeftUpLeg.Transform = joints.LeftUpLeg.Transform * CFrame.Angles(0, 0, math.rad(flare))
+            joints.RightUpLeg.Transform = joints.RightUpLeg.Transform * CFrame.Angles(0, 0, math.rad(-flare))
+        end
+    end
+
+    -- Step secondary deformer bone sync & remote character root stabilizers
     for _, otherPlayer in ipairs(Players:GetPlayers()) do
         if otherPlayer ~= player and otherPlayer.Character then
-            local otherHips = otherPlayer.Character:FindFirstChild("mixamorig:Hips", true)
-            if otherHips and otherHips:IsA("Bone") then
-                local ot = otherHips.Transform
-                if ot.Position.Y > 0 then
-                    otherHips.Transform = CFrame.new(ot.Position.X, math.min(0, ot.Position.Y), ot.Position.Z) * ot.Rotation
-                end
-            end
+            SurvivorBoneSync.RegisterCharacter(otherPlayer.Character)
         end
     end
+    SurvivorBoneSync.StepAll()
 
-    local now = os.clock()
-
-    -- Living Head Gaze & Eye Saccade Presence:
+    -- Living Head Gaze & Eye Saccade Presence on local character:
     -- Organic micro-glance saccades (subtle eye focus drift) with gentle warm rest tilt
     if not joints.HeadBone and activeCharacter then
         joints.HeadBone = activeCharacter:FindFirstChild("mixamorig:Head", true)
     end
     if joints.HeadBone and joints.HeadBone:IsA("Bone") then
         local headBone = joints.HeadBone :: Bone
-        local profileId = (activeCharacter:GetAttribute("SurvivorProfileId") or activeCharacter.Name) :: string
-        local profile = SurvivorRigConfig.GetProfile(profileId)
         local gazeRange = profile.Facial and profile.Facial.MicroGazeRangeDeg or 1.0
         local restTilt = profile.Facial and profile.Facial.HeadRestTiltDeg or 0.0
 
@@ -721,13 +709,6 @@ RunService.PreSimulation:Connect(function(dt: number)
 
         local gazeOffset = CFrame.Angles(gazePitch, gazeYaw, friendlyTilt)
         headBone.Transform = headBone.Transform * gazeOffset
-    end
-
-    -- Synchronize secondary deformer bones (e.g. mixamorig6 for Jody) so skinned mesh follows Animator
-    if #activeBoneSyncPairs > 0 then
-        for _, pair in ipairs(activeBoneSyncPairs) do
-            pair.Target.Transform = pair.Source.Transform
-        end
     end
 
     local moveVel = activeHRP.AssemblyLinearVelocity
@@ -832,7 +813,7 @@ RunService.PreSimulation:Connect(function(dt: number)
         elseif isMoving then
             nextLocomotion = (wantsSprint or horizontalSpeed >= 19) and "Run" or "Walk"
         else
-            nextLocomotion = "Idle"
+            nextLocomotion = nil
         end
     end
 
@@ -914,18 +895,6 @@ RunService.PreSimulation:Connect(function(dt: number)
         rKneeOffset = rKneeOffset * CFrame.Angles(math.rad(-landingComp * 12), 0, 0)
         lKneeOffset = lKneeOffset * CFrame.Angles(math.rad(-landingComp * 12), 0, 0)
         waistOffset = waistOffset * CFrame.Angles(math.rad(landingComp * 4), 0, 0)
-    end
-
-    -- Small additive gait polish keeps movement readable without replacing the rig's
-    -- authored walk/run cycle. Weapon swings leave this phase running continuously.
-    local runAlpha = isMoving and math.clamp(horizontalSpeed / 12, 0, 1) or 0
-    if runAlpha > 0.001 and not (authoredLocomotionActive and (nextLocomotion == "Walk" or nextLocomotion == "Run")) then
-        local legSwing = math.sin(state.WalkCycleClock) * math.rad(12 * runAlpha)
-        local kneeLift = math.max(math.cos(state.WalkCycleClock), 0) * math.rad(16 * runAlpha)
-        rHipOffset = rHipOffset * CFrame.Angles(legSwing, 0, 0)
-        lHipOffset = lHipOffset * CFrame.Angles(-legSwing, 0, 0)
-        rKneeOffset = rKneeOffset * CFrame.Angles(-kneeLift, 0, 0)
-        lKneeOffset = lKneeOffset * CFrame.Angles(-math.max(-math.cos(state.WalkCycleClock), 0) * math.rad(16 * runAlpha), 0, 0)
     end
 
     -- 4. Dynamic turn banking applied to root (TPP only, ultra-mild)
