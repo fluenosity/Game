@@ -1348,6 +1348,7 @@ navPlay = createMenuLink("NavPlay", "PLAY", 1, true, function()
     pickerTransitionGeneration += 1
     local transitionId = pickerTransitionGeneration
     navPlay.Text = "PREPARING CAMP..."
+    navPlay.TextTransparency = 0
     navPlay.Active = false
     navPlay.Selectable = false
     -- Keep the main menu and its wide forest shot on screen while the lobby
@@ -1356,10 +1357,11 @@ navPlay = createMenuLink("NavPlay", "PLAY", 1, true, function()
     task.spawn(function()
         local prepareStartedAt = os.clock()
         local prepareDeadline = prepareStartedAt + 2.5
+        local minimumPrepareTime = 1.15
         while transitionId == pickerTransitionGeneration
             and menuFlowState == "Preparing"
             and os.clock() < prepareDeadline
-            and ((os.clock() - prepareStartedAt) < 0.45
+            and ((os.clock() - prepareStartedAt) < minimumPrepareTime
                 or (wardrobeScreen.IsLobbyReady and not wardrobeScreen.IsLobbyReady())) do
             task.wait(0.05)
         end
@@ -1369,6 +1371,13 @@ navPlay = createMenuLink("NavPlay", "PLAY", 1, true, function()
 
         menuFlowState = "OpeningPicker"
         navPlay.Text = "ENTERING CAMP..."
+        navPlay.TextTransparency = 0
+        -- Leave the second status on screen long enough to read before the
+        -- main-menu layer clears for the camera glide.
+        task.wait(0.55)
+        if transitionId ~= pickerTransitionGeneration or menuFlowState ~= "OpeningPicker" then
+            return
+        end
         menuCameraResumeToken += 1
         camera = Workspace.CurrentCamera or camera
         if camera then
@@ -1381,8 +1390,80 @@ navPlay = createMenuLink("NavPlay", "PLAY", 1, true, function()
             menuCameraConn:Disconnect()
             menuCameraConn = nil
         end
-        -- Opening the picker and beginning the glide happen in the same turn;
-        -- the panel covers the scene before the camera can reveal empty camp.
+        -- Clear the main-menu screen before the glide. The survivor picker is
+        -- mounted only after the camera reaches its camp framing.
+        leftArea.Visible = false
+        studioStamp.Visible = false
+        if rightArea then rightArea.Visible = false end
+
+        local function showSurvivorPicker()
+            if transitionId ~= pickerTransitionGeneration or menuFlowState ~= "OpeningPicker" then
+                return
+            end
+            menuFlowState = "Picker"
+            navPlay.Text = "PLAY"
+            navPlay.Active = true
+            navPlay.Selectable = true
+            isBusy = false
+            wardrobeScreen.Open(function()
+                if menuFlowState ~= "OpeningPicker" and menuFlowState ~= "Picker" then return end
+                menuFlowState = "Returning"
+                pickerTransitionGeneration += 1
+                local returnTransitionId = pickerTransitionGeneration
+                player:SetAttribute("IsInGameplay", false)
+                holdMenuCharacter(player.Character)
+                camera = Workspace.CurrentCamera or camera
+                if menuCameraTween then
+                    menuCameraTween:Cancel()
+                    menuCameraTween = nil
+                end
+                local returnCFrame = menuReturnCFrame or CFrame.lookAt(baseCamPos, baseCamTarget)
+                local resumeElapsed = menuPausedElapsed
+                menuCameraResumeToken += 1
+                local resumeToken = menuCameraResumeToken
+                isBusy = true
+                navPlay.Text = "RETURNING..."
+                navPlay.Active = false
+                navPlay.Selectable = false
+
+                local function finishReturn()
+                    if returnTransitionId ~= pickerTransitionGeneration or menuFlowState ~= "Returning" then
+                        return
+                    end
+                    menuCameraTween = nil
+                    wardrobeScreen.Close()
+                    leftArea.Visible = true
+                    studioStamp.Visible = true
+                    navPlay.Text = "PLAY"
+                    navPlay.Active = true
+                    navPlay.Selectable = true
+                    menuFlowState = "MainMenu"
+                    isBusy = false
+                    startMenuCameraSimulation(resumeElapsed)
+                    menuReturnCFrame = nil
+                end
+
+                if camera then
+                    camera.CameraType = Enum.CameraType.Scriptable
+                    menuCameraTween = TweenService:Create(camera, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+                        CFrame = returnCFrame,
+                        FieldOfView = menuReturnFov,
+                    })
+                    menuCameraTween.Completed:Connect(function(playbackState)
+                        if playbackState == Enum.PlaybackState.Completed
+                            and resumeToken == menuCameraResumeToken then
+                            finishReturn()
+                        end
+                    end)
+                    menuCameraTween:Play()
+                else
+                    finishReturn()
+                end
+            end, function(selection)
+                beginGame(selection)
+            end)
+        end
+
         if camera then
             if menuCameraTween then
                 menuCameraTween:Cancel()
@@ -1398,89 +1479,11 @@ navPlay = createMenuLink("NavPlay", "PLAY", 1, true, function()
                     return
                 end
                 menuCameraTween = nil
-                menuFlowState = "Picker"
-                -- The survivor picker has its own heading and controls. Keep
-                -- the separate main-menu branding/navigation out of that view;
-                -- the party slots are part of the picker and remain visible.
-                leftArea.Visible = false
-                studioStamp.Visible = false
-                navPlay.Text = "PLAY"
-                navPlay.Active = true
-                navPlay.Selectable = true
-                isBusy = false
+                showSurvivorPicker()
             end)
-        end
-
-        wardrobeScreen.Open(function()
-            if menuFlowState ~= "OpeningPicker" and menuFlowState ~= "Picker" then return end
-            menuFlowState = "Returning"
-            pickerTransitionGeneration += 1
-            local returnTransitionId = pickerTransitionGeneration
-            player:SetAttribute("IsInGameplay", false)
-            holdMenuCharacter(player.Character)
-            camera = Workspace.CurrentCamera or camera
-            if menuCameraTween then
-                menuCameraTween:Cancel()
-                menuCameraTween = nil
-            end
-            local returnCFrame = menuReturnCFrame or CFrame.lookAt(baseCamPos, baseCamTarget)
-            local resumeElapsed = menuPausedElapsed
-            menuCameraResumeToken += 1
-            local resumeToken = menuCameraResumeToken
-            isBusy = true
-            navPlay.Text = "RETURNING..."
-            navPlay.Active = false
-            navPlay.Selectable = false
-
-            local function finishReturn()
-                if returnTransitionId ~= pickerTransitionGeneration or menuFlowState ~= "Returning" then
-                    return
-                end
-                menuCameraTween = nil
-                -- Swap the two surfaces after the camera reaches the menu
-                -- framing, so no empty-camp frame is exposed.
-                wardrobeScreen.Close()
-                leftArea.Visible = true
-                studioStamp.Visible = true
-                navPlay.Text = "PLAY"
-                navPlay.Active = true
-                navPlay.Selectable = true
-                menuFlowState = "MainMenu"
-                isBusy = false
-                startMenuCameraSimulation(resumeElapsed)
-                menuReturnCFrame = nil
-            end
-
-            if camera then
-                camera.CameraType = Enum.CameraType.Scriptable
-                menuCameraTween = TweenService:Create(camera, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
-                    CFrame = returnCFrame,
-                    FieldOfView = menuReturnFov,
-                })
-                menuCameraTween.Completed:Connect(function(playbackState)
-                    if playbackState == Enum.PlaybackState.Completed
-                        and resumeToken == menuCameraResumeToken then
-                        finishReturn()
-                    end
-                end)
-                menuCameraTween:Play()
-            else
-                finishReturn()
-            end
-        end, function(selection)
-            beginGame(selection)
-        end)
-
-        if menuCameraTween then
             menuCameraTween:Play()
         else
-            menuFlowState = "Picker"
-            leftArea.Visible = false
-            studioStamp.Visible = false
-            navPlay.Text = "PLAY"
-            navPlay.Active = true
-            navPlay.Selectable = true
-            isBusy = false
+            showSurvivorPicker()
         end
     end)
 end)

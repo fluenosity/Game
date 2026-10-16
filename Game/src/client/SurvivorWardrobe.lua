@@ -117,6 +117,7 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 		DragStartRot = 0,
 		OnBack = nil :: (() -> ())?,
 		OnConfirm = nil :: ((any) -> ())?,
+		HideOverlayForReturn = nil :: (() -> ())?,
 		IsOpen = false,
 		IsReturning = false,
 		BackButtons = {} :: { TextButton },
@@ -129,6 +130,9 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 			button.Active = false
 			button.Selectable = false
 			button.Text = "RETURNING..."
+		end
+		if state.HideOverlayForReturn then
+			state.HideOverlayForReturn()
 		end
 		if state.OnBack then
 			state.OnBack()
@@ -169,6 +173,9 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	overlay.Visible = false
 	overlay.ZIndex = 70
 	overlay.Parent = screenGui
+	state.HideOverlayForReturn = function()
+		overlay.Visible = false
+	end
 
 	-- Main Central Luxury Glass Panel
 	local panel = Instance.new("Frame")
@@ -1703,6 +1710,7 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 		for _, button in ipairs(state.BackButtons) do
 			button.Active = true
 			button.Selectable = true
+			button.Visible = true
 			button.Text = "BACK"
 		end
 		state.IsOpen = true
