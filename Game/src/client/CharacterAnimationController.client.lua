@@ -98,6 +98,7 @@ local sprintSpring = createSpring(120, 16)    -- 0 = walk/idle, 1 = full sprint
 local currentSprintAlpha = 0
 local currentAirborneAlpha = 0
 local currentHeadPostureAlpha = 0
+local currentLocomotionAngle = 0
 local lastYaw = 0
 
 -- -----------------------------------------------------------------------------
@@ -237,6 +238,91 @@ local function findLocomotionTrack(animator: Animator, wantsSprint: boolean?): (
     return bestTrack, isRun, matchedTimeline
 end
 
+local function getLocomotionAngleAndReverse(hum: Humanoid?): (number, boolean)
+    if not hum then return 0, false end
+    
+    local isW = UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.Up)
+    local isS = UserInputService:IsKeyDown(Enum.KeyCode.S) or UserInputService:IsKeyDown(Enum.KeyCode.Down)
+    local isA = UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Left)
+    local isD = UserInputService:IsKeyDown(Enum.KeyCode.D) or UserInputService:IsKeyDown(Enum.KeyCode.Right)
+
+    -- Case 1: Pure key state available (zero latency)
+    if isW or isS or isA or isD then
+        -- Forward key has absolute priority (if W is held, continuous transitions always take forward path):
+        if isW then
+            if isA and not isD then
+                return math.rad(45), false  -- Forward-Left (W+A combo): turns body to +45 deg (faces forward-left)
+            elseif isD and not isA then
+                return math.rad(-45), false -- Forward-Right (W+D combo): turns body to -45 deg (faces forward-right)
+            else
+                return 0, false              -- Pure Forward (W): 0 deg
+            end
+        elseif isS then
+            if isA and not isD then
+                -- Back-Left (S+A): inverse angle of Forward-Right (-45 deg, reverse walk)
+                -- Facing -45 deg (Front-Right) and stepping in reverse moves along Back-Left
+                return math.rad(-45), true
+            elseif isD and not isA then
+                -- Back-Right (S+D): inverse angle of Forward-Left (+45 deg, reverse walk)
+                -- Facing +45 deg (Front-Left) and stepping in reverse moves along Back-Right
+                return math.rad(45), true
+            else
+                -- Pure Backward (S): straight back (0 deg, reverse walk)
+                return 0, true
+            end
+        elseif isA and not isD then
+            return math.rad(90), false      -- Pure Left (A): turns body to +90 deg (faces left)
+        elseif isD and not isA then
+            return math.rad(-90), false     -- Pure Right (D): turns body to -90 deg (faces right)
+        end
+    end
+
+    -- Case 2: Gamepad / mobile fallback via MoveDirection relative to Camera
+    local cam = workspace.CurrentCamera
+    if cam and hum.MoveDirection.Magnitude > 0.05 then
+        local camCF = cam.CFrame
+        local camForward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+        local camRight = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z)
+        if camForward.Magnitude > 0.001 and camRight.Magnitude > 0.001 then
+            local moveDir = hum.MoveDirection.Unit
+            local fwdDot = moveDir:Dot(camForward.Unit)
+            local rightDot = moveDir:Dot(camRight.Unit)
+
+            if fwdDot < -0.15 then
+                -- Backward sector
+                if rightDot < -0.25 then
+                    -- Back-Left: inverse of front-right (-45 deg, reverse walk)
+                    return math.rad(-45), true
+                elseif rightDot > 0.25 then
+                    -- Back-Right: inverse of front-left (+45 deg, reverse walk)
+                    return math.rad(45), true
+                else
+                    return 0, true
+                end
+            else
+                -- Forward sector
+                if rightDot < -0.25 then
+                    if fwdDot > 0.25 then
+                        return math.rad(45), false  -- Forward-Left
+                    else
+                        return math.rad(90), false  -- Left
+                    end
+                elseif rightDot > 0.25 then
+                    if fwdDot > 0.25 then
+                        return math.rad(-45), false -- Forward-Right
+                    else
+                        return math.rad(-90), false -- Right
+                    end
+                else
+                    return 0, false                 -- Forward
+                end
+            end
+        end
+    end
+
+    return 0, false
+end
+
 local function evaluateCharacterFootsteps(
     char: Model,
     isLocal: boolean,
@@ -267,14 +353,28 @@ local function evaluateCharacterFootsteps(
     local detectedFloorMat: Enum.Material? = hum.FloorMaterial
     local isDeliberateJump = (hum:GetState() == Enum.HumanoidStateType.Jumping)
 
+    local isBackwards = false
     if isLocal then
-        isMoving = isMovingLocal == true
-        isSprinting = wantsSprintLocal == true
+        local _, isBack = getLocomotionAngleAndReverse(hum)
+        isBackwards = isBack
     else
         local moveVel = hrp.AssemblyLinearVelocity * Vector3.new(1, 0, 1)
         local moveSpeed = moveVel.Magnitude
         isMoving = (moveSpeed > 1.2) or (hum.MoveDirection.Magnitude > 0.05)
-        isSprinting = (moveSpeed > 12)
+        local moveDir = if hum.MoveDirection.Magnitude > 0.05 then hum.MoveDirection.Unit else (if moveSpeed > 0.1 then moveVel.Unit else Vector3.zero)
+        if moveDir.Magnitude > 0.1 then
+            local facingLook = hrp.CFrame.LookVector
+            local horizFacing = Vector3.new(facingLook.X, 0, facingLook.Z)
+            if horizFacing.Magnitude > 0.001 then
+                isBackwards = moveDir:Dot(horizFacing.Unit) < -0.15
+            end
+        end
+        isSprinting = (moveSpeed > 11) and not isBackwards
+    end
+
+    if isLocal then
+        isMoving = isMovingLocal == true
+        isSprinting = (wantsSprintLocal == true) and not isBackwards
     end
 
     -- Deep Ground and Floor Material Detection (Rock-solid across terrain boundaries):
@@ -302,13 +402,17 @@ local function evaluateCharacterFootsteps(
 
     -- Locomotion Cadence Discontinuation Check:
     -- Footsteps and stride cadence ONLY stop when:
-    -- 1. Character has actually stopped moving (no input, zero horizontal speed)
-    -- 2. Character is in a deliberate high jump (Jumping state) or freefalling fast (> 15 studs/s down)
+    -- 1. Character is Seated in a bench/log/chair (immediate absolute silence)
+    -- 2. Character has actually stopped moving (no input, zero horizontal speed)
+    -- 3. Character is in a deliberate high jump (Jumping state) or freefalling fast (> 15 studs/s down)
+    local isSeated = hum.Sit or (hum:GetState() == Enum.HumanoidStateType.Seated)
     local isAirborneJump = isDeliberateJump or (not isGrounded and hrp.AssemblyLinearVelocity.Y < -15)
 
-    if not isMoving or isAirborneJump then
+    local isSwimming = (hum:GetState() == Enum.HumanoidStateType.Swimming)
+
+    if isSeated or not isMoving or isAirborneJump or isSwimming then
         tracker.StopGraceTime = tracker.StopGraceTime + dt
-        if tracker.StopGraceTime > 0.16 then
+        if tracker.StopGraceTime > 0.16 or isSwimming or isSeated then
             tracker.IsActive = false
             tracker.StepTimer = 0
             tracker.LastTrack = nil
@@ -327,6 +431,10 @@ local function evaluateCharacterFootsteps(
 
     if animator then
         activeTrack, isRunTrack = findLocomotionTrack(animator, isSprinting)
+    end
+
+    if isBackwards then
+        isRunTrack = false
     end
 
     -- Derive exact cadence interval per single step:
@@ -382,7 +490,8 @@ local function evaluateCharacterFootsteps(
     if isLocal then
         -- Phase-lock local FPP viewmodel arm swing and camera motion to the exact cadence:
         local strideFreq = (math.pi * 2) / (tracker.StepInterval * 2)
-        state.WalkCycleClock = state.WalkCycleClock + dt * strideFreq
+        local cycleDir = isBackwards and -1 or 1
+        state.WalkCycleClock = state.WalkCycleClock + dt * strideFreq * cycleDir
     end
 
     if stepTriggered then
@@ -410,6 +519,7 @@ type JointSet = {
     LeftElbow: Instance?,
     LeftWrist: Instance?,
     Waist: Instance?,
+    SpineBone: Instance?,
     Neck: Instance?,
     Root: Instance?,
     RightHip: Instance?,
@@ -432,6 +542,7 @@ local joints: JointSet = {
     LeftElbow = nil,
     LeftWrist = nil,
     Waist = nil,
+    SpineBone = nil,
     Neck = nil,
     Root = nil,
     RightHip = nil,
@@ -571,6 +682,7 @@ local function cacheCharacterJoints(char: Model)
     joints.LeftElbow = char:FindFirstChild("LeftElbow", true)
     joints.LeftWrist = char:FindFirstChild("LeftWrist", true)
     joints.Waist = char:FindFirstChild("Waist", true)
+    joints.SpineBone = char:FindFirstChild("mixamorig:Spine1", true) or char:FindFirstChild("mixamorig:Spine", true)
     joints.Neck = char:FindFirstChild("Neck", true)
     joints.Root = char:FindFirstChild("Root", true)
     joints.RightHip = char:FindFirstChild("RightHip", true)
@@ -679,6 +791,9 @@ local function cacheCharacterJoints(char: Model)
             elseif newState == Enum.HumanoidStateType.Running or newState == Enum.HumanoidStateType.RunningNoPhysics or newState == Enum.HumanoidStateType.Landed then
                 state.IsAirborne = false
                 state.IsGrounded = true
+            elseif newState == Enum.HumanoidStateType.Swimming then
+                state.IsAirborne = false
+                state.IsGrounded = false
             end
 
             -- When jump finishes (touchdown on the ground):
@@ -728,6 +843,7 @@ local function hookRemotePlayer(otherPlayer: Player)
         local hum = char:WaitForChild("Humanoid", 10) :: Humanoid?
         local hrp = char:WaitForChild("HumanoidRootPart", 10) :: BasePart?
         if not hum or not hrp then return end
+        AudioManager.PrewarmFootsteps(hrp)
 
         local lastYVel = 0
         local conns = remotePlayerConnections[otherPlayer] or {}
@@ -1037,14 +1153,17 @@ RunService.PreSimulation:Connect(function(dt: number)
     -- translate -5.1 to -14.1 studs forward along Z on mixamorig:Hips.
     -- Locking Z = 0 keeps the pelvis anchored to HumanoidRootPart, producing clean,
     -- perfect in-place locomotion without forward-and-back rubberbanding or forward jump throw.
-    if not joints.HipsBone and activeCharacter then
-        joints.HipsBone = activeCharacter:FindFirstChild("mixamorig:Hips", true)
-    end
-    if joints.HipsBone and joints.HipsBone:IsA("Bone") then
-        local hipsBone = joints.HipsBone :: Bone
-        local t = hipsBone.Transform
-        if math.abs(t.Position.Z) > 0.001 then
-            hipsBone.Transform = CFrame.new(t.Position.X, t.Position.Y, 0) * t.Rotation
+    local isSeatedLocally = activeHumanoid.Sit or (activeHumanoid:GetState() == Enum.HumanoidStateType.Seated)
+    if not isSeatedLocally then
+        if not joints.HipsBone and activeCharacter then
+            joints.HipsBone = activeCharacter:FindFirstChild("mixamorig:Hips", true)
+        end
+        if joints.HipsBone and joints.HipsBone:IsA("Bone") then
+            local hipsBone = joints.HipsBone :: Bone
+            local t = hipsBone.Transform
+            if math.abs(t.Position.Z) > 0.001 then
+                hipsBone.Transform = CFrame.new(t.Position.X, t.Position.Y, 0) * t.Rotation
+            end
         end
     end
 
@@ -1075,10 +1194,25 @@ RunService.PreSimulation:Connect(function(dt: number)
     local horizontalSpeed = Vector3.new(moveVel.X, 0, moveVel.Z).Magnitude
     state.LastVerticalVelocity = moveVel.Y
 
+    -- Directional Locomotion Angle & Backward Check
+    local targetLocomotionAngle, isMovingBackward = getLocomotionAngleAndReverse(activeHumanoid)
+
     local isMovingIntent = activeHumanoid.MoveDirection.Magnitude > 0.05
     local isLocomoting = (horizontalSpeed > 1.0 or isMovingIntent)
-    local isMoving = isLocomoting and (state.IsGrounded or state.IsAirborne)
-    local wantsSprint = (activeHumanoid.WalkSpeed >= 12 or UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)) and isMoving
+    local isMoving = not isSeatedLocally and isLocomoting and (state.IsGrounded or state.IsAirborne)
+    
+    -- Smoothly interpolate body locomotion angle (snappy ~100ms response, zero pop)
+    if isMoving then
+        currentLocomotionAngle = currentLocomotionAngle + (targetLocomotionAngle - currentLocomotionAngle) * math.clamp(dt * 12, 0, 1)
+    else
+        currentLocomotionAngle = currentLocomotionAngle + (0 - currentLocomotionAngle) * math.clamp(dt * 14, 0, 1)
+    end
+
+    -- SPRINT STRICTLY DISABLED IN BACKWARD MOVEMENT (Walk only, no sprint footsteps):
+    local wantsSprint = false
+    if not isMovingBackward and isMoving then
+        wantsSprint = (activeHumanoid.WalkSpeed >= 12 or UserInputService:IsKeyDown(Enum.KeyCode.LeftShift))
+    end
     state.IsSprinting = wantsSprint
 
     -- Smooth spring for walk <-> sprint transitions
@@ -1216,7 +1350,12 @@ RunService.PreSimulation:Connect(function(dt: number)
             -- Let the character's original Animate script handle the air states.
             nextLocomotion = nil
         elseif isMoving then
-            nextLocomotion = (wantsSprint or horizontalSpeed >= 9.5) and "Run" or "Walk"
+            if isMovingBackward then
+                -- Backwards: strictly Walk only (tactical backpedal: no run, no jump)
+                nextLocomotion = "Walk"
+            else
+                nextLocomotion = (wantsSprint or horizontalSpeed >= 9.5) and "Run" or "Walk"
+            end
         else
             nextLocomotion = nil
         end
@@ -1233,6 +1372,10 @@ RunService.PreSimulation:Connect(function(dt: number)
         local playbackSpeed = 1
         if nextLocomotion == "Walk" then
             playbackSpeed = math.clamp(horizontalSpeed / 6.0, 0.70, 1.35)
+            if isMovingBackward then
+                -- Play walk animation in reverse for backward stepping!
+                playbackSpeed = -playbackSpeed
+            end
         elseif nextLocomotion == "Run" then
             playbackSpeed = math.clamp(horizontalSpeed / 12.0, 0.75, 1.35)
         end
@@ -1305,6 +1448,7 @@ RunService.PreSimulation:Connect(function(dt: number)
     applyJointOffset(joints.RightAnkle, rAnkleOffset)
     applyJointOffset(joints.LeftAnkle, lAnkleOffset)
     applyJointOffset(joints.Waist, waistOffset)
+    -- Whole-body locomotion: character body, spine, and face turn unified into the movement vector (zero opposite contortion)
 
     ----------------------------------------------------------------------------
     -- BASE POSE BLENDING (Idle Breathing & Locomotion)
@@ -1360,9 +1504,11 @@ RunService.PreSimulation:Connect(function(dt: number)
     end
 
     ----------------------------------------------------------------------------
-    -- APPLY PROCEDURAL ARM TRANSFORMS
+    -- APPLY PROCEDURAL ARM TRANSFORMS (Disabled during swimming so swim strokes animate naturally)
     ----------------------------------------------------------------------------
-    if not isTPP then
+    local isSwimming = (activeHumanoid:GetState() == Enum.HumanoidStateType.Swimming)
+        or (activeCharacter ~= nil and activeCharacter:GetAttribute("IsSwimming") == true)
+    if not isTPP and not isSwimming then
         setJointTransform(joints.RightShoulder, rShoulderBase)
         setJointTransform(joints.RightElbow, rElbowBase)
         setJointTransform(joints.RightWrist, rWristBase)
@@ -1430,6 +1576,41 @@ RunService.RenderStepped:Connect(function(dt: number)
         -- In TPP: Ultra-mild bank roll
         local bankRollCF = isTPP and CFrame.Angles(0, 0, -currentLeanZ * 0.2) or CFrame.identity
         camera.CFrame = camera.CFrame * recoilCF * bankRollCF
+    end
+
+    -- 5. Camera-Driven Player Rotation (Main player body rotates with camera look)
+    -- When Seated: Character body rotation is strictly locked to the seat facing vector; freecam look is decoupled
+    if player:GetAttribute("IsInGameplay") == true and not ModalManager.IsAnyModalOpen() then
+        if activeHRP and activeHumanoid and activeHumanoid.Health > 0 and state.SpecialAction == "None" then
+            local isSeated = activeHumanoid.Sit or (activeHumanoid:GetState() == Enum.HumanoidStateType.Seated)
+            if not isSeated then
+                activeHumanoid.AutoRotate = false
+                local isSwimming = (activeHumanoid:GetState() == Enum.HumanoidStateType.Swimming)
+
+                if isSwimming then
+                    -- In water / swimming: full 3D aim rotation (pitch and yaw)
+                    local camLook = camera.CFrame.LookVector
+                    if camLook.Magnitude > 0.001 then
+                        local p = activeHRP.Position
+                        activeHRP.CFrame = CFrame.lookAt(p, p + camLook)
+                    end
+                else
+                    -- On land: horizontal yaw rotation blended with dynamic diagonal locomotion angle
+                    local camLook = camera.CFrame.LookVector
+                    local horizLook = Vector3.new(camLook.X, 0, camLook.Z)
+                    if horizLook.Magnitude > 0.001 then
+                        horizLook = horizLook.Unit
+                        local angledLook = CFrame.Angles(0, currentLocomotionAngle, 0):VectorToWorldSpace(horizLook)
+                        local p = activeHRP.Position
+                        activeHRP.CFrame = CFrame.lookAt(p, p + angledLook)
+                    end
+                end
+            end
+        end
+    else
+        if activeHumanoid and activeHumanoid.AutoRotate == false then
+            activeHumanoid.AutoRotate = true
+        end
     end
 
 end)

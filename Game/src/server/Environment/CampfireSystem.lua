@@ -505,11 +505,19 @@ function CampfireSystem.BuildSittingTrunks(): Folder
         end
 
         -- 2 Seats per Trunk (8 seats total)
-        local seatSurfaceY = spec.Center.Y + (spec.Size.Y * 0.46)
+        -- Calibrated height: buttocks rest naturally on top of the log surface without sinking into the wood
+        local topOfLogY = spec.Center.Y + (spec.Size.Y * 0.50)
+        local seatSurfaceY = topOfLogY + 0.65 -- Elevated for mixamorig seated hip height
+        local fireOffset = 0.40 -- Shift slightly towards campfire so thighs drape over front edge
         for sIdx, sOffset in ipairs(spec.SeatOffsets) do
-            local seatPos = (spec.SeatAxis == "X")
-                and Vector3.new(spec.Center.X + sOffset, seatSurfaceY, spec.Center.Z)
-                or  Vector3.new(spec.Center.X, seatSurfaceY, spec.Center.Z + sOffset)
+            local seatPos: Vector3
+            if spec.SeatAxis == "X" then
+                local zDir = (firePos.Z > spec.Center.Z) and 1 or -1
+                seatPos = Vector3.new(spec.Center.X + sOffset, seatSurfaceY, spec.Center.Z + (fireOffset * zDir))
+            else
+                local xDir = (firePos.X > spec.Center.X) and 1 or -1
+                seatPos = Vector3.new(spec.Center.X + (fireOffset * xDir), seatSurfaceY, spec.Center.Z + sOffset)
+            end
 
             local lookTarget = Vector3.new(firePos.X, seatPos.Y, firePos.Z)
             local seatCF = CFrame.lookAt(seatPos, lookTarget)

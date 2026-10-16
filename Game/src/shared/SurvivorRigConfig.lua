@@ -16,6 +16,9 @@ export type LocomotionConfig = {
     Fall: string,
     Swim: string?,
     SwimIdle: string?,
+    StandToSit: string?,
+    SittingIdle: string?,
+    SitToStand: string?,
     IdleStatic: string?,
     Idle2: string?,
     Idle3: string?,
@@ -58,8 +61,11 @@ local FemaleBase = {
         Run = "rbxassetid://99676638771528",   -- RunningNewMain
         Jump = "rbxassetid://103074489051723", -- RunningJumpMain (moving jump)
         Fall = "rbxassetid://103074489051723", -- RunningJumpMain (moving fall)
-        Swim = "rbxassetid://117791765615739", -- SwimmingMain
-        SwimIdle = "rbxassetid://122627851214967", -- SwimmingIdleMain
+        Swim = "rbxassetid://89978361700030", -- SwimmingMain (active stroke)
+        SwimIdle = "rbxassetid://139050203336639", -- SwimmingIdleMain (3.0s treading water loop)
+        StandToSit = "rbxassetid://84740804971115", -- Stand to Sit transition (~2.23s)
+        SittingIdle = "rbxassetid://111666571897686", -- Sitting Idle (4.00s loop)
+        SitToStand = "rbxassetid://94330775048617", -- Sit to Stand transition (~2.27s)
         IdleStatic = "rbxassetid://103828063959982", -- StaticIDLEMAIND (10s resting idle)
         Idle2 = "rbxassetid://132876566376642",      -- IDLEMAIN2 (4s flavor idle)
         Idle3 = "rbxassetid://137772468102995",      -- IDLEMAIN3 (3.27s flavor idle)
@@ -85,8 +91,11 @@ local MaleBase = {
         Run = "rbxassetid://99676638771528",   -- RunningNewMain
         Jump = "rbxassetid://103074489051723", -- RunningJumpMain (moving jump)
         Fall = "rbxassetid://103074489051723", -- RunningJumpMain (moving fall)
-        Swim = "rbxassetid://117791765615739", -- SwimmingMain
-        SwimIdle = "rbxassetid://122627851214967", -- SwimmingIdleMain
+        Swim = "rbxassetid://89978361700030", -- SwimmingMain (active stroke)
+        SwimIdle = "rbxassetid://139050203336639", -- SwimmingIdleMain (3.0s treading water loop)
+        StandToSit = "rbxassetid://84740804971115", -- Stand to Sit transition (~2.23s)
+        SittingIdle = "rbxassetid://111666571897686", -- Sitting Idle (4.00s loop)
+        SitToStand = "rbxassetid://94330775048617", -- Sit to Stand transition (~2.27s)
         IdleStatic = "rbxassetid://103828063959982", -- StaticIDLEMAIND (10s resting idle)
         Idle2 = "rbxassetid://132876566376642",      -- IDLEMAIN2 (4s flavor idle)
         Idle3 = "rbxassetid://137772468102995",      -- IDLEMAIN3 (3.27s flavor idle)

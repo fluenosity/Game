@@ -316,13 +316,19 @@ local function spawnCharacterForPlayer(player: Player, requestedSelection: any):
 		local swimContainer = animateScript:FindFirstChild("swim")
 		local swimAnim = swimContainer and (swimContainer:FindFirstChild("Swim") or swimContainer:FindFirstChildOfClass("Animation"))
 		if swimAnim and swimAnim:IsA("Animation") then
-			swimAnim.AnimationId = "rbxassetid://117791765615739"
+			swimAnim.AnimationId = "rbxassetid://89978361700030"
 		end
 
 		local swimIdleContainer = animateScript:FindFirstChild("swimidle")
 		local swimIdleAnim = swimIdleContainer and (swimIdleContainer:FindFirstChild("SwimIdle") or swimIdleContainer:FindFirstChildOfClass("Animation"))
 		if swimIdleAnim and swimIdleAnim:IsA("Animation") then
-			swimIdleAnim.AnimationId = "rbxassetid://122627851214967"
+			swimIdleAnim.AnimationId = "rbxassetid://139050203336639"
+		end
+
+		local sitContainer = animateScript:FindFirstChild("sit")
+		local sitAnim = sitContainer and (sitContainer:FindFirstChild("SitAnim") or sitContainer:FindFirstChildOfClass("Animation"))
+		if sitAnim and sitAnim:IsA("Animation") then
+			sitAnim.AnimationId = "rbxassetid://111666571897686"
 		end
 
 		local idleJumpContainer = animateScript:FindFirstChild("idlejump")

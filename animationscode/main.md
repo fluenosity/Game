@@ -8,6 +8,11 @@
 - **StaticIDLEMAIND**: `103828063959982` (Primary Static Breathing Idle ~10.0s, anchor stance, played between flavor idles)
 - **IDLEMAIN2**: `132876566376642` (Flavor Idle Variant 2 ~4.0s, breathing posture shift)
 - **IDLEMAIN3**: `137772468102995` (Flavor Idle Variant 3 ~3.27s, observant subtle gaze shift)
+- **swimming**: `89978361700030` (Active swim @ 1.15x, Sprint swim @ 1.60x)
+- **swimming idle**: `139050203336639` (SwimmingIdleMain 3.0s treading water loop @ 1.0x; old `97270048250941` deprecated)
+- **StandToSit**: `84740804971115` (Stand to Sit transition ~2.23s, natural lowering into seat)
+- **SittingIdle**: `111666571897686` (Sitting Idle 4.00s loop, relaxed breathing seated posture)
+- **SitToStand**: `94330775048617` (Sit to Stand transition ~2.27s, smoothly rising out of seat with instant move-cancel)
 - **Idle Sequence Cycle**: `{ 1, 2, 1, 3 }` (`StaticIDLEMAIND (10s)` -> `IDLEMAIN2 (4s)` -> `StaticIDLEMAIND (10s)` -> `IDLEMAIN3 (3.3s)` -> repeat, with smooth 0.35s crossfade and instant movement cancel)
 ### Secondary / Overlay / Emote Animations:
 - Movementoractiontoidle: `134245085026778`

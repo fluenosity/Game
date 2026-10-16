@@ -1,5 +1,6 @@
 local Character = script.Parent
 local Humanoid = Character:WaitForChild("Humanoid")
+local UserInputService = game:GetService("UserInputService")
 local pose = "Standing"
 
 local function getRigScale()
@@ -77,11 +78,17 @@ local animNames = {
 	fall =     {
 		{ id = "rbxassetid://103074489051723", weight = 10 }
 	},
+	swim = {
+		{ id = "rbxassetid://89978361700030", weight = 10 }
+	},
+	swimidle = {
+		{ id = "rbxassetid://139050203336639", weight = 10 }
+	},
 	climb = {
 		{ id = "http://www.roblox.com/asset/?id=507765644", weight = 10 }
 	},
 	sit =     {
-		{ id = "http://www.roblox.com/asset/?id=2506281703", weight = 10 }
+		{ id = "rbxassetid://111666571897686", weight = 10 }
 	},
 	toolnone = {
 		{ id = "http://www.roblox.com/asset/?id=507768375", weight = 10 }
@@ -553,15 +560,45 @@ local smallButNotZero = 0.0001
 local normalizedWalkSpeed = 0.47 -- Calibrated for default WalkSpeed = 6 (walk weight = 1.0)
 local normalizedRunSpeed  = 1.25 -- Calibrated for sprint WalkSpeed = 16 (run weight = 1.0)
 
+local function isMovingBackwardCheck()
+	if not Humanoid then return false end
+	-- 1. Forward key priority: if W / Up is held, continuous transition takes forward path immediately
+	local isUpKey = UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.Up)
+	if isUpKey then
+		return false
+	end
+	-- 2. Physical backward key check (zero latency)
+	local isDownKey = UserInputService:IsKeyDown(Enum.KeyCode.S) or UserInputService:IsKeyDown(Enum.KeyCode.Down)
+	if isDownKey then
+		return true
+	end
+	-- 3. Fallback via MoveDirection relative to camera
+	local cam = workspace.CurrentCamera
+	if not cam then return false end
+	local moveDir = Humanoid.MoveDirection
+	if moveDir.Magnitude < 0.05 then return false end
+	local camLook = cam.CFrame.LookVector
+	local horizLook = Vector3.new(camLook.X, 0, camLook.Z)
+	if horizLook.Magnitude < 0.001 then return false end
+	return moveDir:Dot(horizLook.Unit) < -0.15
+end
+
 local lastRunSpeed = -999
+local lastIsBackward = false
 local function setRunSpeed(speed)
 	local runSpeed = rootMotionCompensation(speed)
+	local isBackward = isMovingBackwardCheck()
 
 	local walkAnimationWeight = smallButNotZero
 	local runAnimationWeight = smallButNotZero
 	local timeWarp = 1
 
-	if runSpeed <= normalizedWalkSpeed then
+	if isBackward then
+		-- Backwards: strictly Walk only, played in reverse!
+		walkAnimationWeight = 1
+		runAnimationWeight = smallButNotZero
+		timeWarp = -math.clamp(runSpeed / normalizedWalkSpeed, 0.70, 1.35)
+	elseif runSpeed <= normalizedWalkSpeed then
 		walkAnimationWeight = 1
 		timeWarp = math.clamp(runSpeed/normalizedWalkSpeed, 0.70, 1.35)
 	elseif runSpeed < normalizedRunSpeed then
@@ -574,13 +611,14 @@ local function setRunSpeed(speed)
 	end
 
 	-- Smooth weight adjustment when run speed actually changes
-	if math.abs(runSpeed - lastRunSpeed) > 0.05 then
+	if math.abs(runSpeed - lastRunSpeed) > 0.05 or isBackward ~= lastIsBackward then
 		lastRunSpeed = runSpeed
+		lastIsBackward = isBackward
 		currentAnimTrack:AdjustWeight(walkAnimationWeight, 0.15)
 		runAnimTrack:AdjustWeight(runAnimationWeight, 0.15)
 	end
 	currentAnimTrack:AdjustSpeed(timeWarp)
-	runAnimTrack:AdjustSpeed(timeWarp)
+	runAnimTrack:AdjustSpeed(isBackward and 0 or timeWarp)
 end
 
 function setAnimationSpeed(speed)
@@ -673,7 +711,7 @@ local function switchToAnim(anim, animName, transitionTime, humanoid)
 					end
 				end)
 			end
-		elseif animName == "walk" or animName == "run" then
+		elseif animName == "walk" or animName == "run" or animName == "swim" or animName == "swimidle" then
 			currentAnimTrack.Looped = true
 			idleStep = 1
 			currentIdleToken = currentIdleToken + 1
@@ -936,11 +974,12 @@ function onSwimming(speed)
 	speed /= getHeightScale()
 	if speed > 1.00 then
 		local scale = 10.0
-		playAnimation("swim", 0.4, Humanoid)
+		playAnimation("swim", 0.35, Humanoid)
 		setAnimationSpeed(speed / scale)
 		pose = "Swimming"
 	else
-		playAnimation("swimidle", 0.4, Humanoid)
+		playAnimation("swimidle", 0.35, Humanoid)
+		setAnimationSpeed(1.0)
 		pose = "Standing"
 	end
 end

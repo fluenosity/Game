@@ -84,6 +84,17 @@ local function isJumpPhysicallyHeld(): boolean
     return ok and isDown == true
 end
 
+local function isShiftHeld(): boolean
+    local uis = UserInputService
+    if uis:IsKeyDown(Enum.KeyCode.LeftShift) or uis:IsKeyDown(Enum.KeyCode.RightShift) then
+        return true
+    end
+    local ok, isDown = pcall(function()
+        return uis:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonL3)
+    end)
+    return ok and isDown == true
+end
+
 local function hasMovementInput(): boolean
     if activeHumanoid and activeHumanoid.MoveDirection.Magnitude > 0.05 then
         return true
@@ -104,6 +115,37 @@ local function hasMovementInput(): boolean
             return true
         end
     end
+    return false
+end
+
+local function isMovingBackward(): boolean
+    local uis = UserInputService
+    -- 1. Forward key has absolute priority: if W / Up is held, player is moving forward/diagonal (never backward)
+    local isUpKey = uis:IsKeyDown(Enum.KeyCode.W) or uis:IsKeyDown(Enum.KeyCode.Up)
+    if isUpKey then
+        return false
+    end
+
+    -- 2. Physical backward key check (zero latency)
+    local isDownKey = uis:IsKeyDown(Enum.KeyCode.S) or uis:IsKeyDown(Enum.KeyCode.Down)
+    if isDownKey then
+        return true
+    end
+
+    -- 3. Gamepad / mobile fallback via MoveDirection relative to Camera
+    if activeHumanoid and activeHumanoid.MoveDirection.Magnitude > 0.05 then
+        local cam = workspace.CurrentCamera
+        if cam then
+            local camCF = cam.CFrame
+            local camForward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+            if camForward.Magnitude > 0.001 then
+                if activeHumanoid.MoveDirection:Dot(camForward.Unit) < -0.15 then
+                    return true
+                end
+            end
+        end
+    end
+
     return false
 end
 
@@ -260,6 +302,21 @@ local function updateMouseBehavior()
         if crosshairInstance then
             crosshairInstance.SetVisible(false)
         end
+    elseif player:GetAttribute("IsSeated") == true then
+        -- Seated Freecam Orbit: Camera orbits freely around seated player without turning character body
+        savedCameraRotation = nil
+        modalBypassBtn.Modal = false
+        player.CameraMode = Enum.CameraMode.Classic
+        player.CameraMinZoomDistance = 3
+        player.CameraMaxZoomDistance = 22
+        if cam and cam.CameraType ~= Enum.CameraType.Custom then
+            cam.CameraType = Enum.CameraType.Custom
+        end
+        UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+        UserInputService.MouseIconEnabled = false
+        if crosshairInstance then
+            crosshairInstance.SetVisible(false)
+        end
     elseif isTPP then
         -- Third-Person Perspective (TPP): Orbit camera with locked center mouse for smooth look
         savedCameraRotation = nil
@@ -294,6 +351,10 @@ local function updateMouseBehavior()
 end
 
 player:GetAttributeChangedSignal("IsInGameplay"):Connect(function()
+    updateMouseBehavior()
+end)
+
+player:GetAttributeChangedSignal("IsSeated"):Connect(function()
     updateMouseBehavior()
 end)
 
@@ -914,24 +975,33 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
     -- Movement speed arbitration (attacks stay mobile; Walk = 6, Sprint = 16)
     local isAttacking = (activeCharacter and activeCharacter:GetAttribute("IsAttacking") == true)
 
-    -- Continuously enforce: jumping requires active movement (idle jump strictly blocked)
+    -- Check if moving backward relative to camera look
+    local movingBackward = isMovingBackward()
+
+    -- Continuously enforce: jumping requires forward movement (idle jump & backward jump strictly blocked)
     if activeHumanoid and jumpCooldownThread == nil then
-        local isMovingOrRunning = hasMovementInput()
-        local canJump = isMovingOrRunning and not isFatigued
+        local isMovingForward = hasMovementInput() and not movingBackward
+        local canJump = isMovingForward and not isFatigued
         activeHumanoid.JumpPower = canJump and normalJumpPower or 0
         activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, canJump)
     end
+
+    -- Dynamic sprint arbitration: user wants sprint if Shift is physically held or toggled
+    local wantsSprint = (isSprinting or isShiftHeld())
+    -- Active sprint is enabled ONLY when moving forward/diagonally, not fatigued, not attacking
+    local isSprintActive = wantsSprint and not movingBackward and not isFatigued and not isAttacking
 
     if UNLIMITED_STAMINA_DEV then
         currentStamina = maxStamina
         isFatigued = false
         if activeHumanoid then
-            local targetSpeed = isSprinting and sprintWalkSpeed or normalWalkSpeed
+            local targetSpeed = isSprintActive and sprintWalkSpeed or normalWalkSpeed
             activeHumanoid.WalkSpeed = targetSpeed
         end
+        vitalsInstance.SetSprinting(isSprintActive)
         vitalsInstance.SetStamina(maxStamina, maxStamina)
     else
-        if isSprinting and isMoving and not isFatigued and not isAttacking then
+        if isSprintActive and isMoving then
             currentStamina = math.max(0, currentStamina - (20 * deltaTime))
             lastSprintTime = os.clock()
 
@@ -943,7 +1013,7 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
                 activeHumanoid.JumpPower = fatiguedJumpPower
 
                 task.delay(1.2, function()
-                    if activeHumanoid and not isSprinting and not isFatigued then
+                    if activeHumanoid and not isFatigued then
                         activeHumanoid.WalkSpeed = normalWalkSpeed
                     end
                 end)
@@ -957,7 +1027,7 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
                 -- Recover from fatigue once stamina reaches 25%
                 if isFatigued and currentStamina >= 25 then
                     isFatigued = false
-                    if activeHumanoid and not isSprinting then
+                    if activeHumanoid then
                         activeHumanoid.WalkSpeed = normalWalkSpeed
                         activeHumanoid.JumpPower = normalJumpPower
                     end
@@ -969,7 +1039,7 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
             local targetSpeed = normalWalkSpeed
             if isFatigued then
                 targetSpeed = fatiguedWalkSpeed
-            elseif isSprinting and isMoving then
+            elseif isSprintActive and isMoving then
                 targetSpeed = sprintWalkSpeed
             else
                 targetSpeed = normalWalkSpeed
@@ -978,6 +1048,7 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
         end
 
         -- Update vitals
+        vitalsInstance.SetSprinting(isSprintActive and isMoving)
         vitalsInstance.SetStamina(currentStamina, maxStamina)
     end
 
@@ -1065,13 +1136,8 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         return
     elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
         if player:GetAttribute("IsInGameplay") == true then
-            if UNLIMITED_STAMINA_DEV or (not isFatigued and currentStamina > 0) then
-                isSprinting = true
-                vitalsInstance.SetSprinting(true)
-                if activeHumanoid and not (activeCharacter and activeCharacter:GetAttribute("IsAttacking") == true) then
-                    activeHumanoid.WalkSpeed = sprintWalkSpeed
-                end
-            end
+            isSprinting = true
+            -- Heartbeat dynamically and seamlessly applies sprint speed whenever not moving backward
         end
         return
     end
