@@ -230,16 +230,103 @@ local SOUND_PRESETS: { [string]: SoundConfig } = {
         MinInterval = 0.15,
     },
 
-    -- Rhythmic footstep crunch
+    -- Rhythmic footstep crunch (legacy fallback)
     ["Footstep"] = {
-        SoundId = "rbxassetid://10066968815",
+        SoundId = "rbxassetid://137891923918460",
         FallbackId = "rbxassetid://10066968815",
-        Volume = 0.15,
-        Pitch = 1.25,
-        PitchVariation = 0.08,
+        Volume = 0.22,
+        Pitch = 1.0,
+        PitchVariation = 0.05,
         MinInterval = 0.18,
     },
 }
+
+-- -----------------------------------------------------------------------------
+-- MATERIAL FOOTSTEP SOUND POOLS & MAPPING (AAA PRODUCTION GRADE)
+-- -----------------------------------------------------------------------------
+local MATERIAL_MAP: { [Enum.Material]: string } = {
+    [Enum.Material.Grass] = "Grass",
+    [Enum.Material.LeafyGrass] = "Grass",
+    [Enum.Material.Ground] = "Dirt",
+    [Enum.Material.Mud] = "Dirt",
+    [Enum.Material.Sand] = "Dirt",
+    [Enum.Material.Rock] = "Stone",
+    [Enum.Material.Slate] = "Stone",
+    [Enum.Material.Basalt] = "Stone",
+    [Enum.Material.Concrete] = "Stone",
+    [Enum.Material.Brick] = "Stone",
+    [Enum.Material.Cobblestone] = "Stone",
+    [Enum.Material.Pavement] = "Stone",
+    [Enum.Material.Wood] = "Wood",
+    [Enum.Material.WoodPlanks] = "Wood",
+    [Enum.Material.Metal] = "Metal",
+    [Enum.Material.CorrodedMetal] = "Metal",
+    [Enum.Material.DiamondPlate] = "Metal",
+    [Enum.Material.Water] = "Water",
+}
+
+local MATERIAL_FOOTSTEPS: { [string]: { SoundIds: { string }, BasePitch: number, BaseVol: number } } = {
+    ["Grass"] = {
+        SoundIds = {
+            "rbxassetid://129956418693357", -- Step A (Left foot, 0.35s)
+            "rbxassetid://78534941650081",  -- Step B (Right foot, 0.42s)
+        },
+        BasePitch = 1.00,
+        BaseVol = 0.22,
+    },
+    ["Dirt"] = {
+        SoundIds = {
+            "rbxassetid://140165597842270", -- Earthy step A
+            "rbxassetid://138750508569819", -- Earthy step B
+        },
+        BasePitch = 1.00,
+        BaseVol = 0.22,
+    },
+    ["Stone"] = {
+        SoundIds = {
+            "rbxassetid://8031019470", -- Solid stone step A
+            "rbxassetid://8031020207", -- Solid stone step B
+        },
+        BasePitch = 1.02,
+        BaseVol = 0.22,
+    },
+    ["Wood"] = {
+        SoundIds = {
+            "rbxassetid://139575423158758", -- Timber step A
+            "rbxassetid://139561410113584", -- Timber step B
+        },
+        BasePitch = 1.00,
+        BaseVol = 0.24,
+    },
+    ["Metal"] = {
+        SoundIds = {
+            "rbxassetid://15675037413", -- Metal contact A
+            "rbxassetid://10066914500", -- Metal contact B
+        },
+        BasePitch = 1.05,
+        BaseVol = 0.20,
+    },
+    ["Water"] = {
+        SoundIds = {
+            "rbxasset://sounds/impact_water.mp3",
+        },
+        BasePitch = 1.35,
+        BaseVol = 0.26,
+    },
+}
+
+local MATERIAL_LANDINGS: { [string]: { SoundId: string, Pitch: number, Volume: number } } = {
+    ["Grass"] = { SoundId = "rbxassetid://93258972585027", Pitch = 1.00, Volume = 0.30 },
+    ["Dirt"]  = { SoundId = "rbxassetid://140165597842270", Pitch = 0.95, Volume = 0.32 },
+    ["Stone"] = { SoundId = "rbxassetid://8031021863", Pitch = 0.95, Volume = 0.35 },
+    ["Wood"]  = { SoundId = "rbxassetid://139575423158758", Pitch = 0.90, Volume = 0.36 },
+    ["Metal"] = { SoundId = "rbxassetid://15675037413", Pitch = 0.85, Volume = 0.30 },
+    ["Water"] = { SoundId = "rbxasset://sounds/impact_water.mp3", Pitch = 1.10, Volume = 0.40 },
+}
+
+local lastMaterialIndices: { [string]: number } = {}
+local lastStepTimesByPart: { [Instance]: number } = setmetatable({}, { __mode = "k" })
+local fallbackLastStepTime = 0
 
 -- -----------------------------------------------------------------------------
 -- 2. DEDICATED UI SOUNDGROUP & POOLING
@@ -343,6 +430,163 @@ function AudioManager.AttachButton(
     end)
 end
 
+--- Resolve Enum.Material to human-readable sound archetype ("Grass", "Dirt", "Stone", "Wood", "Metal", "Water")
+function AudioManager.GetMaterialName(material: Enum.Material?): string
+    if not material then return "Grass" end
+    return MATERIAL_MAP[material] or "Grass"
+end
+
+--- Play high-fidelity, material-reactive footstep with round-robin variation and left/right stereo/pitch cadence
+function AudioManager.PlayFootstep(floorMaterial: Enum.Material?, isSprinting: boolean?, isLeftFoot: boolean?, attachPart: BasePart?): ()
+    local now = os.clock()
+    -- Fast debounce per character to allow crisp high-speed footfalls without skipping (0.10s sprint, 0.14s walk)
+    local minGap = if isSprinting then 0.10 else 0.14
+    local lastStepTime = if attachPart then (lastStepTimesByPart[attachPart] or 0) else fallbackLastStepTime
+    if now - lastStepTime < minGap then
+        return
+    end
+    if attachPart then
+        lastStepTimesByPart[attachPart] = now
+    else
+        fallbackLastStepTime = now
+    end
+
+    local matName = AudioManager.GetMaterialName(floorMaterial)
+    local pool = MATERIAL_FOOTSTEPS[matName] or MATERIAL_FOOTSTEPS["Grass"]
+    local ids = pool.SoundIds
+    if #ids == 0 then return end
+
+    -- Pair strictly 1 or 2 sounds: Sound 1 = Left foot, Sound 2 = Right foot
+    local soundId: string
+    if #ids == 1 then
+        soundId = ids[1]
+    elseif isLeftFoot == true then
+        soundId = ids[1]
+    elseif isLeftFoot == false then
+        soundId = ids[2]
+    else
+        local lastIdx = lastMaterialIndices[matName] or 0
+        local nextIdx = if lastIdx == 1 then 2 else 1
+        lastMaterialIndices[matName] = nextIdx
+        soundId = ids[nextIdx]
+    end
+
+    local basePitch = pool.BasePitch
+    local baseVol = pool.BaseVol
+
+    -- Distinct Left vs Right foot acoustic signature (Left = slightly deeper, Right = slightly crisper)
+    if isLeftFoot ~= nil then
+        if isLeftFoot then
+            basePitch = basePitch * 0.98
+        else
+            basePitch = basePitch * 1.02
+        end
+    end
+
+    -- Sprinting: +20% volume, +3% energetic pitch
+    if isSprinting then
+        baseVol = baseVol * 1.20
+        basePitch = basePitch * 1.03
+    end
+
+    -- Organic micro-pitch variance (+/- 2%)
+    local pitchVariance = (math.random() - 0.5) * 0.04
+    local finalPitch = math.clamp(basePitch + pitchVariance, 0.80, 1.40)
+
+    local group = getUISoundGroup()
+    local sound = Instance.new("Sound")
+    sound.Name = "Footstep_" .. matName .. (if isLeftFoot == true then "_L" elseif isLeftFoot == false then "_R" else "")
+    sound.SoundId = soundId
+    sound.Volume = baseVol
+    sound.PlaybackSpeed = finalPitch
+    sound.SoundGroup = group
+    sound.RollOffMode = Enum.RollOffMode.InverseTapered
+    sound.RollOffMinDistance = 3
+    sound.RollOffMaxDistance = 50
+
+    if attachPart and attachPart:IsA("BasePart") then
+        sound.Parent = attachPart
+    else
+        sound.Parent = group
+    end
+    sound:Play()
+
+    sound.Ended:Once(function()
+        sound:Destroy()
+    end)
+    task.delay(0.9, function()
+        if sound and sound.Parent then
+            sound:Destroy()
+        end
+    end)
+end
+
+--- Play responsive landing audio based on ground material and impact speed
+function AudioManager.PlayLanding(floorMaterial: Enum.Material?, impactSpeed: number?, attachPart: BasePart?): ()
+    local matName = AudioManager.GetMaterialName(floorMaterial)
+    local landingCfg = MATERIAL_LANDINGS[matName] or MATERIAL_LANDINGS["Grass"]
+
+    local spd = impactSpeed or 10
+    local volMultiplier = math.clamp(spd / 12, 0.7, 1.5)
+
+    local group = getUISoundGroup()
+    local sound = Instance.new("Sound")
+    sound.Name = "Landing_" .. matName
+    sound.SoundId = landingCfg.SoundId
+    sound.Volume = landingCfg.Volume * volMultiplier
+    sound.PlaybackSpeed = landingCfg.Pitch + ((math.random() - 0.5) * 0.04)
+    sound.SoundGroup = group
+    sound.RollOffMode = Enum.RollOffMode.InverseTapered
+    sound.RollOffMinDistance = 3
+    sound.RollOffMaxDistance = 50
+
+    if attachPart and attachPart:IsA("BasePart") then
+        sound.Parent = attachPart
+    else
+        sound.Parent = group
+    end
+    sound:Play()
+
+    sound.Ended:Once(function()
+        sound:Destroy()
+    end)
+    task.delay(1.2, function()
+        if sound and sound.Parent then
+            sound:Destroy()
+        end
+    end)
+end
+
+--- Play athletic jump takeoff sound (soft clothing rustle, zero cartoon spring/ting)
+function AudioManager.PlayJumpTakeoff(attachPart: BasePart?): ()
+    local group = getUISoundGroup()
+    local sound = Instance.new("Sound")
+    sound.Name = "JumpTakeoff"
+    sound.SoundId = "rbxassetid://15675075163"
+    sound.Volume = 0.14
+    sound.PlaybackSpeed = 1.00 + ((math.random() - 0.5) * 0.05)
+    sound.SoundGroup = group
+    sound.RollOffMode = Enum.RollOffMode.InverseTapered
+    sound.RollOffMinDistance = 3
+    sound.RollOffMaxDistance = 45
+
+    if attachPart and attachPart:IsA("BasePart") then
+        sound.Parent = attachPart
+    else
+        sound.Parent = group
+    end
+    sound:Play()
+
+    sound.Ended:Once(function()
+        sound:Destroy()
+    end)
+    task.delay(0.8, function()
+        if sound and sound.Parent then
+            sound:Destroy()
+        end
+    end)
+end
+
 --- Scans a UI container and attaches hover and click SFX to all text and image buttons
 function AudioManager.AttachContainerButtons(container: Instance)
     for _, desc in ipairs(container:GetDescendants()) do
@@ -367,6 +611,13 @@ task.defer(function()
         local snd = Instance.new("Sound")
         snd.SoundId = cfg.SoundId
         table.insert(assetsToPreload, snd)
+    end
+    for _, pool in pairs(MATERIAL_FOOTSTEPS) do
+        for _, id in ipairs(pool.SoundIds) do
+            local snd = Instance.new("Sound")
+            snd.SoundId = id
+            table.insert(assetsToPreload, snd)
+        end
     end
 
     pcall(function()

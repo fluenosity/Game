@@ -29,9 +29,8 @@ local GameConfig = {
     DEV_MODE = true,
 
     -- 1. SKIP SPLASH SCREEN
-    -- If true: Skips the white "A FLUENOSITY STUDIO PRODUCTION" intro screen entirely.
-    -- If false: Displays the full cinematic white studio splash sequence.
-    SKIP_SPLASH_SCREEN = true,
+    -- Keep the requested loading -> studio splash -> main menu sequence active in Studio too.
+    SKIP_SPLASH_SCREEN = false,
 
     -- 2. SKIP MAIN MENU
     -- If true: Bypasses the Main Menu screen and proceeds straight into the world with preloading.

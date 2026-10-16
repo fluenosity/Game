@@ -21,6 +21,8 @@ local ContentProvider = game:GetService("ContentProvider")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local SocialService = game:GetService("SocialService")
+local ModalManager = require(script.Parent:WaitForChild("ModalManager"))
 
 local player = Players.LocalPlayer
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
@@ -116,7 +118,24 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 		OnBack = nil :: (() -> ())?,
 		OnConfirm = nil :: ((any) -> ())?,
 		IsOpen = false,
+		IsReturning = false,
+		BackButtons = {} :: { TextButton },
 	}
+
+	local function requestBack()
+		if not state.IsOpen or state.IsReturning then return end
+		state.IsReturning = true
+		for _, button in ipairs(state.BackButtons) do
+			button.Active = false
+			button.Selectable = false
+			button.Text = "RETURNING..."
+		end
+		if state.OnBack then
+			state.OnBack()
+		else
+			Wardrobe.Close()
+		end
+	end
 
 	-- Background Asset Preloading (All 4 characters, all textures and all idles cached upfront)
 	task.spawn(function()
@@ -142,10 +161,10 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 
 	-- Root Fullscreen Overlay
 	local overlay = Instance.new("Frame")
-	overlay.Name = "SurvivorWardrobe"
+	overlay.Name = "SurvivorPicker"
 	overlay.Size = UDim2.fromScale(1, 1)
 	overlay.BackgroundColor3 = UI.Theme.Colors.GlassBackdrop
-	overlay.BackgroundTransparency = 0.52 -- Transparent so 3D campfire at night is visible
+    overlay.BackgroundTransparency = 1 -- Keep the live campsite visible behind the survivor preview.
 	overlay.BorderSizePixel = 0
 	overlay.Visible = false
 	overlay.ZIndex = 70
@@ -158,7 +177,7 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.BackgroundColor3 = UI.Theme.Colors.GlassModal
-	panel.BackgroundTransparency = 0.28
+    panel.BackgroundTransparency = 1
 	panel.BorderSizePixel = 0
 	panel.ZIndex = 71
 	panel.Parent = overlay
@@ -168,6 +187,8 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 		StrokeColor = UI.Theme.Colors.BorderGlow,
 		StrokeThickness = 1.4,
 	})
+    local panelStroke = panel:FindFirstChildOfClass("UIStroke")
+    if panelStroke then panelStroke.Transparency = 1 end
 
 	local sizeConstraint = Instance.new("UISizeConstraint")
 	sizeConstraint.MinSize = Vector2.new(340, 420)
@@ -199,20 +220,22 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	----------------------------------------------------------------------------
 	local previewPanel = Instance.new("Frame")
 	previewPanel.Name = "PreviewPanel"
-	previewPanel.Position = UDim2.new(0.035, 0, 0.115, 0)
-	previewPanel.Size = UDim2.new(0.41, 0, 0.85, 0)
-	previewPanel.BackgroundColor3 = UI.Theme.Colors.GlassSurface
-	previewPanel.BackgroundTransparency = 0.38
+	previewPanel.Position = UDim2.new(0.62, 0, 0, 0)
+	previewPanel.Size = UDim2.new(0.38, 0, 1, 0)
+	previewPanel.BackgroundColor3 = Color3.fromRGB(8, 10, 14)
+	previewPanel.BackgroundTransparency = 0.06
 	previewPanel.BorderSizePixel = 0
 	previewPanel.ZIndex = 72
 	previewPanel.ClipsDescendants = true
-	previewPanel.Parent = panel
+	previewPanel.Parent = overlay
 
 	UI.Theme.ApplyGlass(previewPanel, {
 		CornerRadius = 14,
 		StrokeColor = UI.Theme.Colors.BorderSubtle,
 		StrokeThickness = 1.2,
 	})
+    local previewStroke = previewPanel:FindFirstChildOfClass("UIStroke")
+    if previewStroke then previewStroke.Transparency = 1 end
 
 	local viewport = Instance.new("ViewportFrame")
 	viewport.Name = "CharacterViewport"
@@ -223,12 +246,30 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	viewport.LightDirection = Vector3.new(-1, -1.8, -1.2)
 	viewport.ZIndex = 73
 	viewport.Parent = previewPanel
+	local selectorFooter = Instance.new("Frame")
+	selectorFooter.Name = "SelectorFooter"
+	selectorFooter.Position = UDim2.new(0, 0, 0.70, 0)
+	selectorFooter.Size = UDim2.new(1, 0, 0.30, 0)
+	selectorFooter.BackgroundColor3 = Color3.fromRGB(8, 10, 14)
+	selectorFooter.BackgroundTransparency = 0.04
+	selectorFooter.BorderSizePixel = 0
+	selectorFooter.ZIndex = 76
+	selectorFooter.Parent = previewPanel
+	local footerDivider = Instance.new("Frame")
+	footerDivider.Name = "FooterDivider"
+	footerDivider.Size = UDim2.new(0.92, 0, 0, 1)
+	footerDivider.Position = UDim2.new(0.04, 0, 0, 0)
+	footerDivider.BackgroundColor3 = UI.Theme.Colors.BorderSubtle
+	footerDivider.BackgroundTransparency = 0.25
+	footerDivider.BorderSizePixel = 0
+	footerDivider.ZIndex = 77
+	footerDivider.Parent = selectorFooter
 
 	local worldModel = Instance.new("WorldModel")
 	worldModel.Parent = viewport
 
 	local previewCamera = Instance.new("Camera")
-	previewCamera.FieldOfView = 30
+    previewCamera.FieldOfView = 35
 	previewCamera.Parent = viewport
 	viewport.CurrentCamera = previewCamera
 
@@ -296,11 +337,11 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	previewVeil.Size = UDim2.fromScale(1, 1)
 	previewVeil.Position = UDim2.fromScale(0, 0)
 	previewVeil.BackgroundColor3 = Color3.fromRGB(10, 11, 14)
-	previewVeil.BackgroundTransparency = 0
+    previewVeil.BackgroundTransparency = 0.24
 	previewVeil.BorderSizePixel = 0
-	previewVeil.ZIndex = 82
+	previewVeil.ZIndex = 74
 	previewVeil.Visible = false
-	previewVeil.Parent = previewPanel
+	previewVeil.Parent = viewport
 
 	local veilCorner = Instance.new("UICorner")
 	veilCorner.CornerRadius = UDim.new(0, 14)
@@ -317,7 +358,7 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	spinnerCenter.Position = UDim2.fromScale(0.5, 0.5)
 	spinnerCenter.AnchorPoint = Vector2.new(0.5, 0.5)
 	spinnerCenter.BackgroundTransparency = 1
-	spinnerCenter.ZIndex = 83
+	spinnerCenter.ZIndex = 75
 	spinnerCenter.Parent = previewVeil
 
 	local spinnerRing = Instance.new("Frame")
@@ -326,7 +367,7 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	spinnerRing.Position = UDim2.new(0.5, 0, 0, 18)
 	spinnerRing.AnchorPoint = Vector2.new(0.5, 0.5)
 	spinnerRing.BackgroundTransparency = 1
-	spinnerRing.ZIndex = 84
+	spinnerRing.ZIndex = 76
 	spinnerRing.Parent = spinnerCenter
 
 	local srCorner = Instance.new("UICorner")
@@ -354,7 +395,7 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	centerDot.AnchorPoint = Vector2.new(0.5, 0.5)
 	centerDot.BackgroundColor3 = UI.Theme.Colors.EmberGold
 	centerDot.BorderSizePixel = 0
-	centerDot.ZIndex = 85
+	centerDot.ZIndex = 77
 	centerDot.Parent = spinnerRing
 
 	local cdCorner = Instance.new("UICorner")
@@ -520,11 +561,11 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	bottomRow.Parent = controls
 
 	local backButton = makeButton(bottomRow, "BACK", UDim2.new(0.32, -6, 1, 0), 75, UI, function()
-		Wardrobe.Close()
-		if state.OnBack then state.OnBack() end
+		requestBack()
 	end)
 	backButton.Name = "BackButton"
 	backButton.Position = UDim2.new(0, 0, 0, 0)
+	table.insert(state.BackButtons, backButton)
 
 	local enterButton = makeButton(bottomRow, "CONFIRM & ENTER WILDERNESS", UDim2.new(0.68, 0, 1, 0), 75, UI, function()
 		local validated = Config.ValidateSelection({ CharacterId = state.SelectedCharacterId })
@@ -577,12 +618,13 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	local previewGeneration = 0
 	local refreshPreview: () -> ()
 	local refreshUI: () -> ()
+	local selectorNameLabel: TextLabel? = nil
 	local poseButtons: { [string]: TextButton } = {}
 
 	local function showLoadingVeil(titleText: string?)
 		if veilTitle then veilTitle.Text = titleText or "LOADING SURVIVOR..." end
 		previewVeil.Visible = true
-		previewVeil.BackgroundTransparency = 0
+		previewVeil.BackgroundTransparency = 0.24
 	end
 
 	local function hideLoadingVeil()
@@ -660,9 +702,15 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 			for _, d in ipairs(source:GetDescendants()) do
 				table.insert(toPreload, d)
 			end
-			pcall(function()
-				ContentProvider:PreloadAsync(toPreload)
+			local sourcePreloadFinished = false
+			task.spawn(function()
+				pcall(function() ContentProvider:PreloadAsync(toPreload) end)
+				sourcePreloadFinished = true
 			end)
+			local preloadDeadline = os.clock() + 1.6
+			while not sourcePreloadFinished and os.clock() < preloadDeadline and generation == previewGeneration do
+				task.wait(0.03)
+			end
 			if generation ~= previewGeneration then return end
 
 			-- Safely clean up previous preview
@@ -737,8 +785,13 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 			-- Camera Framing Head-to-Toe with comfortable margin
 			local boxCFrame, boxSize = clone:GetBoundingBox()
 			local focus = boxCFrame.Position + Vector3.new(0, boxSize.Y * 0.02, 0)
-			local distance = math.max(boxSize.Y * 2.18, 8.8)
-			previewCamera.CFrame = CFrame.lookAt(focus + Vector3.new(0, boxSize.Y * 0.03, -distance), focus)
+			local distance = math.max(boxSize.Y * 1.85, 7.6)
+			-- Three-quarter side profile keeps the survivor readable while the live
+			-- campsite stays visible through the transparent viewport behind them.
+			previewCamera.CFrame = CFrame.lookAt(
+				focus + Vector3.new(distance * 1.35, boxSize.Y * 0.03, -distance * 0.05),
+				focus
+			)
 
 			-- 2. Preload and start selected idle animation
 			local targetAnimId = IDLE_ANIMATIONS[state.CurrentIdleName] or charDef.RecommendedIdle
@@ -748,9 +801,15 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 			animation.AnimationId = if numericId then "rbxassetid://" .. numericId else targetAnimId
 			animation.Parent = clone
 
-			pcall(function()
-				ContentProvider:PreloadAsync({ animation })
+			local animationPreloadFinished = false
+			task.spawn(function()
+				pcall(function() ContentProvider:PreloadAsync({ animation }) end)
+				animationPreloadFinished = true
 			end)
+			local animationDeadline = os.clock() + 0.6
+			while not animationPreloadFinished and os.clock() < animationDeadline and generation == previewGeneration do
+				task.wait(0.03)
+			end
 			if generation ~= previewGeneration or not clone.Parent or not previewAnimator then return end
 
 			local loaded, track = pcall(function()
@@ -1093,7 +1152,402 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 				stroke.Color = isCurrent and UI.Theme.Colors.BorderGlow or UI.Theme.Colors.BorderGlass
 			end
 		end
+
+		if selectorNameLabel then
+			selectorNameLabel.Text = string.upper(activeDef.DisplayName)
+		end
 	end
+
+	----------------------------------------------------------------------------
+	-- Minimal camp picker: survivor name, arrows, invite, back, and enter.
+	----------------------------------------------------------------------------
+	local selectorHeading = makeText(panel, "CHOOSE YOUR SURVIVOR", 14, UI.Theme.Colors.EmberHot, UI.Theme.Fonts.Heading, 78)
+	selectorHeading.Position = UDim2.new(0.055, 0, 0.10, 0)
+	selectorHeading.Size = UDim2.new(0.48, 0, 0, 22)
+
+	local partyPanel = Instance.new("Frame")
+	partyPanel.Name = "FireteamPanel"
+	partyPanel.Position = UDim2.new(0.035, 0, 0.70, 0)
+	partyPanel.Size = UDim2.new(0.55, 0, 0.25, 0)
+	partyPanel.BackgroundColor3 = UI.Theme.Colors.GlassSurface
+	partyPanel.BackgroundTransparency = 1
+	partyPanel.BorderSizePixel = 0
+	partyPanel.ZIndex = 74
+	partyPanel.Parent = overlay
+
+	local partyHeader = makeText(partyPanel, "SETTING UP SESSION...", 11, UI.Theme.Colors.EmberGold, UI.Theme.Fonts.Heading, 76)
+	partyHeader.Position = UDim2.new(0.035, 0, 0, 0)
+	partyHeader.Size = UDim2.new(0.65, 0, 0, 30)
+	local partyCount = makeText(partyPanel, "1 / 4", 10, UI.Theme.Colors.TextMuted, UI.Theme.Fonts.Heading, 76, Enum.TextXAlignment.Right)
+	partyCount.Position = UDim2.new(0.75, -10, 0, 0)
+	partyCount.Size = UDim2.new(0.22, 0, 0, 30)
+
+	local slotList = Instance.new("Frame")
+	slotList.Name = "Slots"
+	slotList.Position = UDim2.new(0.025, 0, 0, 32)
+	slotList.Size = UDim2.new(0.95, 0, 1, -40)
+	slotList.BackgroundTransparency = 1
+	slotList.ZIndex = 75
+	slotList.Parent = partyPanel
+	local slotLayout = Instance.new("UIGridLayout")
+	slotLayout.FillDirection = Enum.FillDirection.Horizontal
+	slotLayout.FillDirectionMaxCells = 4
+	slotLayout.CellSize = UDim2.new(0.235, 0, 1, 0)
+	slotLayout.CellPadding = UDim2.new(0.015, 0, 0, 0)
+	slotLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	slotLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	slotLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	slotLayout.Parent = slotList
+
+	local getLobbySnapshot = sharedFolder:FindFirstChild("GetLobbySnapshot") :: RemoteFunction?
+	local lobbyStateChanged = sharedFolder:FindFirstChild("LobbyStateChanged") :: RemoteEvent?
+	local setLobbySelection = sharedFolder:FindFirstChild("SetLobbySelection") :: RemoteEvent?
+	local requestLobbyKick = sharedFolder:FindFirstChild("RequestLobbyKick") :: RemoteFunction?
+	local lobbySnapshot: any = { Members = {}, HostUserId = 0, Capacity = 4 }
+	local lobbyRows = {}
+	local lobbyLoaded = false
+	local lobbyStartedAt = os.clock()
+	local pendingKickUserId: number? = nil
+	local lobbyStateConnection: RBXScriptConnection? = nil
+	local confirmKickButton: TextButton
+
+	local kickDimmer = Instance.new("TextButton")
+	kickDimmer.Name = "KickConfirmDimmer"
+	kickDimmer.Size = UDim2.fromScale(1, 1)
+	kickDimmer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	kickDimmer.BackgroundTransparency = 0.42
+	kickDimmer.Text = ""
+	kickDimmer.AutoButtonColor = false
+	kickDimmer.Visible = false
+	kickDimmer.ZIndex = 110
+	kickDimmer.Parent = overlay
+
+	local kickDialog = Instance.new("Frame")
+	kickDialog.Name = "KickConfirmation"
+	kickDialog.Size = UDim2.new(0.38, 0, 0, 210)
+	kickDialog.Position = UDim2.fromScale(0.5, 0.5)
+	kickDialog.AnchorPoint = Vector2.new(0.5, 0.5)
+	kickDialog.BackgroundColor3 = Color3.fromRGB(12, 14, 18)
+	kickDialog.BackgroundTransparency = 0.04
+	kickDialog.BorderSizePixel = 0
+	kickDialog.Visible = false
+	kickDialog.ZIndex = 111
+	kickDialog.Parent = overlay
+	UI.Theme.ApplyGlass(kickDialog, {
+		CornerRadius = 14,
+		StrokeColor = UI.Theme.Colors.BorderGlow,
+		StrokeThickness = 1.2,
+	})
+	local kickTitle = makeText(kickDialog, "REMOVE PLAYER?", 18, UI.Theme.Colors.TextPrimary, UI.Theme.Fonts.Title, 112)
+	kickTitle.Position = UDim2.new(0.08, 0, 0.12, 0)
+	kickTitle.Size = UDim2.new(0.84, 0, 0, 30)
+	local kickDescription = makeText(kickDialog, "The player will be removed from this lobby.", 12, UI.Theme.Colors.TextMuted, UI.Theme.Fonts.Body, 112)
+	kickDescription.Position = UDim2.new(0.08, 0, 0.34, 0)
+	kickDescription.Size = UDim2.new(0.84, 0, 0, 44)
+	local function closeKickDialog()
+		kickDialog.Visible = false
+		kickDimmer.Visible = false
+		pendingKickUserId = nil
+		ModalManager.SetOpen("PartyKickConfirmation", false)
+	end
+	kickDimmer.Activated:Connect(closeKickDialog)
+	local cancelKickButton = makeButton(kickDialog, "CANCEL", UDim2.new(0.40, -6, 0, 40), 113, UI, closeKickDialog)
+	cancelKickButton.Position = UDim2.new(0.08, 0, 0.70, 0)
+	confirmKickButton = makeButton(kickDialog, "REMOVE", UDim2.new(0.44, 0, 0, 40), 113, UI, function()
+		local targetUserId = pendingKickUserId
+		if not targetUserId or not requestLobbyKick then
+			closeKickDialog()
+			return
+		end
+		confirmKickButton.Active = false
+		confirmKickButton.Text = "REMOVING..."
+		task.spawn(function()
+			local ok, removed = pcall(function()
+				return requestLobbyKick:InvokeServer(targetUserId)
+			end)
+			if not ok or removed ~= true then
+				kickDescription.Text = "The host could not remove that player. Refresh and try again."
+				task.wait(1.2)
+			end
+			confirmKickButton.Active = true
+			confirmKickButton.Text = "REMOVE"
+			closeKickDialog()
+		end)
+	end)
+	confirmKickButton.Position = UDim2.new(0.52, 0, 0.70, 0)
+	confirmKickButton.BackgroundColor3 = UI.Theme.Colors.EmberCrimson
+	confirmKickButton.TextColor3 = Color3.fromRGB(255, 245, 235)
+
+	local function inviteFriend()
+		local ok, canInvite = pcall(function()
+			return SocialService:CanSendGameInviteAsync(player)
+		end)
+		if ok and canInvite == true then
+			pcall(function()
+				SocialService:PromptGameInvite(player)
+			end)
+		end
+	end
+
+	local function renderLobby()
+		for _, row in ipairs(lobbyRows) do row:Destroy() end
+		table.clear(lobbyRows)
+		local members = lobbySnapshot.Members or {}
+		local capacity = math.clamp(tonumber(lobbySnapshot.Capacity) or 4, 1, 4)
+		local viewSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
+		local compact = viewSize.X < 760
+		partyHeader.Text = lobbyLoaded and "YOUR FIRETEAM" or "SETTING UP SESSION..."
+		partyCount.Text = lobbyLoaded and string.format("%d / %d", #members, capacity) or "SYNCING"
+		for slotIndex = 1, capacity do
+			local member = members[slotIndex]
+			local row = Instance.new("Frame")
+			row.Name = "FireteamSlot" .. slotIndex
+			row.LayoutOrder = slotIndex
+			row.Size = UDim2.new(0, 0, 0, 0)
+			row.BackgroundColor3 = member and UI.Theme.Colors.GlassElevated or UI.Theme.Colors.GlassSurface
+			row.BackgroundTransparency = 0.10
+			row.BorderSizePixel = 0
+			row.ZIndex = 76
+			row.Parent = slotList
+			table.insert(lobbyRows, row)
+			UI.Theme.ApplyGlass(row, {
+				CornerRadius = 9,
+				StrokeColor = member and UI.Theme.Colors.BorderSubtle or UI.Theme.Colors.BorderEmber,
+				StrokeThickness = 1,
+			})
+
+			local portrait = Instance.new("ImageLabel")
+			portrait.Name = "PlayerPortrait"
+			local portraitSize = compact and 32 or 48
+			portrait.Size = UDim2.fromOffset(portraitSize, portraitSize)
+			portrait.Position = UDim2.new(0.5, 0, 0, compact and 6 or 10)
+			portrait.AnchorPoint = Vector2.new(0.5, 0)
+			portrait.BackgroundColor3 = UI.Theme.Colors.GlassSurface
+			portrait.BackgroundTransparency = 0.2
+			portrait.Image = ""
+			portrait.ZIndex = 77
+			portrait.Parent = row
+			local portraitCorner = Instance.new("UICorner")
+			portraitCorner.CornerRadius = UDim.new(1, 0)
+			portraitCorner.Parent = portrait
+
+			local nameLabel = makeText(row, "", compact and 9 or 12, member and UI.Theme.Colors.TextPrimary or UI.Theme.Colors.TextMuted, UI.Theme.Fonts.Heading, 78, Enum.TextXAlignment.Center)
+			nameLabel.Position = UDim2.new(0.05, 0, 0, compact and 42 or 65)
+			nameLabel.Size = UDim2.new(0.90, 0, 0, compact and 14 or 19)
+			nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+			local selectedId = member and member.CharacterId
+			local survivorDef = selectedId and Config.Characters[selectedId]
+			local detailLabel = makeText(row, "", compact and 8 or 10, UI.Theme.Colors.EmberHot, UI.Theme.Fonts.Body, 78, Enum.TextXAlignment.Center)
+			detailLabel.Position = UDim2.new(0.04, 0, 0, compact and 58 or 87)
+			detailLabel.Size = UDim2.new(0.92, 0, 0, compact and 13 or 16)
+			detailLabel.TextTruncate = Enum.TextTruncate.AtEnd
+			if not lobbyLoaded then
+				nameLabel.Text = ""
+				detailLabel.Text = ""
+				local shimmer = Instance.new("Frame")
+				shimmer.Name = "LoadingSkeleton"
+				shimmer.Size = UDim2.fromOffset(portraitSize, portraitSize)
+				shimmer.Position = portrait.Position
+				shimmer.AnchorPoint = portrait.AnchorPoint
+				shimmer.BackgroundColor3 = Color3.fromRGB(82, 84, 91)
+				shimmer.BackgroundTransparency = 0.24
+				shimmer.BorderSizePixel = 0
+				shimmer.ZIndex = 79
+				shimmer.Parent = row
+				local shimmerCorner = Instance.new("UICorner")
+				shimmerCorner.CornerRadius = UDim.new(1, 0)
+				shimmerCorner.Parent = shimmer
+				for lineIndex = 1, 2 do
+					local line = Instance.new("Frame")
+					line.Size = UDim2.new(lineIndex == 1 and 0.68 or 0.48, 0, 0, compact and 4 or 6)
+					line.Position = UDim2.new(0.5, 0, 0, (compact and 44 or 69) + (lineIndex - 1) * (compact and 10 or 14))
+					line.AnchorPoint = Vector2.new(0.5, 0)
+					line.BackgroundColor3 = Color3.fromRGB(89, 91, 97)
+					line.BackgroundTransparency = 0.32
+					line.BorderSizePixel = 0
+					line.ZIndex = 79
+					line.Parent = row
+					local lineCorner = Instance.new("UICorner")
+					lineCorner.CornerRadius = UDim.new(1, 0)
+					lineCorner.Parent = line
+				end
+				continue
+			end
+			local shownName = member and (member.DisplayName or member.Name) or "INVITE FRIEND"
+			nameLabel.Text = shownName
+			local subtitle = member and (survivorDef and string.upper(survivorDef.DisplayName) or "CHOOSING SURVIVOR") or "OPEN SLOT"
+			detailLabel.Text = subtitle
+			if member then
+				local usernameLabel = makeText(row, "@" .. tostring(member.Name), compact and 7 or 9, UI.Theme.Colors.TextMuted, UI.Theme.Fonts.Body, 78, Enum.TextXAlignment.Center)
+				usernameLabel.Position = UDim2.new(0.04, 0, 1, compact and -14 or -19)
+				usernameLabel.Size = UDim2.new(0.92, 0, 0, compact and 10 or 13)
+				usernameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+				if member.UserId == player.UserId then
+					detailLabel.Text ..= "  ·  YOU"
+				end
+				if member.IsHost then
+					local hostBadge = makeText(row, "HOST", compact and 7 or 8, UI.Theme.Colors.EmberGold, UI.Theme.Fonts.Heading, 80, Enum.TextXAlignment.Center)
+					hostBadge.Position = UDim2.new(0, 3, 0, 3)
+					hostBadge.Size = UDim2.new(0, compact and 27 or 34, 0, compact and 13 or 16)
+				end
+				if lobbySnapshot.HostUserId == player.UserId and member.UserId ~= player.UserId then
+					local targetId = member.UserId
+					local kickButton = makeButton(row, "×", UDim2.fromOffset(32, 32), 80, UI, function()
+						pendingKickUserId = targetId
+						kickDescription.Text = "Remove " .. tostring(member.DisplayName or member.Name) .. " from this lobby?"
+						kickDialog.Visible = true
+						kickDimmer.Visible = true
+						ModalManager.SetOpen("PartyKickConfirmation", true)
+					end)
+					kickButton.Name = "KickPlayer"
+					kickButton.Position = UDim2.new(1, -34, 0, 3)
+					kickButton.Size = UDim2.fromOffset(compact and 22 or 26, compact and 22 or 26)
+					kickButton.TextSize = 24
+					kickButton.BackgroundColor3 = Color3.fromRGB(74, 29, 25)
+				end
+				task.spawn(function()
+					local ok, image = pcall(function()
+						return Players:GetUserThumbnailAsync(member.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+					end)
+					if ok and portrait.Parent then portrait.Image = image end
+				end)
+			else
+				local plus = makeText(row, "+", compact and 24 or 32, UI.Theme.Colors.EmberGold, Enum.Font.GothamMedium, 78, Enum.TextXAlignment.Center)
+				plus.Position = UDim2.new(0.5, 0, 0, compact and 5 or 10)
+				plus.AnchorPoint = Vector2.new(0.5, 0)
+				plus.Size = UDim2.fromOffset(compact and 32 or 48, compact and 32 or 48)
+				nameLabel.TextColor3 = UI.Theme.Colors.TextPrimary
+				nameLabel.Position = UDim2.new(0.05, 0, 0, compact and 42 or 65)
+				nameLabel.Size = UDim2.new(0.90, 0, 0, compact and 14 or 19)
+				detailLabel.Position = UDim2.new(0.04, 0, 0, compact and 58 or 87)
+				detailLabel.Size = UDim2.new(0.92, 0, 0, compact and 13 or 16)
+				local inviteSlot = Instance.new("TextButton")
+				inviteSlot.Name = "InviteFriend"
+				inviteSlot.Size = UDim2.fromScale(1, 1)
+				inviteSlot.BackgroundTransparency = 1
+				inviteSlot.Text = ""
+				inviteSlot.ZIndex = 81
+				inviteSlot.Parent = row
+				inviteSlot.Activated:Connect(inviteFriend)
+			end
+		end
+	end
+
+	local function syncLobbySelection()
+		if setLobbySelection then setLobbySelection:FireServer(state.SelectedCharacterId) end
+		for _, member in ipairs(lobbySnapshot.Members or {}) do
+			if member.UserId == player.UserId then
+				member.CharacterId = state.SelectedCharacterId
+				break
+			end
+		end
+		renderLobby()
+	end
+
+	if lobbyStateChanged and lobbyStateChanged:IsA("RemoteEvent") then
+		lobbyStateConnection = lobbyStateChanged.OnClientEvent:Connect(function(snapshot)
+			if typeof(snapshot) == "table" then
+				lobbySnapshot = snapshot
+				lobbyLoaded = true
+				renderLobby()
+			end
+		end)
+	end
+	if getLobbySnapshot and getLobbySnapshot:IsA("RemoteFunction") then
+		task.spawn(function()
+			local ok, snapshot = pcall(function() return getLobbySnapshot:InvokeServer() end)
+			local skeletonMinimum = 0.32
+			local remainingSkeletonTime = skeletonMinimum - (os.clock() - lobbyStartedAt)
+			if remainingSkeletonTime > 0 then task.wait(remainingSkeletonTime) end
+			if ok and typeof(snapshot) == "table" then
+				lobbySnapshot = snapshot
+			else
+				lobbySnapshot.Members = {{
+					UserId = player.UserId,
+					Name = player.Name,
+					DisplayName = player.DisplayName,
+					CharacterId = state.SelectedCharacterId,
+					IsHost = true,
+				}}
+				lobbySnapshot.HostUserId = player.UserId
+			end
+			lobbyLoaded = true
+			renderLobby()
+		end)
+	else
+		lobbySnapshot.Members = {{
+			UserId = player.UserId,
+			Name = player.Name,
+			DisplayName = player.DisplayName,
+			CharacterId = state.SelectedCharacterId,
+			IsHost = true,
+		}}
+		lobbySnapshot.HostUserId = player.UserId
+		lobbyLoaded = true
+	end
+
+	selectorNameLabel = makeText(panel, "SOPHIE", 40, UI.Theme.Colors.TextPrimary, UI.Theme.Fonts.Title, 78)
+	selectorNameLabel.Position = UDim2.new(0.20, 0, 0.08, 0)
+	selectorNameLabel.Size = UDim2.new(0.60, 0, 0, 44)
+	selectorNameLabel.TextXAlignment = Enum.TextXAlignment.Center
+	selectorNameLabel.Parent = selectorFooter
+
+	local function stepSurvivor(direction: number)
+		local currentIndex = table.find(Config.CharacterOrder, state.SelectedCharacterId) or 1
+		local nextIndex = ((currentIndex - 1 + direction) % #Config.CharacterOrder) + 1
+		local nextId = Config.CharacterOrder[nextIndex]
+		if not nextId or nextId == state.SelectedCharacterId then return end
+		state.SelectedCharacterId = nextId
+		state.CurrentIdleName = "Static Resting Idle"
+		UI.Theme.PlayClick()
+		syncLobbySelection()
+		refreshUI()
+		refreshPreview()
+	end
+
+	local previousButton = makeButton(panel, "‹", UDim2.fromOffset(44, 44), 79, UI, function()
+		stepSurvivor(-1)
+	end)
+	previousButton.Name = "PreviousSurvivor"
+	previousButton.Position = UDim2.new(0.055, 0, 0.06, 0)
+	previousButton.TextSize = 32
+	previousButton.Font = Enum.Font.GothamMedium
+	previousButton.Parent = selectorFooter
+
+	local nextButton = makeButton(panel, "›", UDim2.fromOffset(44, 44), 79, UI, function()
+		stepSurvivor(1)
+	end)
+	nextButton.Name = "NextSurvivor"
+	nextButton.Position = UDim2.new(0.865, -44, 0.06, 0)
+	nextButton.TextSize = 32
+	nextButton.Font = Enum.Font.GothamMedium
+	nextButton.Parent = selectorFooter
+
+	local pickerBackButton = makeButton(panel, "BACK", UDim2.new(0.13, 0, 0, 42), 79, UI, function()
+		requestBack()
+	end)
+	pickerBackButton.Name = "PickerBack"
+	pickerBackButton.Position = UDim2.new(0.045, 0, 0.60, 0)
+	pickerBackButton.TextSize = 13
+	pickerBackButton.Size = UDim2.new(0.34, -4, 0, 40)
+	pickerBackButton.Parent = selectorFooter
+	table.insert(state.BackButtons, pickerBackButton)
+
+	local pickerEnterButton = makeButton(panel, "ENTER THE WILDERNESS", UDim2.new(0.29, 0, 0, 42), 79, UI, function()
+		local validated = Config.ValidateSelection({ CharacterId = state.SelectedCharacterId })
+		if not validated then return end
+		Wardrobe.Close()
+		if state.OnConfirm then state.OnConfirm(validated) end
+	end)
+	pickerEnterButton.Name = "PickerEnter"
+	pickerEnterButton.Position = UDim2.new(0.405, 4, 0.60, 0)
+	pickerEnterButton.Size = UDim2.new(0.55, -4, 0, 40)
+	pickerEnterButton.BackgroundColor3 = UI.Theme.Colors.EmberCrimson
+	pickerEnterButton.TextColor3 = Color3.fromRGB(255, 245, 235)
+	pickerEnterButton.TextSize = 13
+	pickerEnterButton.Parent = selectorFooter
+
+	renderLobby()
 
 	----------------------------------------------------------------------------
 	-- CONTINUOUS RENDERSTEPPED LOOP (Turntable Rotation, Spinner & Anti-Zombie Hold)
@@ -1132,8 +1586,9 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 		end
 
 		-- Posture adjustment: Arch thoracic spine to elaborate chest, level gaze, and retract shoulders
-		if profile and profile.Posture then
-			local posture = profile.Posture
+		if profile and (profile.Posture or profile.Facial) then
+			local posture = profile.Posture or {}
+			local facial = profile.Facial or {}
 			local s1 = previewClone:FindFirstChild("mixamorig:Spine1", true)
 			local s2 = previewClone:FindFirstChild("mixamorig:Spine2", true)
 			local neck = previewClone:FindFirstChild("mixamorig:Neck", true)
@@ -1150,11 +1605,15 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 			if neck and neck:IsA("Bone") and posture.NeckCounterDeg then
 				neck.Transform = neck.Transform * CFrame.Angles(math.rad(posture.NeckCounterDeg), 0, 0)
 			end
-			if neck and neck:IsA("Bone") and posture.NeckPostureBackDeg then
-				neck.Transform = neck.Transform * CFrame.Angles(math.rad(posture.NeckPostureBackDeg), 0, 0)
-			end
-			if head and head:IsA("Bone") and posture.HeadPostureBackDeg then
-				head.Transform = head.Transform * CFrame.Angles(math.rad(posture.HeadPostureBackDeg), 0, 0)
+			if state.CurrentIdleName == "Static Resting Idle" then
+				local neckDeg = posture.NeckPostureBackDeg or facial.NeckPostureBackDeg
+				local headDeg = posture.HeadPostureBackDeg or facial.HeadPostureBackDeg
+				if neck and neck:IsA("Bone") and neckDeg then
+					neck.Transform = neck.Transform * CFrame.Angles(math.rad(neckDeg), 0, 0)
+				end
+				if head and head:IsA("Bone") and headDeg then
+					head.Transform = head.Transform * CFrame.Angles(math.rad(headDeg), 0, 0)
+				end
 			end
 			if lSh and lSh:IsA("Bone") and posture.ShoulderRetractDeg then
 				lSh.Transform = lSh.Transform * CFrame.Angles(0, math.rad(-posture.ShoulderRetractDeg), math.rad(posture.ShoulderRetractDeg * 0.8))
@@ -1181,26 +1640,49 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 		camera = workspace.CurrentCamera or camera
 		local vpSize = camera and camera.ViewportSize or Vector2.new(1280, 720)
 		if vpSize.X < 760 then
-			panel.Size = UDim2.fromScale(0.96, 0.94)
-			previewPanel.Position = UDim2.new(0.03, 0, 0.10, 0)
-			previewPanel.Size = UDim2.new(0.94, 0, 0.36, 0)
-			controls.Position = UDim2.new(0.03, 0, 0.48, 0)
-			controls.Size = UDim2.new(0.94, 0, 0.50, 0)
-			cardsContainer.Size = UDim2.new(1, 0, 0, 120)
-			cardsLayout.CellSize = UDim2.new(0.485, 0, 0, 54)
-			dossierCard.Position = UDim2.new(0, 0, 0, 170)
-			dossierCard.Size = UDim2.new(1, 0, 0, 130)
+			panel.Size = UDim2.fromScale(1, 1)
+			previewPanel.Position = UDim2.new(0.04, 0, 0.02, 0)
+			previewPanel.Size = UDim2.new(0.92, 0, 0.56, 0)
+			viewport.Size = UDim2.new(1, 0, 0.65, 0)
+			selectorFooter.Position = UDim2.new(0, 0, 0.65, 0)
+			selectorFooter.Size = UDim2.new(1, 0, 0.35, 0)
+			selectorHeading.Position = UDim2.new(0.055, 0, 0.60, 0)
+			selectorHeading.Size = UDim2.new(0.88, 0, 0, 20)
+			partyPanel.Position = UDim2.new(0.04, 0, 0.62, 0)
+			partyPanel.Size = UDim2.new(0.92, 0, 0.36, 0)
 		else
 			panel.Size = UDim2.fromScale(0.94, 0.90)
-			previewPanel.Position = UDim2.new(0.035, 0, 0.115, 0)
-			previewPanel.Size = UDim2.new(0.41, 0, 0.85, 0)
-			controls.Position = UDim2.new(0.47, 0, 0.115, 0)
-			controls.Size = UDim2.new(0.495, 0, 0.85, 0)
-			cardsContainer.Size = UDim2.new(1, 0, 0, 168)
-			cardsLayout.CellSize = UDim2.new(0.488, 0, 0, 76)
-			dossierCard.Position = UDim2.new(0, 0, 0, 222)
-			dossierCard.Size = UDim2.new(1, 0, 0, 180)
+			previewPanel.Position = UDim2.new(0.62, 0, 0, 0)
+			previewPanel.Size = UDim2.new(0.38, 0, 1, 0)
+			viewport.Size = UDim2.new(1, 0, 0.70, 0)
+			selectorFooter.Position = UDim2.new(0, 0, 0.70, 0)
+			selectorFooter.Size = UDim2.new(1, 0, 0.30, 0)
+			partyPanel.Position = UDim2.new(0.035, 0, 0.70, 0)
+			partyPanel.Size = UDim2.new(0.55, 0, 0.25, 0)
+			selectorHeading.Position = UDim2.new(0.055, 0, 0.10, 0)
+			selectorHeading.Size = UDim2.new(0.50, 0, 0, 20)
 		end
+
+		selectorNameLabel.Parent = selectorFooter
+		previousButton.Parent = selectorFooter
+		nextButton.Parent = selectorFooter
+		pickerBackButton.Parent = selectorFooter
+		pickerEnterButton.Parent = selectorFooter
+		panel.BackgroundTransparency = 1
+		previewPanel.BackgroundTransparency = 0.06
+		controls.Visible = false
+		bottomRow.Visible = false
+		headerTag.Visible = false
+		header.Visible = false
+		headerDiv.Visible = false
+		rimGlow.Visible = false
+		previewInfoBox.Visible = false
+		dragHint.Visible = false
+		poseBar.Visible = false
+		if previewVeil.Parent ~= viewport then previewVeil.Parent = viewport end
+		kickDialog.Size = UDim2.new(vpSize.X < 760 and 0.88 or 0.38, 0, 0, 210)
+		if previewStroke then previewStroke.Transparency = 0.42 end
+		if panelStroke then panelStroke.Transparency = 1 end
 	end
 	updateResponsive()
 	if camera then
@@ -1210,33 +1692,31 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	----------------------------------------------------------------------------
 	-- PUBLIC INTERFACE
 	----------------------------------------------------------------------------
+	Wardrobe.IsLobbyReady = function()
+		return lobbyLoaded
+	end
+
 	Wardrobe.Open = function(onBack: () -> (), onConfirm: (any) -> ())
 		state.OnBack = onBack
 		state.OnConfirm = onConfirm
+		state.IsReturning = false
+		for _, button in ipairs(state.BackButtons) do
+			button.Active = true
+			button.Selectable = true
+			button.Text = "BACK"
+		end
 		state.IsOpen = true
 		overlay.Visible = true
 		refreshUI()
+		syncLobbySelection()
 		refreshPreview()
 		UI.Theme.PlayClick()
-
-		local cam = workspace.CurrentCamera
-		if cam and not player:GetAttribute("IsInGameplay") then
-			TweenService:Create(cam, TweenInfo.new(0.85, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				CFrame = CFrame.lookAt(Vector3.new(10, 24, -392), Vector3.new(2.5, 12, -430)),
-			}):Play()
-		end
 	end
 
 	Wardrobe.Close = function()
 		state.IsOpen = false
+		state.IsReturning = false
 		overlay.Visible = false
-
-		local cam = workspace.CurrentCamera
-		if cam and not player:GetAttribute("IsInGameplay") then
-			TweenService:Create(cam, TweenInfo.new(0.85, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				CFrame = CFrame.lookAt(Vector3.new(0, 26, -385), Vector3.new(2.5, 12, -430)),
-			}):Play()
-		end
 	end
 
 	Wardrobe.Destroy = function()
@@ -1258,6 +1738,10 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 		if viewportResizeConn then
 			viewportResizeConn:Disconnect()
 			viewportResizeConn = nil
+		end
+		if lobbyStateConnection then
+			lobbyStateConnection:Disconnect()
+			lobbyStateConnection = nil
 		end
 		if inputBeganConn then inputBeganConn:Disconnect() end
 		if inputChangedConn then inputChangedConn:Disconnect() end

@@ -96,6 +96,8 @@ local landingSpring = createSpring(130, 15)   -- Y-compression impulse on touchd
 local leanSpring = createSpring(95, 14)       -- X = forward lean, Z = centrifugal turn banking
 local sprintSpring = createSpring(120, 16)    -- 0 = walk/idle, 1 = full sprint
 local currentSprintAlpha = 0
+local currentAirborneAlpha = 0
+local currentHeadPostureAlpha = 0
 local lastYaw = 0
 
 -- -----------------------------------------------------------------------------
@@ -131,11 +133,244 @@ local state = {
 local attackToken = 0
 
 -- -----------------------------------------------------------------------------
+-- ANIMATION-SYNCHRONIZED MASTER LOCOMOTION CYCLE & MULTIPLAYER 3D AUDIO
+-- -----------------------------------------------------------------------------
+local STEP_STRIDE_WALK = 2.70   -- Studs per walk step (~0.45s at WalkSpeed = 6)
+local STEP_STRIDE_SPRINT = 4.30 -- Studs per sprint step (~0.27s at WalkSpeed = 16)
+
+-- Skeletal forward-kinematic contact timestamps (measured across all keyframes in Studio):
+-- Female Walk (0.967s): Right foot touchdown @ 0.167s (0.17), Left foot touchdown @ 0.567s (0.58)
+-- Male Walk (1.033s):   Right foot touchdown @ 0.200s (0.19), Left foot touchdown @ 0.680s (0.66)
+-- Main Run (0.633s):    Right foot touchdown @ 0.033s (0.05), Left foot touchdown @ 0.333s (0.52)
+local ANIM_FOOTSTEP_TIMELINES: { [string]: { Right: number, Left: number, IsRun: boolean } } = {
+    ["115531053004010"] = { Right = 0.17, Left = 0.58, IsRun = false },
+    ["70412449762831"]  = { Right = 0.19, Left = 0.66, IsRun = false },
+    ["99676638771528"]  = { Right = 0.05, Left = 0.52, IsRun = true },
+}
+
+type FootstepTracker = {
+    LastNormPos: number,
+    LastTrack: AnimationTrack?,
+    LastTriggerClock: number,
+    LastHRPPos: Vector3?,
+    StepDistanceAccum: number,
+    IsLeftStep: boolean,
+}
+
+local characterTrackers: { [Model]: FootstepTracker } = setmetatable({}, { __mode = "k" })
+
+local function getCharacterTracker(char: Model): FootstepTracker
+    local tracker = characterTrackers[char]
+    if not tracker then
+        tracker = {
+            LastNormPos = -1.0,
+            LastTrack = nil,
+            LastTriggerClock = 0.0,
+            LastHRPPos = nil,
+            StepDistanceAccum = STEP_STRIDE_WALK * 0.75,
+            IsLeftStep = true,
+        }
+        characterTrackers[char] = tracker
+    end
+    return tracker
+end
+
+local function findLocomotionTrack(animator: Animator): (AnimationTrack?, boolean, { Right: number, Left: number, IsRun: boolean }?)
+    local bestTrack: AnimationTrack? = nil
+    local bestEffectiveWeight = 0.01
+    local isRun = false
+    local matchedTimeline: { Right: number, Left: number, IsRun: boolean }? = nil
+
+    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+        local effectiveWeight = math.max(track.WeightCurrent, track.WeightTarget)
+        if track.IsPlaying and effectiveWeight > bestEffectiveWeight then
+            local tName = track.Name
+            local aId = track.Animation and track.Animation.AnimationId or ""
+            local cleanId = string.match(aId, "%d+") or ""
+            local timeline = ANIM_FOOTSTEP_TIMELINES[cleanId]
+
+            if timeline then
+                if timeline.IsRun or not isRun then
+                    bestTrack = track
+                    bestEffectiveWeight = effectiveWeight
+                    isRun = timeline.IsRun
+                    matchedTimeline = timeline
+                end
+            elseif tName == "RunAnim" or string.find(string.lower(tName), "run") then
+                bestTrack = track
+                bestEffectiveWeight = effectiveWeight
+                isRun = true
+                matchedTimeline = { Right = 0.05, Left = 0.52, IsRun = true }
+            elseif (tName == "WalkAnim" or string.find(string.lower(tName), "walk")) and not isRun then
+                bestTrack = track
+                bestEffectiveWeight = effectiveWeight
+                isRun = false
+                matchedTimeline = { Right = 0.18, Left = 0.62, IsRun = false }
+            end
+        end
+    end
+
+    return bestTrack, isRun, matchedTimeline
+end
+
+local function evaluateCharacterFootsteps(
+    char: Model,
+    isLocal: boolean,
+    dt: number,
+    isMovingLocal: boolean?,
+    wantsSprintLocal: boolean?
+)
+    local hum = if isLocal then (activeHumanoid or char:FindFirstChildOfClass("Humanoid")) else char:FindFirstChildOfClass("Humanoid")
+    local hrp = if isLocal then (activeHRP or (char:FindFirstChild("HumanoidRootPart") :: BasePart?)) else (char:FindFirstChild("HumanoidRootPart") :: BasePart?)
+    if not hum or not hrp or hum.Health <= 0 then return end
+
+    local tracker = getCharacterTracker(char)
+
+    if not isLocal then
+        -- Co-op Audio Culling: Skip remote players beyond audible range (60 studs)
+        if not camera or (hrp.Position - camera.CFrame.Position).Magnitude > 60 then
+            tracker.LastNormPos = -1.0
+            tracker.LastTrack = nil
+            tracker.LastHRPPos = nil
+            return
+        end
+    end
+
+    local isMoving = false
+    local isGrounded = false
+    local isSprinting = false
+
+    if isLocal then
+        isMoving = isMovingLocal == true
+        isGrounded = state.IsGrounded
+        isSprinting = wantsSprintLocal == true
+    else
+        local moveVel = hrp.AssemblyLinearVelocity * Vector3.new(1, 0, 1)
+        local moveSpeed = moveVel.Magnitude
+        isMoving = (moveSpeed > 1.2) or (hum.MoveDirection.Magnitude > 0.05)
+        isGrounded = (hum.FloorMaterial ~= Enum.Material.Air)
+        isSprinting = (moveSpeed > 20)
+    end
+
+    if not isMoving or not isGrounded then
+        tracker.LastNormPos = -1.0
+        tracker.LastTrack = nil
+        tracker.LastHRPPos = nil
+        tracker.StepDistanceAccum = STEP_STRIDE_WALK * 0.75
+        if isLocal then
+            state.WalkCycleClock = state.WalkCycleClock + dt * 1.8 -- Idle breathing cadence
+        end
+        return
+    end
+
+    local animator = if isLocal then (activeAnimator or hum:FindFirstChildOfClass("Animator")) else hum:FindFirstChildOfClass("Animator")
+    local activeTrack: AnimationTrack? = nil
+    local isRunTrack = isSprinting
+    local matchedTimeline: { Right: number, Left: number, IsRun: boolean }? = nil
+
+    if animator then
+        activeTrack, isRunTrack, matchedTimeline = findLocomotionTrack(animator)
+    end
+
+    local stepTriggered = false
+    local triggeredIsLeft = false
+
+    if activeTrack and activeTrack.Length > 0.1 then
+        local trackLen = activeTrack.Length
+        local currentTimePos = activeTrack.TimePosition % trackLen
+        local normPos = currentTimePos / trackLen
+
+        if isLocal then
+            -- Phase-lock local FPP viewmodel arm swing and camera motion smoothly to skeletal master cycle:
+            local targetClock = normPos * (math.pi * 2)
+            local diff = (targetClock - state.WalkCycleClock + math.pi) % (2 * math.pi) - math.pi
+            state.WalkCycleClock = state.WalkCycleClock + diff * math.clamp(dt * 6, 0, 1)
+        end
+
+        local rStep = if matchedTimeline then matchedTimeline.Right else (if isRunTrack then 0.05 else 0.18)
+        local lStep = if matchedTimeline then matchedTimeline.Left else (if isRunTrack then 0.52 else 0.62)
+
+        if tracker.LastTrack == activeTrack and tracker.LastNormPos >= 0 then
+            local crossedR = false
+            local crossedL = false
+
+            if normPos >= tracker.LastNormPos then
+                crossedR = (tracker.LastNormPos < rStep and normPos >= rStep)
+                crossedL = (tracker.LastNormPos < lStep and normPos >= lStep)
+            else
+                -- Loop wrap-around across 0.0 boundary
+                crossedR = (tracker.LastNormPos < rStep or normPos >= rStep)
+                crossedL = (tracker.LastNormPos < lStep or normPos >= lStep)
+            end
+
+            local nowClock = os.clock()
+            local minInterval = if isRunTrack then 0.11 else 0.16
+            if crossedR and (nowClock - tracker.LastTriggerClock >= minInterval) then
+                tracker.LastTriggerClock = nowClock
+                stepTriggered = true
+                triggeredIsLeft = false -- Right foot touchdown
+            elseif crossedL and (nowClock - tracker.LastTriggerClock >= minInterval) then
+                tracker.LastTriggerClock = nowClock
+                stepTriggered = true
+                triggeredIsLeft = true -- Left foot touchdown
+            end
+        end
+
+        tracker.LastNormPos = normPos
+        tracker.LastTrack = activeTrack
+    else
+        -- Fallback distance accumulator (ensures continuous audio if replication yields)
+        local currentPos = hrp.Position
+        local sprintFactor = if isRunTrack then 1.0 else 0.0
+        local strideTarget = STEP_STRIDE_WALK + (sprintFactor * (STEP_STRIDE_SPRINT - STEP_STRIDE_WALK))
+
+        if tracker.LastHRPPos then
+            local deltaPos = (currentPos - tracker.LastHRPPos) * Vector3.new(1, 0, 1)
+            local distMoved = deltaPos.Magnitude
+            if distMoved < 4.0 then
+                tracker.StepDistanceAccum += distMoved
+            end
+        else
+            tracker.StepDistanceAccum = strideTarget * 0.75
+        end
+        tracker.LastHRPPos = currentPos
+
+        if tracker.StepDistanceAccum >= strideTarget then
+            tracker.StepDistanceAccum = tracker.StepDistanceAccum % strideTarget
+            tracker.IsLeftStep = not tracker.IsLeftStep
+            stepTriggered = true
+            triggeredIsLeft = tracker.IsLeftStep
+        end
+
+        if isLocal then
+            local strideFreq = 4.0 + (currentSprintAlpha * 3.8)
+            state.WalkCycleClock = state.WalkCycleClock + dt * strideFreq
+        end
+    end
+
+    if stepTriggered then
+        local floorMat = hum.FloorMaterial
+        if (floorMat == Enum.Material.Air or floorMat == nil) and hrp then
+            local rayParams = RaycastParams.new()
+            rayParams.FilterDescendantsInstances = { char }
+            rayParams.FilterType = Enum.RaycastFilterType.Exclude
+            local rayResult = workspace:Raycast(hrp.Position, Vector3.new(0, -4.5, 0), rayParams)
+            if rayResult then
+                floorMat = rayResult.Material
+            end
+        end
+
+        AudioManager.PlayFootstep(floorMat, isRunTrack, triggeredIsLeft, hrp)
+    end
+end
+
+-- -----------------------------------------------------------------------------
 -- 4. CHARACTER JOINTS & VISIBILITY REGISTRY
 -- -----------------------------------------------------------------------------
 local activeCharacter: Model? = nil
 local activeHumanoid: Humanoid? = nil
 local activeHRP: BasePart? = nil
+local activeAnimator: Animator? = nil
 local activeBoneSyncPairs: { { Source: Bone, Target: Bone } } = {}
 
 type JointSet = {
@@ -277,10 +512,13 @@ local function cacheCharacterJoints(char: Model)
     activeLocomotionName = nil
     sprintSpring:Reset(Vector3.zero)
     landingSpring:Reset(Vector3.zero)
+    characterTrackers[char] = nil
 
     activeCharacter = char
     activeHumanoid = char:WaitForChild("Humanoid", 10) :: Humanoid?
     activeHRP = char:WaitForChild("HumanoidRootPart", 10) :: BasePart?
+    activeAnimator = (activeHumanoid and activeHumanoid:WaitForChild("Animator", 10) :: Animator?)
+        or (char:FindFirstChildWhichIsA("Animator", true) :: Animator?)
 
     table.insert(characterConnections, char:GetAttributeChangedSignal("IsGuardBroken"):Connect(function()
         if char:GetAttribute("IsGuardBroken") == true then
@@ -355,6 +593,26 @@ local function cacheCharacterJoints(char: Model)
     if activeHumanoid then
         defaultHipHeight = activeHumanoid.HipHeight > 0 and activeHumanoid.HipHeight or 2.0
 
+        -- Permanently silence default Roblox character sounds (plastic running, jump, land)
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local function silenceDefaultSound(s: Instance)
+                if s:IsA("Sound") then
+                    local sName = s.Name
+                    if sName == "Running" or sName == "Climbing" or sName == "Jumping" or sName == "Landing" then
+                        s.Volume = 0
+                        s.SoundId = ""
+                        s:Stop()
+                    end
+                end
+            end
+
+            for _, c in ipairs(hrp:GetChildren()) do
+                silenceDefaultSound(c)
+            end
+            table.insert(characterConnections, hrp.ChildAdded:Connect(silenceDefaultSound))
+        end
+
         -- Ensure natural human skin tone on skin mesh parts
         local skinTone = Color3.fromRGB(222, 178, 148)
         for _, name in ipairs({ "Head", "LeftHand", "RightHand", "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm" }) do
@@ -372,19 +630,33 @@ local function cacheCharacterJoints(char: Model)
         end))
 
         table.insert(characterConnections, activeHumanoid.StateChanged:Connect(function(oldState, newState)
-            if newState == Enum.HumanoidStateType.Jumping or newState == Enum.HumanoidStateType.Freefall then
+            if newState == Enum.HumanoidStateType.Jumping then
+                state.IsAirborne = true
+                state.IsGrounded = false
+                AudioManager.PlayJumpTakeoff(hrp)
+            elseif newState == Enum.HumanoidStateType.Freefall then
                 state.IsAirborne = true
                 state.IsGrounded = false
             elseif newState == Enum.HumanoidStateType.Landed then
                 state.IsAirborne = false
                 state.IsGrounded = true
 
-                -- Brief, subtle feedback only. Landing never holds or locks the character.
+                -- Responsive material landing audio
                 local impactSpeed = math.abs(state.LastVerticalVelocity)
-                if impactSpeed > 6 then
+                if impactSpeed > 5 then
                     local force = math.clamp(impactSpeed * 0.12, 0.8, 3.5)
                     landingSpring.Velocity = Vector3.new(0, force, 0)
-                    AudioManager.Play("Footstep")
+                    local floorMat = activeHumanoid.FloorMaterial
+                    if floorMat == Enum.Material.Air and hrp then
+                        local rayParams = RaycastParams.new()
+                        rayParams.FilterDescendantsInstances = { char }
+                        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+                        local rayResult = workspace:Raycast(hrp.Position, Vector3.new(0, -4.5, 0), rayParams)
+                        if rayResult then
+                            floorMat = rayResult.Material
+                        end
+                    end
+                    AudioManager.PlayLanding(floorMat, impactSpeed, hrp)
                 end
             end
         end))
@@ -395,6 +667,74 @@ if player.Character then
     cacheCharacterJoints(player.Character)
 end
 player.CharacterAdded:Connect(cacheCharacterJoints)
+
+-- -----------------------------------------------------------------------------
+-- MULTIPLAYER CO-OP: REMOTE PLAYER JUMP & LAND 3D AUDIO HOOKS
+-- -----------------------------------------------------------------------------
+local remotePlayerConnections: { [Player]: { RBXScriptConnection } } = {}
+
+local function hookRemotePlayer(otherPlayer: Player)
+    if otherPlayer == player then return end
+
+    local function onCharacterAdded(char: Model)
+        local hum = char:WaitForChild("Humanoid", 10) :: Humanoid?
+        local hrp = char:WaitForChild("HumanoidRootPart", 10) :: BasePart?
+        if not hum or not hrp then return end
+
+        local lastYVel = 0
+        local conns = remotePlayerConnections[otherPlayer] or {}
+        remotePlayerConnections[otherPlayer] = conns
+
+        local stateConn = hum.StateChanged:Connect(function(oldState, newState)
+            if not camera or not hrp.Parent then return end
+            if (hrp.Position - camera.CFrame.Position).Magnitude > 60 then return end
+
+            if newState == Enum.HumanoidStateType.Jumping then
+                AudioManager.PlayJumpTakeoff(hrp)
+            elseif newState == Enum.HumanoidStateType.Landed then
+                local impactSpeed = math.abs(lastYVel)
+                if impactSpeed > 5 then
+                    local floorMat = hum.FloorMaterial
+                    if (floorMat == Enum.Material.Air or floorMat == nil) and hrp then
+                        local rayParams = RaycastParams.new()
+                        rayParams.FilterDescendantsInstances = { char }
+                        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+                        local hit = workspace:Raycast(hrp.Position, Vector3.new(0, -4.5, 0), rayParams)
+                        if hit then floorMat = hit.Material end
+                    end
+                    AudioManager.PlayLanding(floorMat, impactSpeed, hrp)
+                end
+            end
+        end)
+        table.insert(conns, stateConn)
+
+        local velConn = RunService.Heartbeat:Connect(function()
+            if hrp and hrp.Parent then
+                lastYVel = hrp.AssemblyLinearVelocity.Y
+            end
+        end)
+        table.insert(conns, velConn)
+    end
+
+    if otherPlayer.Character then
+        onCharacterAdded(otherPlayer.Character)
+    end
+    otherPlayer.CharacterAdded:Connect(onCharacterAdded)
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    hookRemotePlayer(p)
+end
+Players.PlayerAdded:Connect(hookRemotePlayer)
+Players.PlayerRemoving:Connect(function(leavingPlayer)
+    local conns = remotePlayerConnections[leavingPlayer]
+    if conns then
+        for _, c in ipairs(conns) do
+            c:Disconnect()
+        end
+        remotePlayerConnections[leavingPlayer] = nil
+    end
+end)
 
 -- -----------------------------------------------------------------------------
 -- 5. HIT DETECTION & ATTACK DISPATCHER
@@ -668,43 +1008,13 @@ RunService.PreSimulation:Connect(function(dt: number)
     end
     SurvivorBoneSync.StepAll()
 
-    -- Upright Head & Neck Posture Alignment (pulls head and neck back to eliminate hunched posture):
-    if not joints.NeckBone and activeCharacter then
-        joints.NeckBone = activeCharacter:FindFirstChild("mixamorig:Neck", true)
-    end
-    if not joints.HeadBone and activeCharacter then
-        joints.HeadBone = activeCharacter:FindFirstChild("mixamorig:Head", true)
-    end
-
-    local neckBack = profile.Facial and profile.Facial.NeckPostureBackDeg or 6.0
-    local headBack = profile.Facial and profile.Facial.HeadPostureBackDeg or 9.0
-
-    if joints.NeckBone and joints.NeckBone:IsA("Bone") and neckBack ~= 0 then
-        local neckBone = joints.NeckBone :: Bone
-        neckBone.Transform = neckBone.Transform * CFrame.Angles(math.rad(neckBack), 0, 0)
-    end
-
-    if joints.HeadBone and joints.HeadBone:IsA("Bone") then
-        local headBone = joints.HeadBone :: Bone
-        local gazeRange = profile.Facial and profile.Facial.MicroGazeRangeDeg or 1.0
-        local restTilt = profile.Facial and profile.Facial.HeadRestTiltDeg or 0.0
-
-        local saccadeClock = now * 0.42
-        local gazeYaw = math.sin(saccadeClock * 0.75 + math.sin(saccadeClock * 1.4)) * math.rad(gazeRange)
-        local gazePitch = math.cos(saccadeClock * 0.85) * math.rad(gazeRange * 0.6)
-        local friendlyTilt = math.rad(restTilt)
-
-        local totalPitch = math.rad(headBack) + gazePitch
-        local gazeOffset = CFrame.Angles(totalPitch, gazeYaw, friendlyTilt)
-        headBone.Transform = headBone.Transform * gazeOffset
-    end
-
     local moveVel = activeHRP.AssemblyLinearVelocity
     local horizontalSpeed = Vector3.new(moveVel.X, 0, moveVel.Z).Magnitude
     state.LastVerticalVelocity = moveVel.Y
 
     local isMovingIntent = activeHumanoid.MoveDirection.Magnitude > 0.05
-    local isMoving = (horizontalSpeed > 1.0 or isMovingIntent) and state.IsGrounded
+    local isLocomoting = (horizontalSpeed > 1.0 or isMovingIntent)
+    local isMoving = isLocomoting and (state.IsGrounded or state.IsAirborne)
     local wantsSprint = (activeHumanoid.WalkSpeed >= 12 or UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)) and isMoving
     state.IsSprinting = wantsSprint
 
@@ -714,19 +1024,74 @@ RunService.PreSimulation:Connect(function(dt: number)
 
     local effectiveSprintAlpha = currentSprintAlpha
 
-    -- Keep the locomotion clock moving through weapon swings so the stride never snaps.
-    if isMoving then
-        local strideFreq = 4.0 + (currentSprintAlpha * 3.8) -- Smooth 4.0 -> 7.8 rad/s for 6 -> 16 studs/s
-        state.WalkCycleClock = state.WalkCycleClock + dt * strideFreq
+    -- Smooth airborne easing for procedural viewmodel arm stabilization during jumps
+    local targetAirborne = (state.IsAirborne and not state.IsGrounded) and 1 or 0
+    currentAirborneAlpha = currentAirborneAlpha + (targetAirborne - currentAirborneAlpha) * math.clamp(dt * 10, 0, 1)
 
-        -- Dynamic footstep cadence
-        local footstepInterval = 0.65 - (currentSprintAlpha * 0.32)
-        if now - state.LastFootstepClock > footstepInterval then
-            state.LastFootstepClock = now
-            AudioManager.Play("Footstep")
+    -- Main Idle Detection (StaticIDLEMAIND only):
+    -- Head posture correction is ONLY applied in the main idle animation.
+    -- During walk and running, posture remains 100% normal (0 deg offset).
+    local isMainIdle = false
+    if not isMoving and state.IsGrounded and activeAnimator then
+        for _, track in ipairs(activeAnimator:GetPlayingAnimationTracks()) do
+            if track.IsPlaying and track.Animation and track.Animation.AnimationId then
+                if string.find(track.Animation.AnimationId, "103828063959982") then
+                    isMainIdle = true
+                    break
+                end
+            end
         end
-    else
-        state.WalkCycleClock = state.WalkCycleClock + dt * 1.8 -- Idle breathing cadence
+    end
+
+    local targetHeadAlpha = (isMainIdle and 1 or 0)
+    currentHeadPostureAlpha = currentHeadPostureAlpha + (targetHeadAlpha - currentHeadPostureAlpha) * math.clamp(dt * 12, 0, 1)
+
+    -- Upright Head & Neck Posture Alignment (Active ONLY in Main Idle):
+    if not joints.NeckBone and activeCharacter then
+        joints.NeckBone = activeCharacter:FindFirstChild("mixamorig:Neck", true)
+    end
+    if not joints.HeadBone and activeCharacter then
+        joints.HeadBone = activeCharacter:FindFirstChild("mixamorig:Head", true)
+    end
+
+    local neckBack = (profile.Facial and profile.Facial.NeckPostureBackDeg or 11.0) * currentHeadPostureAlpha
+    local headBack = (profile.Facial and profile.Facial.HeadPostureBackDeg or 14.5) * currentHeadPostureAlpha
+
+    if joints.NeckBone and joints.NeckBone:IsA("Bone") and neckBack > 0.05 then
+        local neckBone = joints.NeckBone :: Bone
+        neckBone.Transform = neckBone.Transform * CFrame.Angles(math.rad(neckBack), 0, 0)
+    end
+
+    if joints.HeadBone and joints.HeadBone:IsA("Bone") then
+        local headBone = joints.HeadBone :: Bone
+        local gazeRange = profile.Facial and profile.Facial.MicroGazeRangeDeg or 1.0
+        local restTilt = (profile.Facial and profile.Facial.HeadRestTiltDeg or 0.0) * currentHeadPostureAlpha
+
+        local saccadeClock = now * 0.42
+        local gazeYaw = math.sin(saccadeClock * 0.75 + math.sin(saccadeClock * 1.4)) * math.rad(gazeRange) * currentHeadPostureAlpha
+        local gazePitch = math.cos(saccadeClock * 0.85) * math.rad(gazeRange * 0.6) * currentHeadPostureAlpha
+        local friendlyTilt = math.rad(restTilt)
+
+        if headBack > 0.05 or gazeYaw ~= 0 or gazePitch ~= 0 then
+            local totalPitch = math.rad(headBack) + gazePitch
+            local gazeOffset = CFrame.Angles(totalPitch, gazeYaw, friendlyTilt)
+            headBone.Transform = headBone.Transform * gazeOffset
+        end
+    end
+
+    -- 1. Local Player Locomotion & Master Cycle Synchronization
+    if activeCharacter then
+        evaluateCharacterFootsteps(activeCharacter, true, dt, isMoving, wantsSprint)
+    end
+
+    -- 2. Nearby Co-op Players 3D Proximity Locomotion & Audio
+    for _, otherPlayer in ipairs(Players:GetPlayers()) do
+        if otherPlayer ~= player then
+            local otherChar = otherPlayer.Character
+            if otherChar then
+                evaluateCharacterFootsteps(otherChar, false, dt)
+            end
+        end
     end
 
     -- Evaluate active Combat Action expiration
@@ -854,12 +1219,14 @@ RunService.PreSimulation:Connect(function(dt: number)
     local lAnkleOffset = CFrame.identity
     local waistOffset = isTPP and CFrame.Angles(leanPos.X, 0, leanPos.Z) or CFrame.identity
 
-    -- 1. Soft landing compression; it fades immediately and never blocks movement.
-    if landingComp > 0.001 then
-        rootOffset = rootOffset * CFrame.new(0, -landingComp * 0.18, 0)
-        rKneeOffset = rKneeOffset * CFrame.Angles(math.rad(-landingComp * 12), 0, 0)
-        lKneeOffset = lKneeOffset * CFrame.Angles(math.rad(-landingComp * 12), 0, 0)
-        waistOffset = waistOffset * CFrame.Angles(math.rad(landingComp * 4), 0, 0)
+    -- 1. Soft landing compression; continuous attenuation with speed so there is zero boolean snapping.
+    local moveCompFactor = math.clamp(1 - (horizontalSpeed / 2.5), 0, 1)
+    local effectiveLandingComp = landingComp * moveCompFactor
+    if effectiveLandingComp > 0.001 then
+        rootOffset = rootOffset * CFrame.new(0, -effectiveLandingComp * 0.06, 0)
+        rKneeOffset = rKneeOffset * CFrame.Angles(math.rad(-effectiveLandingComp * 2.0), 0, 0)
+        lKneeOffset = lKneeOffset * CFrame.Angles(math.rad(-effectiveLandingComp * 2.0), 0, 0)
+        waistOffset = waistOffset * CFrame.Angles(math.rad(effectiveLandingComp * 1.0), 0, 0)
     end
 
     -- 4. Dynamic turn banking applied to root (TPP only, ultra-mild)
@@ -914,7 +1281,7 @@ RunService.PreSimulation:Connect(function(dt: number)
             rElbowBase = CFrame.Angles(math.rad(-112), math.rad(20), 0)
             lElbowBase = CFrame.Angles(math.rad(-112), math.rad(-20), 0)
         elseif isMoving then
-            local swingAmp = 16 + (effectiveSprintAlpha * 14)
+            local swingAmp = (16 + (effectiveSprintAlpha * 14)) * (1 - currentAirborneAlpha * 0.7)
             local armSwing = math.rad(walkStride * swingAmp)
             local forwardLean = math.rad(4 + effectiveSprintAlpha * 6)
 

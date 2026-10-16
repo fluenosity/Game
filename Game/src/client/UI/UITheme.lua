@@ -363,30 +363,11 @@ function UITheme.GetMouseSensitivity(): number
 end
 
 --------------------------------------------------------------------------------
--- 8. GLOBAL ASSETS REGISTRY (Main Menu Art, Game Logo, Posters)
+-- 8. GLOBAL ASSETS REGISTRY (Game Logo)
 --------------------------------------------------------------------------------
 UITheme.Assets = {
-    MainMenuVideo = "rbxasset://MainMenuMp4.mp4",        -- Animated Cinematic Background Video
-    MainMenuBackground = "rbxassetid://77749440485321", -- Fallback Forest Campfire Thumbnail
     GameLogo = "rbxassetid://106299822759980",           -- Stylized Campfire Emblem Icon
 }
-
-function UITheme.GetBackgroundVideo(): string?
-    if UITheme.Assets.MainMenuVideo and UITheme.Assets.MainMenuVideo ~= "" then
-        return UITheme.Assets.MainMenuVideo
-    end
-    return nil
-end
-
-function UITheme.GetBackgroundAsset(): string
-    if string.find(UITheme.Assets.MainMenuBackground, "rbxassetid://") then
-        return UITheme.Assets.MainMenuBackground
-    end
-    if game.PlaceId > 0 then
-        return string.format("rbxthumb://type=GameThumbnail&id=%d&w=768&h=432", game.PlaceId)
-    end
-    return UITheme.Assets.MainMenuBackground
-end
 
 function UITheme.GetLogoAsset(): string
     if string.find(UITheme.Assets.GameLogo, "rbxassetid://") then

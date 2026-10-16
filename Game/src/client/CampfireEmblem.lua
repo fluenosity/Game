@@ -15,7 +15,7 @@ local CampfireEmblem = {}
 CampfireEmblem.__index = CampfireEmblem
 
 -- Set to a valid Roblox asset ID once logo.png is uploaded (e.g. "rbxassetid://123456789")
-CampfireEmblem.ROBLOX_ASSET_ID = "rbxassetid://106299822759980"
+CampfireEmblem.ROBLOX_ASSET_ID = ""
 
 export type EmblemInstance = {
     Root: Frame,

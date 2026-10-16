@@ -19,10 +19,12 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
@@ -37,6 +39,7 @@ local SurvivorWardrobe = require(script.Parent:WaitForChild("SurvivorWardrobe"))
 
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local GameConfig = require(sharedFolder:WaitForChild("GameConfig"))
+local EnvironmentConfig = require(sharedFolder:WaitForChild("EnvironmentConfig"))
 local IconPack = require(sharedFolder:WaitForChild("IconPack"))
 
 -- Initialize game-wide audio routing to MasterSoundGroup
@@ -49,13 +52,41 @@ local isBusy = false
 local hasIntroCompleted = false
 local reducedMotionEnabled = false
 local rightArea: Frame? = nil
+local skipMainMenu = GameConfig.ShouldSkipMainMenu()
+local gameplayTransitionAuthorized = skipMainMenu
+local MENU_MOVEMENT_LOCK = "DontLetTheFireDie_MenuMovementLock"
+local hiddenMenuParts: { [BasePart]: number } = {}
+local hideMenuCharacter: (Model?) -> () = function(_character: Model?) end
 
 local camera = workspace.CurrentCamera
 if not camera then
     camera = workspace:WaitForChild("Camera", 5) :: Camera
 end
 
-local function setCharacterControlsEnabled(enabled: boolean)
+local function setMenuInputSink(_actionName: string, _inputState: Enum.UserInputState, _input: InputObject)
+    return Enum.ContextActionResult.Sink
+end
+
+local function setMenuInputLocked(locked: boolean)
+    if locked then
+        ContextActionService:BindActionAtPriority(
+            MENU_MOVEMENT_LOCK,
+            setMenuInputSink,
+            false,
+            Enum.ContextActionPriority.High.Value + 100,
+            Enum.KeyCode.W,
+            Enum.KeyCode.A,
+            Enum.KeyCode.S,
+            Enum.KeyCode.D,
+            Enum.KeyCode.Space,
+            Enum.KeyCode.Thumbstick1
+        )
+    else
+        ContextActionService:UnbindAction(MENU_MOVEMENT_LOCK)
+    end
+end
+
+local function setCharacterControlsEnabled(enabled: boolean, targetCharacter: Model?)
     pcall(function()
         local playerScripts = player:WaitForChild("PlayerScripts", 3)
         if playerScripts then
@@ -69,7 +100,7 @@ local function setCharacterControlsEnabled(enabled: boolean)
         end
     end)
 
-    local character = player.Character
+    local character = targetCharacter or player.Character
     if character then
         local humanoid = character:FindFirstChildOfClass("Humanoid")
         if humanoid then
@@ -79,10 +110,39 @@ local function setCharacterControlsEnabled(enabled: boolean)
     end
 end
 
+local function holdMenuCharacter(character: Model?)
+    if gameplayTransitionAuthorized or player:GetAttribute("IsInGameplay") == true then return end
+    setMenuInputLocked(true)
+    setCharacterControlsEnabled(false, character)
+    if not character then return end
+
+    task.defer(function()
+        if gameplayTransitionAuthorized or player:GetAttribute("IsInGameplay") == true or not character.Parent then return end
+        local humanoid = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 5)
+        if humanoid and humanoid:IsA("Humanoid") then
+            humanoid.WalkSpeed = 0
+            humanoid.UseJumpPower = true
+            humanoid.JumpPower = 0
+            humanoid.Jump = false
+            humanoid:Move(Vector3.zero)
+        end
+    end)
+end
+
+local gameplayStateConnection = player:GetAttributeChangedSignal("IsInGameplay"):Connect(function()
+    if gameplayTransitionAuthorized then return end
+    if player:GetAttribute("IsInGameplay") == true then
+        -- A stale gameplay state must never unlock movement behind either menu screen.
+        player:SetAttribute("IsInGameplay", false)
+        hideMenuCharacter(player.Character)
+    end
+    holdMenuCharacter(player.Character)
+end)
+
 -- =============================================================================
 -- DEV CONFIG CHECK: SKIP MAIN MENU
 -- =============================================================================
-if GameConfig.ShouldSkipMainMenu() then
+if skipMainMenu then
     -- Fast Direct Play with Clean Shader & Asset Loading Screen (Prevents Pop-in & Flickering)
     local devScreenGui = Instance.new("ScreenGui")
     devScreenGui.Name = "DontLetTheFireDie_DevLoadingGui"
@@ -102,6 +162,8 @@ if GameConfig.ShouldSkipMainMenu() then
     LoadingManager.LoadGame(devLoading, function()
         devLoading.Destroy()
         devScreenGui:Destroy()
+        gameplayTransitionAuthorized = true
+        setMenuInputLocked(false)
         player:SetAttribute("IsInGameplay", true)
         setCharacterControlsEnabled(true)
         if camera then
@@ -114,40 +176,212 @@ if GameConfig.ShouldSkipMainMenu() then
 end
 
 player:SetAttribute("IsInGameplay", false)
-setCharacterControlsEnabled(false)
+holdMenuCharacter(player.Character)
+local menuPromptServiceWasEnabled = ProximityPromptService.Enabled
+ProximityPromptService.Enabled = false
+local watchedMenuModels: { [Model]: boolean } = {}
+hideMenuCharacter = function(character: Model?)
+    if not character then return end
+    for _, descendant in ipairs(character:GetDescendants()) do
+        if descendant:IsA("BasePart") and hiddenMenuParts[descendant] == nil then
+            hiddenMenuParts[descendant] = descendant.LocalTransparencyModifier
+            descendant.LocalTransparencyModifier = 1
+        end
+    end
+end
+local function hideMenuPart(part: BasePart)
+    if hiddenMenuParts[part] == nil then
+        hiddenMenuParts[part] = part.LocalTransparencyModifier
+    end
+    part.LocalTransparencyModifier = 1
+end
+local function watchMenuCharacter(character: Model)
+    if watchedMenuModels[character] then return end
+    watchedMenuModels[character] = true
+    hideMenuCharacter(character)
+    character.DescendantAdded:Connect(function(descendant)
+        if player:GetAttribute("IsInGameplay") ~= true and descendant:IsA("BasePart") then
+            hideMenuPart(descendant)
+        end
+    end)
+end
+local function restoreMenuCharacter()
+    for part, transparency in pairs(hiddenMenuParts) do
+        if part.Parent then
+            part.LocalTransparencyModifier = transparency
+        end
+    end
+    table.clear(hiddenMenuParts)
+end
+hideMenuCharacter(player.Character)
+for _, object in ipairs(Workspace:GetChildren()) do
+    if object:IsA("Model") and object:GetAttribute("IsCombatTestCharacter") == true then
+        watchMenuCharacter(object)
+    end
+end
+-- The campsite and its combat test rig may arrive after this LocalScript starts
+-- because StreamingEnabled is on. Hide tagged rigs as they stream in too.
+local menuDescendantAddedConnection = Workspace.DescendantAdded:Connect(function(descendant)
+    if descendant:IsA("Model") and descendant:GetAttribute("IsCombatTestCharacter") == true then
+        watchMenuCharacter(descendant)
+    elseif descendant:IsA("BasePart") then
+        local ancestor = descendant.Parent
+        while ancestor and ancestor ~= Workspace do
+            if ancestor:IsA("Model") and ancestor:GetAttribute("IsCombatTestCharacter") == true then
+                hideMenuPart(descendant)
+                break
+            end
+            ancestor = ancestor.Parent
+        end
+    end
+end)
+local menuCharacterAddedConnection = player.CharacterAdded:Connect(function(character)
+    if player:GetAttribute("IsInGameplay") ~= true then
+        task.defer(function()
+            hideMenuCharacter(character)
+            holdMenuCharacter(character)
+        end)
+    end
+end)
+holdMenuCharacter(player.Character)
 UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 UserInputService.MouseIconEnabled = true
 
 --------------------------------------------------------------------------------
 -- LIVE 3D FOREST CAMPFIRE SIMULATION AT NIGHT (Reference Image Alignment)
 --------------------------------------------------------------------------------
-local campCenter = Vector3.new(2.5, 12, -430)
-local baseCamPos = Vector3.new(0, 26, -385)
-local menuCameraConn: RBXScriptConnection? = nil
-local menuStartTime = os.clock()
+local function resolveMenuSceneCenter(): Vector3
+    -- Use the actual campsite that exists in this place. The authored map has
+    -- moved campsites over time, so fixed coordinates here can frame empty woods.
+    local deadline = os.clock() + 8
+    local campfire = Workspace:FindFirstChild("Campfire")
+    while not campfire and os.clock() < deadline do
+        campfire = Workspace:FindFirstChild("Campfire")
+        if not campfire then task.wait(0.1) end
+    end
 
-local function setMenuNightLighting()
-    pcall(function()
-        Lighting.ClockTime = 22.0
-        Lighting.Brightness = 0.8
-        Lighting.FogEnd = 400
-        Lighting.OutdoorAmbient = Color3.fromRGB(22, 28, 45)
-    end)
+    if campfire then
+        local firePart = campfire:FindFirstChild("FirePart", true)
+        if firePart and firePart:IsA("BasePart") then
+            return firePart.Position
+        end
+        if campfire:IsA("Model") then
+            return campfire:GetPivot().Position
+        elseif campfire:IsA("BasePart") then
+            return campfire.Position
+        end
+    end
+
+    local configuredCamp = EnvironmentConfig.CAMP_CENTER
+    if typeof(configuredCamp) == "Vector3" then
+        return configuredCamp + Vector3.new(0, 8, 0)
+    end
+
+    local spawn = Workspace:FindFirstChildOfClass("SpawnLocation")
+    if spawn then return spawn.Position end
+    return Vector3.new(0, 8, 0)
 end
 
-setMenuNightLighting()
+local campCenter = resolveMenuSceneCenter()
+local menuFireGlow: PointLight? = nil
+local function ensureMenuFireGlow()
+    if menuFireGlow and menuFireGlow.Parent then return end
+    local campfireModel = Workspace:FindFirstChild("Campfire")
+    local firePart = campfireModel and campfireModel:FindFirstChild("FirePart", true)
+    if firePart and firePart:IsA("BasePart") then
+        local existingGlow = firePart:FindFirstChild("MenuCampfireGlow")
+        if existingGlow and existingGlow:IsA("PointLight") then
+            menuFireGlow = existingGlow
+            return
+        end
+        local glow = Instance.new("PointLight")
+        glow.Name = "MenuCampfireGlow"
+        glow.Color = Color3.fromRGB(255, 150, 72)
+        glow.Brightness = 1.8
+        glow.Range = 35
+        glow.Shadows = false
+        glow.Parent = firePart
+        menuFireGlow = glow
+    end
+end
+-- Match the user's authored Studio camera: a wide, elevated view with the
+-- campsite on the right and breathing room for the menu on the left.
+local menuCameraPositionOffset = Vector3.new(57, 43.63, 70)
+local menuCameraTargetOffset = Vector3.new(-38, -1.37, 0)
+local baseCamPos = campCenter + menuCameraPositionOffset
+local baseCamTarget = campCenter + menuCameraTargetOffset
+player:SetAttribute("MenuSceneReady", false)
+task.spawn(function()
+    -- The server requests the authored campsite region for this player.
+    -- The client sends no position, so it cannot choose arbitrary world areas.
+    local remote = sharedFolder:WaitForChild("RequestMenuSceneStream", 12)
+    if remote and remote:IsA("RemoteFunction") then
+        local ok, streamed, reason, serverCenter = pcall(function()
+            return remote:InvokeServer()
+        end)
+        if not ok or streamed ~= true then
+            warn("[MainMenu] Could not prefetch the menu scene: " .. tostring(reason or streamed))
+        elseif typeof(serverCenter) == "Vector3" then
+            campCenter = serverCenter
+            baseCamPos = campCenter + menuCameraPositionOffset
+            baseCamTarget = campCenter + menuCameraTargetOffset
+            if camera then
+                camera.CFrame = CFrame.lookAt(baseCamPos, baseCamTarget)
+                camera.Focus = CFrame.new(campCenter)
+            end
+        end
+    else
+        warn("[MainMenu] Menu scene streaming request is unavailable; continuing with normal streaming.")
+    end
+    -- Instances under the campfire can stream after the camp model itself.
+    -- Retry briefly so the local menu light is attached as soon as FirePart exists.
+    for _ = 1, 30 do
+        ensureMenuFireGlow()
+        if menuFireGlow then break end
+        task.wait(0.1)
+    end
+    for _, object in ipairs(Workspace:GetChildren()) do
+        if object:IsA("Model") and object:GetAttribute("IsCombatTestCharacter") == true then
+            watchMenuCharacter(object)
+        end
+    end
+    for _ = 1, 6 do
+        RunService.RenderStepped:Wait()
+    end
+    player:SetAttribute("MenuSceneReady", true)
+end)
+task.delay(12, function()
+    if player:GetAttribute("MenuSceneReady") ~= true then
+        warn("[MainMenu] Scene streaming is taking longer than expected; continuing with Roblox streaming.")
+        player:SetAttribute("MenuSceneReady", true)
+    end
+end)
+local menuCameraConn: RBXScriptConnection? = nil
+local menuStartTime = os.clock()
+local menuReturnCFrame: CFrame? = nil
+local menuReturnFov = 70
+local menuPausedElapsed = 0
+local menuCameraTween: Tween? = nil
+local menuCameraResumeToken = 0
+local menuFlowState = "MainMenu"
+local pickerTransitionGeneration = 0
 
 if camera then
     camera.CameraType = Enum.CameraType.Scriptable
-    camera.FieldOfView = 65
-    camera.CFrame = CFrame.lookAt(baseCamPos, campCenter)
+    camera.FieldOfView = 70
+    camera.CFrame = CFrame.lookAt(baseCamPos, baseCamTarget)
+    camera.Focus = CFrame.new(campCenter)
 end
 
-local function startMenuCameraSimulation()
+local function startMenuCameraSimulation(resumeElapsed: number?)
     if menuCameraConn then
         menuCameraConn:Disconnect()
     end
-    menuStartTime = os.clock()
+    if resumeElapsed ~= nil then
+        menuStartTime = os.clock() - resumeElapsed
+    else
+        menuStartTime = os.clock()
+    end
     menuCameraConn = RunService.RenderStepped:Connect(function()
         if player:GetAttribute("IsInGameplay") == true then
             if menuCameraConn then
@@ -157,14 +391,12 @@ local function startMenuCameraSimulation()
             return
         end
 
-        local elapsed = os.clock() - menuStartTime
-
-        -- Keep live 3D campfire scene at night while in main menu
-        if Lighting.ClockTime ~= 22.0 then
-            Lighting.ClockTime = 22.0
-            Lighting.Brightness = 0.8
-            Lighting.FogEnd = 400
+        camera = Workspace.CurrentCamera or camera
+        if camera.CameraType ~= Enum.CameraType.Scriptable then
+            camera.CameraType = Enum.CameraType.Scriptable
         end
+
+        local elapsed = os.clock() - menuStartTime
 
         -- Gentle cinematic drone drift across the high 3/4 camp perspective
         local driftX = math.sin(elapsed * 0.22) * 2.2
@@ -172,8 +404,9 @@ local function startMenuCameraSimulation()
         local driftZ = math.sin(elapsed * 0.18) * 1.5
 
         local camPos = baseCamPos + Vector3.new(driftX, driftY, driftZ)
-        local target = campCenter + Vector3.new(math.sin(elapsed * 0.15) * 0.5, 0, 0)
+        local target = baseCamTarget + Vector3.new(math.sin(elapsed * 0.15) * 0.5, 0, 0)
         camera.CFrame = CFrame.lookAt(camPos, target)
+        camera.Focus = CFrame.new(target)
     end)
 end
 
@@ -201,9 +434,7 @@ background.BorderSizePixel = 0
 background.ZIndex = 1
 background.Parent = screenGui
 
--- Static bgImage and bgVideo removed: live 3D world rendered in real-time beneath UI!
-local bgImage: ImageLabel? = nil
-local bgVideo: VideoFrame? = nil
+-- The actual streamed world remains visible beneath the menu UI.
 
 -- Ambient warm firelight radial gradient (biased to center-left where fire burns)
 local ambientFirelight = Instance.new("Frame")
@@ -247,6 +478,24 @@ vigGrad.Transparency = NumberSequence.new({
 vigGrad.Parent = vignette
 vignette.Parent = background
 
+-- Keep the text column legible while leaving the campsite and fire visible.
+local leftShade = Instance.new("Frame")
+leftShade.Name = "MenuLeftShade"
+leftShade.Size = UDim2.new(0.56, 0, 1, 0)
+leftShade.BackgroundColor3 = Color3.fromRGB(8, 12, 19)
+leftShade.BackgroundTransparency = 0.12
+leftShade.BorderSizePixel = 0
+leftShade.ZIndex = 4
+local leftShadeGradient = Instance.new("UIGradient")
+leftShadeGradient.Rotation = 0
+leftShadeGradient.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0, 0.12),
+    NumberSequenceKeypoint.new(0.58, 0.38),
+    NumberSequenceKeypoint.new(1, 1),
+})
+leftShadeGradient.Parent = leftShade
+leftShade.Parent = background
+
 local emberSystem = EmberParticles.new(background)
 
 --------------------------------------------------------------------------------
@@ -268,8 +517,8 @@ safePadding.Parent = safeArea
 --------------------------------------------------------------------------------
 local leftArea = Instance.new("Frame")
 leftArea.Name = "LeftArea"
-leftArea.Size = UDim2.new(0, 360, 0, 480)
-leftArea.Position = UDim2.new(0, 48, 0.46, 0)
+leftArea.Size = UDim2.new(0, 400, 0, 490)
+leftArea.Position = UDim2.new(0, 72, 0.44, 0)
 leftArea.AnchorPoint = Vector2.new(0, 0.5)
 leftArea.BackgroundTransparency = 1
 leftArea.Visible = false
@@ -279,7 +528,7 @@ leftArea.Parent = safeArea
 -- 1. Top Branding Group (Campfire Emblem + 2-Line Condensed Title + Burnt Ember Subtitle)
 local brandingHeader = Instance.new("Frame")
 brandingHeader.Name = "BrandingHeader"
-brandingHeader.Size = UDim2.new(1, 0, 0, 210)
+brandingHeader.Size = UDim2.new(1, 0, 0, 220)
 brandingHeader.Position = UDim2.new(0, 0, 0, 0)
 brandingHeader.BackgroundTransparency = 1
 brandingHeader.ZIndex = 7
@@ -287,23 +536,23 @@ brandingHeader.Parent = leftArea
 
 -- Campfire Emblem Centered Above Title
 local emblem = CampfireEmblem.new(UDim2.fromOffset(76, 76))
-emblem.Root.Position = UDim2.new(0.5, 0, 0, 0)
-emblem.Root.AnchorPoint = Vector2.new(0.5, 0)
+emblem.Root.Position = UDim2.new(0, 0, 0, 0)
+emblem.Root.AnchorPoint = Vector2.new(0, 0)
 emblem.Root.Parent = brandingHeader
 
 -- Title & Subtitle Stacked Directly Below Emblem
 local titleContainer = Instance.new("Frame")
 titleContainer.Name = "TitleContainer"
-titleContainer.Size = UDim2.new(1, 0, 0, 130)
-titleContainer.Position = UDim2.new(0.5, 0, 0, 80)
-titleContainer.AnchorPoint = Vector2.new(0.5, 0)
+titleContainer.Size = UDim2.new(1, 0, 0, 140)
+titleContainer.Position = UDim2.new(0, 0, 0, 78)
+titleContainer.AnchorPoint = Vector2.new(0, 0)
 titleContainer.BackgroundTransparency = 1
 titleContainer.ZIndex = 7
 titleContainer.Parent = brandingHeader
 
 local titleLayout = Instance.new("UIListLayout")
 titleLayout.FillDirection = Enum.FillDirection.Vertical
-titleLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+titleLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 titleLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 titleLayout.Padding = UDim.new(0, 8)
 titleLayout.Parent = titleContainer
@@ -311,14 +560,14 @@ titleLayout.Parent = titleContainer
 -- 2-Line High-Impact Oswald Bold Title ("DON'T LET \n THE FIRE DIE")
 local mainTitle = Instance.new("TextLabel")
 mainTitle.Name = "MainTitle"
-mainTitle.Size = UDim2.new(1, 0, 0, 92)
+mainTitle.Size = UDim2.new(1, 0, 0, 116)
 mainTitle.BackgroundTransparency = 1
 mainTitle.Font = Enum.Font.Oswald
 mainTitle.Text = "DON'T LET\nTHE FIRE DIE"
 mainTitle.TextColor3 = Color3.fromRGB(240, 235, 225) -- Off-white ivory parchment
-mainTitle.TextSize = 44
+mainTitle.TextSize = 64
 mainTitle.LineHeight = 0.94
-mainTitle.TextXAlignment = Enum.TextXAlignment.Center
+mainTitle.TextXAlignment = Enum.TextXAlignment.Left
 mainTitle.TextStrokeColor3 = Color3.fromRGB(12, 10, 8)
 mainTitle.TextStrokeTransparency = 0.35
 mainTitle.ZIndex = 8
@@ -333,7 +582,7 @@ subTitle.Font = Enum.Font.Oswald
 subTitle.Text = "THE NIGHT WILL CLAIM YOU"
 subTitle.TextColor3 = Color3.fromRGB(245, 130, 48) -- Vibrant amber/ember orange
 subTitle.TextSize = 15
-subTitle.TextXAlignment = Enum.TextXAlignment.Center
+subTitle.TextXAlignment = Enum.TextXAlignment.Left
 subTitle.TextStrokeColor3 = Color3.fromRGB(15, 6, 4)
 subTitle.TextStrokeTransparency = 0.4
 subTitle.ZIndex = 8
@@ -342,19 +591,19 @@ subTitle.Parent = titleContainer
 -- 2. Navigation Actions Container (PLAY, SETTINGS, CREDITS)
 local navContainer = Instance.new("Frame")
 navContainer.Name = "NavContainer"
-navContainer.Size = UDim2.new(1, 0, 0, 210)
-navContainer.Position = UDim2.new(0.5, 0, 0, 240)
-navContainer.AnchorPoint = Vector2.new(0.5, 0)
+navContainer.Size = UDim2.new(1, 0, 0, 180)
+navContainer.Position = UDim2.new(0, 0, 0, 250)
+navContainer.AnchorPoint = Vector2.new(0, 0)
 navContainer.BackgroundTransparency = 1
 navContainer.ZIndex = 9
 navContainer.Parent = leftArea
 
 local navLayout = Instance.new("UIListLayout")
 navLayout.FillDirection = Enum.FillDirection.Vertical
-navLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+navLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 navLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 navLayout.SortOrder = Enum.SortOrder.LayoutOrder
-navLayout.Padding = UDim.new(0, 16)
+navLayout.Padding = UDim.new(0, 4)
 navLayout.Parent = navContainer
 
 -- 3. Bottom-Left Studio Watermark Stamp (Image reference: "A FLUENOSITY STUDIO GAME")
@@ -365,7 +614,7 @@ studioStamp.Position = UDim2.new(0, 4, 1, -8)
 studioStamp.AnchorPoint = Vector2.new(0, 1)
 studioStamp.BackgroundTransparency = 1
 studioStamp.Font = Enum.Font.GothamMedium
-studioStamp.Text = "A FLUENOSITY STUDIO GAME"
+studioStamp.Text = "A Fluenosity Studios production."
 studioStamp.TextColor3 = Color3.fromRGB(115, 122, 136) -- Subtle muted slate grey
 studioStamp.TextSize = 11
 studioStamp.TextXAlignment = Enum.TextXAlignment.Left
@@ -397,20 +646,20 @@ local function updateLayoutResponsiveness()
         leftArea.Size = UDim2.new(0, 320, 0, 420)
         brandingHeader.Size = UDim2.new(1, 0, 0, 180)
         emblem.Root.Size = UDim2.fromOffset(60, 60)
-        titleContainer.Position = UDim2.new(0.5, 0, 0, 65)
+        titleContainer.Position = UDim2.new(0, 0, 0, 62)
         mainTitle.TextSize = 34
         subTitle.TextSize = 13
-        navContainer.Size = UDim2.new(1, 0, 0, 210)
-        navContainer.Position = UDim2.new(0.5, 0, 0, 205)
+        navContainer.Size = UDim2.new(1, 0, 0, 164)
+        navContainer.Position = UDim2.new(0, 0, 0, 194)
     else
-        leftArea.Size = UDim2.new(0, 360, 0, 480)
-        brandingHeader.Size = UDim2.new(1, 0, 0, 210)
+        leftArea.Size = UDim2.new(0, 400, 0, 490)
+        brandingHeader.Size = UDim2.new(1, 0, 0, 220)
         emblem.Root.Size = UDim2.fromOffset(76, 76)
-        titleContainer.Position = UDim2.new(0.5, 0, 0, 80)
-        mainTitle.TextSize = 44
+        titleContainer.Position = UDim2.new(0, 0, 0, 78)
+        mainTitle.TextSize = 64
         subTitle.TextSize = 15
-        navContainer.Size = UDim2.new(1, 0, 0, 210)
-        navContainer.Position = UDim2.new(0.5, 0, 0, 240)
+        navContainer.Size = UDim2.new(1, 0, 0, 180)
+        navContainer.Position = UDim2.new(0, 0, 0, 250)
     end
 
     if viewport.X < 850 then
@@ -424,7 +673,7 @@ local function updateLayoutResponsiveness()
         end
     else
         -- Desktop / wide screens: leftArea on left, rightArea on right
-        leftArea.Position = UDim2.new(0, 48, 0.46, 0)
+        leftArea.Position = UDim2.new(0, 72, 0.44, 0)
         leftArea.AnchorPoint = Vector2.new(0, 0.5)
         if rightArea then
             rightArea.Position = UDim2.new(1, -48, 0.46, 0)
@@ -551,13 +800,6 @@ UI.Toggle.Create({
         reducedMotionEnabled = enabled
         emberSystem:SetReducedMotion(enabled)
         emblem:SetReducedMotion(enabled)
-        if bgVideo then
-            if enabled then
-                bgVideo:Pause()
-            else
-                bgVideo:Play()
-            end
-        end
     end,
 })
 
@@ -944,6 +1186,13 @@ wireCardEvents(femaleCard, "Female")
 -- INTERACTIVE NAV ACTIONS (ORDER: 1. PLAY, 2. SETTINGS, 3. CREDITS)
 --------------------------------------------------------------------------------
 local function beginGame(selection: any)
+    menuFlowState = "StartingGame"
+    pickerTransitionGeneration += 1
+    isBusy = true
+    if menuCameraTween then
+        menuCameraTween:Cancel()
+        menuCameraTween = nil
+    end
     if menuCameraConn then
         menuCameraConn:Disconnect()
         menuCameraConn = nil
@@ -954,7 +1203,7 @@ local function beginGame(selection: any)
 
     -- Smooth cinematic camera glide down from high 3/4 crane into the campsite
     if camera then
-        local glideTargetCFrame = CFrame.lookAt(Vector3.new(1.5, 14.5, -408), campCenter)
+        local glideTargetCFrame = CFrame.lookAt(campCenter + Vector3.new(0, 7, 15), campCenter)
         TweenService:Create(camera, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
             CFrame = glideTargetCFrame,
         }):Play()
@@ -987,12 +1236,18 @@ local function beginGame(selection: any)
         hasIntroCompleted = true
         emberSystem:Destroy()
         emblem:Destroy()
-        if bgVideo then
-            bgVideo:Pause()
-            bgVideo:Destroy()
-        end
         wardrobeScreen.Destroy()
         screenGui:Destroy()
+        if menuFireGlow then
+            menuFireGlow:Destroy()
+            menuFireGlow = nil
+        end
+        menuCharacterAddedConnection:Disconnect()
+        menuDescendantAddedConnection:Disconnect()
+        restoreMenuCharacter()
+        ProximityPromptService.Enabled = menuPromptServiceWasEnabled
+        gameplayTransitionAuthorized = true
+        setMenuInputLocked(false)
         player:SetAttribute("IsInGameplay", true)
         setCharacterControlsEnabled(true)
         if camera then
@@ -1001,76 +1256,244 @@ local function beginGame(selection: any)
     end, selection)
 end
 
-local navPlay = UI.Button.Create({
-    Text = "PLAY",
-    Subtext = "ENTER WILDERNESS",
-    Variant = "Primary",
-    IconName = "flame",
-    IconSize = 18,
-    Size = UDim2.new(1, 0, 0, 52),
-    LayoutOrder = 1,
-    Parent = navContainer,
-    OnClick = function()
-        if isBusy then return end
-        isBusy = true
+local function createMenuLink(
+    name: string,
+    label: string,
+    order: number,
+    primary: boolean,
+    onActivated: () -> ()
+): TextButton
+    local button = Instance.new("TextButton")
+    button.Name = name
+    button.Size = UDim2.new(1, 0, 0, primary and 62 or 52)
+    button.LayoutOrder = order
+    button.BackgroundTransparency = 1
+    button.BorderSizePixel = 0
+    button.AutoButtonColor = false
+    button.Active = true
+    button.Selectable = true
+    button.Text = label
+    button.Font = Enum.Font.Oswald
+    button.TextSize = primary and 38 or 29
+    button.TextColor3 = primary and Color3.fromRGB(255, 184, 99) or Color3.fromRGB(227, 226, 217)
+    button.TextXAlignment = Enum.TextXAlignment.Left
+    button.TextYAlignment = Enum.TextYAlignment.Center
+    button.TextTransparency = 1
+    button.ZIndex = 10
+    button.Parent = navContainer
+
+    local rule = Instance.new("Frame")
+    rule.Name = "ActiveRule"
+    rule.AnchorPoint = Vector2.new(0, 1)
+    rule.Position = UDim2.new(0, 0, 1, -5)
+    rule.Size = UDim2.fromOffset(primary and 156 or 0, 2)
+    rule.BackgroundColor3 = Color3.fromRGB(250, 153, 68)
+    rule.BackgroundTransparency = primary and 0.08 or 1
+    rule.BorderSizePixel = 0
+    rule.ZIndex = 11
+    rule.Parent = button
+
+    local ruleGradient = Instance.new("UIGradient")
+    ruleGradient.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.45),
+        NumberSequenceKeypoint.new(0.45, 0),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    ruleGradient.Parent = rule
+
+    button.MouseEnter:Connect(function()
+        if not primary then
+            TweenService:Create(rule, UITheme.Tweens.Fast, {
+                Size = UDim2.fromOffset(74, 2),
+                BackgroundTransparency = 0.15,
+            }):Play()
+        end
+        TweenService:Create(button, UITheme.Tweens.Fast, {
+            TextColor3 = Color3.fromRGB(255, 190, 112),
+        }):Play()
+        pcall(function()
+            AudioManager.Play("Hover")
+        end)
+    end)
+
+    button.MouseLeave:Connect(function()
+        if not primary then
+            TweenService:Create(rule, UITheme.Tweens.Fast, {
+                Size = UDim2.fromOffset(0, 2),
+                BackgroundTransparency = 1,
+            }):Play()
+        end
+        TweenService:Create(button, UITheme.Tweens.Fast, {
+            TextColor3 = primary and Color3.fromRGB(255, 184, 99) or Color3.fromRGB(227, 226, 217),
+        }):Play()
+    end)
+
+    button.Activated:Connect(function()
+        UITheme.PlayClick()
+        onActivated()
+    end)
+
+    return button
+end
+
+local navPlay: TextButton
+navPlay = createMenuLink("NavPlay", "PLAY", 1, true, function()
+    if isBusy or menuFlowState ~= "MainMenu" then return end
+    -- PLAY only opens survivor selection. The actual gameplay transition belongs
+    -- to the picker's final confirmation button.
+    player:SetAttribute("IsInGameplay", false)
+    holdMenuCharacter(player.Character)
+    isBusy = true
+    menuFlowState = "Preparing"
+    pickerTransitionGeneration += 1
+    local transitionId = pickerTransitionGeneration
+    navPlay.Text = "PREPARING CAMP..."
+    navPlay.Active = false
+    navPlay.Selectable = false
+    -- Keep the main menu and its wide forest shot on screen while the lobby
+    -- snapshot finishes. The label changes synchronously, so the click always
+    -- has feedback even when matchmaking or the server takes a moment.
+    task.spawn(function()
+        local prepareStartedAt = os.clock()
+        local prepareDeadline = prepareStartedAt + 2.5
+        while transitionId == pickerTransitionGeneration
+            and menuFlowState == "Preparing"
+            and os.clock() < prepareDeadline
+            and ((os.clock() - prepareStartedAt) < 0.45
+                or (wardrobeScreen.IsLobbyReady and not wardrobeScreen.IsLobbyReady())) do
+            task.wait(0.05)
+        end
+        if transitionId ~= pickerTransitionGeneration or menuFlowState ~= "Preparing" then
+            return
+        end
+
+        menuFlowState = "OpeningPicker"
+        navPlay.Text = "ENTERING CAMP..."
+        menuCameraResumeToken += 1
+        camera = Workspace.CurrentCamera or camera
+        if camera then
+            camera.CameraType = Enum.CameraType.Scriptable
+        end
+        menuReturnCFrame = camera and camera.CFrame or CFrame.lookAt(baseCamPos, baseCamTarget)
+        menuReturnFov = camera and camera.FieldOfView or 70
+        menuPausedElapsed = os.clock() - menuStartTime
+        if menuCameraConn then
+            menuCameraConn:Disconnect()
+            menuCameraConn = nil
+        end
+        -- Opening the picker and beginning the glide happen in the same turn;
+        -- the panel covers the scene before the camera can reveal empty camp.
+        if camera then
+            if menuCameraTween then
+                menuCameraTween:Cancel()
+            end
+            menuCameraTween = TweenService:Create(camera, TweenInfo.new(1.05, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+                CFrame = CFrame.lookAt(campCenter + Vector3.new(-8, 10, 19), campCenter + Vector3.new(0, 3, 0)),
+                FieldOfView = 48,
+            })
+            menuCameraTween.Completed:Connect(function(playbackState)
+                if playbackState ~= Enum.PlaybackState.Completed
+                    or transitionId ~= pickerTransitionGeneration
+                    or menuFlowState ~= "OpeningPicker" then
+                    return
+                end
+                menuCameraTween = nil
+                menuFlowState = "Picker"
+                -- The survivor picker has its own heading and controls. Keep
+                -- the separate main-menu branding/navigation out of that view;
+                -- the party slots are part of the picker and remain visible.
+                leftArea.Visible = false
+                studioStamp.Visible = false
+                navPlay.Text = "PLAY"
+                navPlay.Active = true
+                navPlay.Selectable = true
+                isBusy = false
+            end)
+        end
+
         wardrobeScreen.Open(function()
-            isBusy = false
+            if menuFlowState ~= "OpeningPicker" and menuFlowState ~= "Picker" then return end
+            menuFlowState = "Returning"
+            pickerTransitionGeneration += 1
+            local returnTransitionId = pickerTransitionGeneration
+            player:SetAttribute("IsInGameplay", false)
+            holdMenuCharacter(player.Character)
+            camera = Workspace.CurrentCamera or camera
+            if menuCameraTween then
+                menuCameraTween:Cancel()
+                menuCameraTween = nil
+            end
+            local returnCFrame = menuReturnCFrame or CFrame.lookAt(baseCamPos, baseCamTarget)
+            local resumeElapsed = menuPausedElapsed
+            menuCameraResumeToken += 1
+            local resumeToken = menuCameraResumeToken
+            isBusy = true
+            navPlay.Text = "RETURNING..."
+            navPlay.Active = false
+            navPlay.Selectable = false
+
+            local function finishReturn()
+                if returnTransitionId ~= pickerTransitionGeneration or menuFlowState ~= "Returning" then
+                    return
+                end
+                menuCameraTween = nil
+                -- Swap the two surfaces after the camera reaches the menu
+                -- framing, so no empty-camp frame is exposed.
+                wardrobeScreen.Close()
+                leftArea.Visible = true
+                studioStamp.Visible = true
+                navPlay.Text = "PLAY"
+                navPlay.Active = true
+                navPlay.Selectable = true
+                menuFlowState = "MainMenu"
+                isBusy = false
+                startMenuCameraSimulation(resumeElapsed)
+                menuReturnCFrame = nil
+            end
+
+            if camera then
+                camera.CameraType = Enum.CameraType.Scriptable
+                menuCameraTween = TweenService:Create(camera, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+                    CFrame = returnCFrame,
+                    FieldOfView = menuReturnFov,
+                })
+                menuCameraTween.Completed:Connect(function(playbackState)
+                    if playbackState == Enum.PlaybackState.Completed
+                        and resumeToken == menuCameraResumeToken then
+                        finishReturn()
+                    end
+                end)
+                menuCameraTween:Play()
+            else
+                finishReturn()
+            end
         end, function(selection)
             beginGame(selection)
         end)
-    end,
-})
 
--- 2. SURVIVOR WARDROBE Action (Dedicated button to inspect and choose survivors)
-local navWardrobe = UI.Button.Create({
-    Text = "SURVIVORS",
-    Subtext = "ROSTER & PREVIEW",
-    Variant = "Secondary",
-    IconName = "user",
-    IconSize = 16,
-    Size = UDim2.new(1, 0, 0, 46),
-    LayoutOrder = 2,
-    Parent = navContainer,
-    OnClick = function()
-        if isBusy then return end
-        isBusy = true
-        wardrobeScreen.Open(function()
+        if menuCameraTween then
+            menuCameraTween:Play()
+        else
+            menuFlowState = "Picker"
+            leftArea.Visible = false
+            studioStamp.Visible = false
+            navPlay.Text = "PLAY"
+            navPlay.Active = true
+            navPlay.Selectable = true
             isBusy = false
-        end, function(selection)
-            beginGame(selection)
-        end)
-    end,
-})
+        end
+    end)
+end)
 
--- 3. SETTINGS Action (Secondary Glassmorphic button with Lucide Settings Icon)
-local navSettings = UI.Button.Create({
-    Text = "SETTINGS",
-    Subtext = "AUDIO & CONTROLS",
-    Variant = "Secondary",
-    IconName = "settings",
-    IconSize = 16,
-    Size = UDim2.new(1, 0, 0, 46),
-    LayoutOrder = 3,
-    Parent = navContainer,
-    OnClick = function()
-        settingsModal.Open()
-    end,
-})
+local navSettings = createMenuLink("NavSettings", "SETTINGS", 2, false, function()
+    if menuFlowState ~= "MainMenu" or isBusy then return end
+    settingsModal.Open()
+end)
 
--- 4. CREDITS Action (Secondary Glassmorphic button with Lucide Sparkles Icon)
-local navCredits = UI.Button.Create({
-    Text = "CREDITS",
-    Subtext = "FLUENOSITY STUDIO",
-    Variant = "Secondary",
-    IconName = "sparkles",
-    IconSize = 16,
-    Size = UDim2.new(1, 0, 0, 46),
-    LayoutOrder = 4,
-    Parent = navContainer,
-    OnClick = function()
-        creditsModal.Open()
-    end,
-})
+local navCredits = createMenuLink("NavCredits", "CREDITS", 3, false, function()
+    if menuFlowState ~= "MainMenu" or isBusy then return end
+    creditsModal.Open()
+end)
 
 --------------------------------------------------------------------------------
 -- CINEMATIC INTRO SEQUENCE (STAGGERED: LEFT FROM LEFT, RIGHT FROM RIGHT)
@@ -1079,13 +1502,13 @@ local function runCinematicIntro()
     isBusy = true
 
     ----------------------------------------------------------------------------
-    -- PHASE 1: Pure White Studio Splash Screen (~2.0s) [Configurable via GameConfig]
+    -- PHASE 1: Clean studio splash before showing the live campsite menu.
     ----------------------------------------------------------------------------
     if not GameConfig.ShouldSkipSplashScreen() then
         local splashScreen = Instance.new("Frame")
         splashScreen.Name = "StudioSplash"
         splashScreen.Size = UDim2.fromScale(1, 1)
-        splashScreen.BackgroundColor3 = (UITheme.Colors and UITheme.Colors.PureWhite) or Color3.fromRGB(255, 255, 255)
+        splashScreen.BackgroundColor3 = Color3.fromRGB(248, 246, 238)
         splashScreen.BorderSizePixel = 0
         splashScreen.ZIndex = 60
         splashScreen.Parent = screenGui
@@ -1093,18 +1516,25 @@ local function runCinematicIntro()
         local studioTitle = Instance.new("TextLabel")
         studioTitle.Name = "StudioTitle"
         studioTitle.Size = UDim2.new(0.9, 0, 0, 36)
-        studioTitle.Position = UDim2.fromScale(0.5, 0.5)
+        studioTitle.Position = UDim2.fromScale(0.5, 0.53)
         studioTitle.AnchorPoint = Vector2.new(0.5, 0.5)
         studioTitle.BackgroundTransparency = 1
         studioTitle.Font = (UITheme.Fonts and UITheme.Fonts.Studio) or Enum.Font.GothamMedium
-        studioTitle.Text = "A  F L U E N O S I T Y   S T U D I O   P R O D U C T I O N"
-        studioTitle.TextColor3 = (UITheme.Colors and UITheme.Colors.TextStudioSplash) or Color3.fromRGB(245, 248, 255)
+        studioTitle.Text = "A FLUENOSITY STUDIO GAME"
+        studioTitle.TextColor3 = Color3.fromRGB(52, 56, 58)
         studioTitle.TextScaled = true
         studioTitle.TextWrapped = true
         studioTitle.TextSize = 18
         studioTitle.TextTransparency = 1
         studioTitle.ZIndex = 61
         studioTitle.Parent = splashScreen
+
+        local splashMark = IconPack.CreateIcon("flame", 38, Color3.fromRGB(211, 113, 46), 0)
+        splashMark.Name = "SplashCampfireMark"
+        splashMark.AnchorPoint = Vector2.new(0.5, 0.5)
+        splashMark.Position = UDim2.fromScale(0.5, 0.43)
+        splashMark.ZIndex = 61
+        splashMark.Parent = splashScreen
 
         local studioConstraint = Instance.new("UITextSizeConstraint")
         studioConstraint.MaxTextSize = 20
@@ -1125,11 +1555,11 @@ local function runCinematicIntro()
         fadeOutText:Play()
         fadeOutText.Completed:Wait()
 
-        local darkTransition = TweenService:Create(splashScreen, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+        local splashTransition = TweenService:Create(splashScreen, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
             BackgroundTransparency = 1,
         })
-        darkTransition:Play()
-        darkTransition.Completed:Wait()
+        splashTransition:Play()
+        splashTransition.Completed:Wait()
         splashScreen:Destroy()
     end
 
@@ -1199,40 +1629,36 @@ local function runCinematicIntro()
 
     task.wait(0.12)
 
-    -- Step 2: Nav Actions (PLAY, SETTINGS, CREDITS) arrive with staggered delays
+    -- Reveal the simple text menu links one at a time, with PLAY highlighted.
     local navItems = { navPlay, navSettings, navCredits }
-    for i, btn in ipairs(navItems) do
-        local content = btn:FindFirstChild("Content") :: Frame?
-        if content then
-            content.Position = UDim2.new(0, -35, 0, 0)
-            for _, d in ipairs(content:GetDescendants()) do
-                if d:IsA("TextLabel") then
-                    d.TextTransparency = 1
-                elseif d:IsA("Frame") and (d.Name:find("Flare") or d.Name:find("Pip") or d.Name:find("Aura")) then
-                    d.BackgroundTransparency = 1
-                end
-            end
-            task.delay((i - 1) * 0.10, function()
-                TweenService:Create(content, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    Position = UDim2.new(0, 0, 0, 0),
-                }):Play()
-                for _, d in ipairs(content:GetDescendants()) do
-                    if d:IsA("TextLabel") then
-                        TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
-                    elseif d:IsA("Frame") and d.Name == "GlowFlare" and i == 1 then
-                        TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0 }):Play()
-                    elseif d:IsA("Frame") and d.Name == "CenterPip" and i == 1 then
-                        TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0 }):Play()
-                    elseif d:IsA("Frame") and d.Name == "PipAura" and i == 1 then
-                        TweenService:Create(d, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0.55 }):Play()
-                    end
-                end
-            end)
+    for i, button in ipairs(navItems) do
+        local rule = button:FindFirstChild("ActiveRule") :: Frame?
+        if rule then
+            rule.Size = UDim2.fromOffset(0, 2)
+            rule.BackgroundTransparency = 1
         end
+        task.delay((i - 1) * 0.11, function()
+            TweenService:Create(button, TweenInfo.new(0.34, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                TextTransparency = 0,
+            }):Play()
+            if rule then
+                TweenService:Create(rule, TweenInfo.new(0.38, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Size = UDim2.fromOffset(i == 1 and 156 or 0, 2),
+                    BackgroundTransparency = i == 1 and 0.08 or 1,
+                }):Play()
+            end
+        end)
     end
 
     hasIntroCompleted = true
     isBusy = false
 end
 
-task.spawn(runCinematicIntro)
+task.spawn(function()
+    local readyDeadline = os.clock() + 50
+    while (player:GetAttribute("InitialMenuAssetsReady") ~= true or player:GetAttribute("MenuSceneReady") ~= true)
+        and os.clock() < readyDeadline do
+        task.wait(0.05)
+    end
+    runCinematicIntro()
+end)

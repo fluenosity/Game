@@ -91,22 +91,49 @@ function SurvivorBoneSync.StepCharacter(rig: CharacterRigData)
     -- perfect in-place locomotion without forward-and-back rubberbanding or forward jump throw.
     if rig.Hips then
         local t = rig.Hips.Transform
-        local clampedY = t.Position.Y
-        if clampedY > 0.05 then
-            clampedY = clampedY * 0.15
-        end
-        if math.abs(t.Position.Z) > 0.001 or clampedY ~= t.Position.Y then
-            rig.Hips.Transform = CFrame.new(t.Position.X, clampedY, 0) * t.Rotation
+        if math.abs(t.Position.Z) > 0.001 then
+            rig.Hips.Transform = CFrame.new(t.Position.X, t.Position.Y, 0) * t.Rotation
         end
     end
 
-    -- Head & Neck Upright Posture Correction:
-    -- Counteracts Mixamo forward head hunch in walk and idle poses by tilting cervical spine and head back
-    if rig.Neck and rig.NeckPostureBackDeg ~= 0 then
-        rig.Neck.Transform = rig.Neck.Transform * CFrame.Angles(math.rad(rig.NeckPostureBackDeg), 0, 0)
+    -- Head & Neck Upright Posture Correction (Main Idle Only):
+    -- Counteracts Mixamo forward head hunch in main idle pose (StaticIDLEMAIND).
+    -- During walk and running, posture remains 100% normal (0 deg offset).
+    local hum = rig.Humanoid or rig.Character:FindFirstChildOfClass("Humanoid")
+    local isMoving = false
+    if hum then
+        if hum.MoveDirection.Magnitude > 0.05 then
+            isMoving = true
+        else
+            local hrp = hum.RootPart or rig.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+            if hrp and Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z).Magnitude > 0.6 then
+                isMoving = true
+            end
+        end
     end
-    if rig.Head and rig.HeadPostureBackDeg ~= 0 then
-        rig.Head.Transform = rig.Head.Transform * CFrame.Angles(math.rad(rig.HeadPostureBackDeg), 0, 0)
+
+    if not isMoving and (rig.NeckPostureBackDeg ~= 0 or rig.HeadPostureBackDeg ~= 0) then
+        local isMainIdle = false
+        local animator = hum and hum:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                if track.IsPlaying and track.Animation and track.Animation.AnimationId then
+                    if string.find(track.Animation.AnimationId, "103828063959982") then
+                        isMainIdle = true
+                        break
+                    end
+                end
+            end
+        end
+
+        if isMainIdle then
+            if rig.Neck and rig.NeckPostureBackDeg ~= 0 then
+                rig.Neck.Transform = rig.Neck.Transform * CFrame.Angles(math.rad(rig.NeckPostureBackDeg), 0, 0)
+            end
+            if rig.Head and rig.HeadPostureBackDeg ~= 0 then
+                rig.Head.Transform = rig.Head.Transform * CFrame.Angles(math.rad(rig.HeadPostureBackDeg), 0, 0)
+            end
+        end
     end
 
     -- Leg Stance Clearance:

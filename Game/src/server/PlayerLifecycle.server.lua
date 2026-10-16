@@ -12,6 +12,7 @@ local GameConfig = require(sharedFolder:WaitForChild("GameConfig"))
 local WardrobeConfig = require(sharedFolder:WaitForChild("SurvivorWardrobeConfig"))
 local WardrobeApplier = require(sharedFolder:WaitForChild("SurvivorWardrobeApplier"))
 local SurvivorRigConfig = require(sharedFolder:WaitForChild("SurvivorRigConfig"))
+local EnvironmentConfig = require(sharedFolder:WaitForChild("EnvironmentConfig"))
 local roster = sharedFolder:WaitForChild("SurvivorRoster")
 
 local spawnRequest = sharedFolder:FindFirstChild("RequestSpawnCharacter")
@@ -29,6 +30,125 @@ end
 local playersInSession: { [Player]: boolean } = {}
 local savedSelections: { [Player]: { [string]: string } } = {}
 local lastSpawnRequest: { [Player]: number } = {}
+local lastMenuStreamRequest: { [Player]: number } = {}
+local menuStreamFoci: { [Player]: { BasePart } } = {}
+
+local function clearMenuStreamFoci(player: Player)
+	local foci = menuStreamFoci[player]
+	if not foci then return end
+	for _, focus in ipairs(foci) do
+		pcall(function()
+			player:RemoveReplicationFocus(focus)
+		end)
+		focus:Destroy()
+	end
+	menuStreamFoci[player] = nil
+end
+
+local function addMenuStreamFocus(player: Player, position: Vector3, ordinal: number): BasePart
+	local focus = Instance.new("Part")
+	focus.Name = string.format("MenuStreamFocus_%d_%d", player.UserId, ordinal)
+	focus.Size = Vector3.new(1, 1, 1)
+	focus.CFrame = CFrame.new(position)
+	focus.Anchored = true
+	focus.CanCollide = false
+	focus.CanTouch = false
+	focus.CanQuery = false
+	focus.CastShadow = false
+	focus.Transparency = 1
+	focus.Parent = workspace
+	player:AddReplicationFocus(focus)
+	return focus
+end
+
+local menuSceneRequest = sharedFolder:FindFirstChild("RequestMenuSceneStream")
+if menuSceneRequest and not menuSceneRequest:IsA("RemoteFunction") then
+	menuSceneRequest:Destroy()
+	menuSceneRequest = nil
+end
+if not menuSceneRequest then
+	local remote = Instance.new("RemoteFunction")
+	remote.Name = "RequestMenuSceneStream"
+	remote.Parent = sharedFolder
+	menuSceneRequest = remote
+end
+
+(menuSceneRequest :: RemoteFunction).OnServerInvoke = function(player: Player): (boolean, string?, Vector3?)
+	if not player.Parent or playersInSession[player] then
+		return false, "The menu scene can only be requested before entering the game", nil
+	end
+
+	local now = os.clock()
+	local previousRequest = lastMenuStreamRequest[player]
+	if previousRequest and now - previousRequest < 10 then
+		return false, "The menu scene was already requested", nil
+	end
+	lastMenuStreamRequest[player] = now
+
+	local center = EnvironmentConfig.CAMP_CENTER + Vector3.new(0, 8, 0)
+	local campfire = workspace:FindFirstChild("Campfire")
+	if campfire then
+		local firePart = campfire:FindFirstChild("FirePart", true)
+		if firePart and firePart:IsA("BasePart") then
+			center = firePart.Position
+		elseif campfire:IsA("Model") then
+			center = campfire:GetPivot().Position
+		elseif campfire:IsA("BasePart") then
+			center = campfire.Position
+		end
+	end
+
+	-- Keep streamed scenery around the menu camera and the distant edges of its
+	-- view. The player has no character focus before entering the game, so asking
+	-- only for the campfire leaves the background outside that request unloaded.
+	clearMenuStreamFoci(player)
+	local menuCameraPosition = center + Vector3.new(57, 0, 70)
+	local menuTarget = center + Vector3.new(-38, 0, 0)
+	local horizontalForward = Vector3.new(
+		menuTarget.X - menuCameraPosition.X,
+		0,
+		menuTarget.Z - menuCameraPosition.Z
+	).Unit
+	local horizontalRight = Vector3.new(-horizontalForward.Z, 0, horizontalForward.X)
+	local leftViewPosition = center + Vector3.new(-38, 0, 0) - horizontalRight * 140
+	local farViewPosition = center + Vector3.new(-38, 0, 0) + horizontalForward * 170
+	menuStreamFoci[player] = {
+		addMenuStreamFocus(player, menuCameraPosition, 1),
+		addMenuStreamFocus(player, leftViewPosition, 2),
+		addMenuStreamFocus(player, farViewPosition, 3),
+	}
+
+	-- Prefetch the campsite and its menu backdrop together, within one bounded
+	-- wait, so the menu does not reveal the viewport before its edges stream in.
+	local requestPositions = { center, menuCameraPosition, leftViewPosition, farViewPosition }
+	local pendingRequests = #requestPositions
+	local requestErrors: { string } = {}
+	for _, requestPosition in ipairs(requestPositions) do
+		local position = requestPosition
+		task.spawn(function()
+			local ok, message = pcall(function()
+				player:RequestStreamAroundAsync(position, 8)
+			end)
+			if not ok then
+				table.insert(requestErrors, tostring(message))
+			end
+			pendingRequests -= 1
+		end)
+	end
+	local streamDeadline = os.clock() + 8.25
+	while pendingRequests > 0 and player.Parent and os.clock() < streamDeadline do
+		task.wait(0.05)
+	end
+	if not player.Parent then
+		clearMenuStreamFoci(player)
+		return false, "Player left while menu scenery was streaming", nil
+	end
+	if #requestErrors > 0 then
+		clearMenuStreamFoci(player)
+		return false, requestErrors[1], nil
+	end
+	return true, nil, center
+end
 
 local function getGroundedSpawnCFrame(character: Model, spawnLocation: SpawnLocation?): CFrame
 	if not spawnLocation then return CFrame.new(0, 10, 0) end
@@ -254,6 +374,8 @@ local function spawnCharacterForPlayer(player: Player, requestedSelection: any):
 		player:SetAttribute("CurrentCharacterId", "StarterCharacter")
 	end
 	playersInSession[player] = true
+	player:SetAttribute("LobbyInGame", true)
+	clearMenuStreamFoci(player)
 	savedSelections[player] = selection or WardrobeConfig.GetDefaultSelection("Sophie")
 	return true, nil
 end
@@ -302,9 +424,11 @@ local function onPlayerAdded(player: Player)
 end
 
 local function onPlayerRemoving(player: Player)
+	clearMenuStreamFoci(player)
 	playersInSession[player] = nil
 	savedSelections[player] = nil
 	lastSpawnRequest[player] = nil
+	lastMenuStreamRequest[player] = nil
 end
 
 Players.PlayerAdded:Connect(onPlayerAdded)

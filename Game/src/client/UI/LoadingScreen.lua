@@ -5,7 +5,7 @@
     Fluenosity Studio — Modular UI Library.
 
     Features:
-    - High-contrast wallpaper background with subtle vignette overlay.
+    - Obsidian transition curtain with a subtle vignette over the live world.
     - Top-right glassmorphic Survival Intel banner with rotating tips.
     - Responsive center-bottom progress bar HUD with percentage readout.
     - Ember-pulsing animated loading spinner.
@@ -142,65 +142,101 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
     container.Name = "CinematicLoadingScreen"
     container.Size = UDim2.fromScale(1, 1)
     container.Position = UDim2.fromScale(0, 0)
-    container.BackgroundColor3 = Color3.fromRGB(6, 7, 9)
+    container.BackgroundColor3 = Color3.fromRGB(249, 247, 240)
     container.BorderSizePixel = 0
     container.Visible = false
     container.ZIndex = 80
     container.Parent = parent
 
-    -- 1. Fullscreen Wallpaper Image
-    local bgImage = Instance.new("ImageLabel")
-    bgImage.Name = "BackgroundImage"
-    bgImage.Size = UDim2.fromScale(1, 1)
-    bgImage.Position = UDim2.fromScale(0.5, 0.5)
-    bgImage.AnchorPoint = Vector2.new(0.5, 0.5)
-    bgImage.BackgroundTransparency = 1
-    bgImage.Image = UITheme.GetBackgroundAsset()
-    bgImage.ScaleType = Enum.ScaleType.Crop
-    bgImage.ImageTransparency = 0.16
-    bgImage.ZIndex = 81
-    bgImage.Parent = container
-
-    local bgVideo: VideoFrame? = nil
-    local videoAsset = UITheme.GetBackgroundVideo()
-    if videoAsset and videoAsset ~= "" then
-        local vf = Instance.new("VideoFrame")
-        vf.Name = "BackgroundVideo"
-        vf.Size = UDim2.fromScale(1, 1)
-        vf.Position = UDim2.fromScale(0.5, 0.5)
-        vf.AnchorPoint = Vector2.new(0.5, 0.5)
-        vf.BackgroundTransparency = 1
-        vf.Video = videoAsset
-        vf.Looped = true
-        vf.Volume = 0
-        vf.ZIndex = 81
-        vf.Parent = container
-        bgVideo = vf
-    end
-
-    -- 2. Dark Shading Overlay / Vignette
+    -- The loader uses a calm ivory page and does not depend on a thumbnail or video.
     local bgOverlay = Instance.new("Frame")
     bgOverlay.Name = "BgOverlay"
     bgOverlay.Size = UDim2.fromScale(1, 1)
-    bgOverlay.BackgroundColor3 = Color3.fromRGB(6, 7, 10)
-    bgOverlay.BackgroundTransparency = 0.32
+    bgOverlay.BackgroundColor3 = Color3.fromRGB(249, 247, 240)
+    bgOverlay.BackgroundTransparency = 0
     bgOverlay.BorderSizePixel = 0
     bgOverlay.ZIndex = 82
     bgOverlay.Parent = container
 
     local vigGrad = Instance.new("UIGradient")
     vigGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-        ColorSequenceKeypoint.new(0.55, Color3.fromRGB(10, 12, 16)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(2, 3, 5)),
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 254, 250)),
+        ColorSequenceKeypoint.new(0.55, Color3.fromRGB(249, 247, 240)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(242, 238, 227)),
     })
     vigGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.22),
-        NumberSequenceKeypoint.new(0.5, 0.45),
-        NumberSequenceKeypoint.new(1, 0.18),
+        NumberSequenceKeypoint.new(0, 0),
+        NumberSequenceKeypoint.new(0.5, 0),
+        NumberSequenceKeypoint.new(1, 0),
     })
     vigGrad.Rotation = 90
     vigGrad.Parent = bgOverlay
+
+    local sigilRow = Instance.new("Frame")
+    sigilRow.Name = "WildernessSigils"
+    sigilRow.AnchorPoint = Vector2.new(0.5, 0.5)
+    sigilRow.Position = UDim2.fromScale(0.5, 0.47)
+    sigilRow.Size = UDim2.fromOffset(230, 28)
+    sigilRow.BackgroundTransparency = 1
+    sigilRow.ZIndex = 84
+    sigilRow.Parent = container
+
+    local sigilLayout = Instance.new("UIListLayout")
+    sigilLayout.FillDirection = Enum.FillDirection.Horizontal
+    sigilLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    sigilLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    sigilLayout.Padding = UDim.new(0, 16)
+    sigilLayout.Parent = sigilRow
+
+    for index = 1, 5 do
+        local sigil = Instance.new("Frame")
+        sigil.Name = "Sigil" .. index
+        sigil.Size = UDim2.fromOffset(index == 3 and 20 or 16, index == 3 and 20 or 16)
+        sigil.Rotation = 45
+        sigil.BackgroundColor3 = index == 3 and Color3.fromRGB(225, 142, 63) or Color3.fromRGB(155, 148, 132)
+        sigil.BackgroundTransparency = index == 3 and 0.12 or 0.72
+        sigil.BorderSizePixel = 0
+        sigil.ZIndex = 85
+        sigil.Parent = sigilRow
+        local core = Instance.new("Frame")
+        core.Name = "Core"
+        core.AnchorPoint = Vector2.new(0.5, 0.5)
+        core.Position = UDim2.fromScale(0.5, 0.5)
+        core.Size = UDim2.fromOffset(index == 3 and 5 or 3, index == 3 and 5 or 3)
+        core.BackgroundColor3 = Color3.fromRGB(255, 248, 229)
+        core.BorderSizePixel = 0
+        core.ZIndex = 86
+        core.Parent = sigil
+        local coreCorner = Instance.new("UICorner")
+        coreCorner.CornerRadius = UDim.new(1, 0)
+        coreCorner.Parent = core
+    end
+
+    local brandTitle = Instance.new("TextLabel")
+    brandTitle.Name = "LoadingBrandTitle"
+    brandTitle.AnchorPoint = Vector2.new(0.5, 0.5)
+    brandTitle.Position = UDim2.fromScale(0.5, 0.535)
+    brandTitle.Size = UDim2.new(0.9, 0, 0, 30)
+    brandTitle.BackgroundTransparency = 1
+    brandTitle.Font = Enum.Font.Oswald
+    brandTitle.Text = "DON'T LET THE FIRE DIE"
+    brandTitle.TextColor3 = Color3.fromRGB(54, 59, 59)
+    brandTitle.TextSize = 22
+    brandTitle.ZIndex = 84
+    brandTitle.Parent = container
+
+    local headphoneTip = Instance.new("TextLabel")
+    headphoneTip.Name = "HeadphoneTip"
+    headphoneTip.AnchorPoint = Vector2.new(0.5, 0.5)
+    headphoneTip.Position = UDim2.fromScale(0.5, 0.835)
+    headphoneTip.Size = UDim2.new(0.9, 0, 0, 20)
+    headphoneTip.BackgroundTransparency = 1
+    headphoneTip.Font = UITheme.Fonts.Body
+    headphoneTip.Text = "HEADPHONES RECOMMENDED FOR THE WILDERNESS"
+    headphoneTip.TextColor3 = Color3.fromRGB(127, 128, 123)
+    headphoneTip.TextSize = 10
+    headphoneTip.ZIndex = 86
+    headphoneTip.Parent = container
 
     -- 3. Top-Right Content Banner with Horizontal Gradient Glass
     local topRightBanner = Instance.new("Frame")
@@ -211,6 +247,7 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
     topRightBanner.BackgroundColor3 = Color3.fromRGB(8, 10, 14)
     topRightBanner.BorderSizePixel = 0
     topRightBanner.ZIndex = 83
+    topRightBanner.Visible = false
     topRightBanner.Parent = container
 
     local bannerCorner = Instance.new("UICorner")
@@ -318,7 +355,7 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
     stageLabel.BackgroundTransparency = 1
     stageLabel.Font = UITheme.Fonts.Heading
     stageLabel.Text = "INITIALIZING WORLD..."
-    stageLabel.TextColor3 = Color3.fromRGB(240, 244, 250)
+    stageLabel.TextColor3 = Color3.fromRGB(84, 91, 92)
     stageLabel.TextSize = 13
     stageLabel.TextXAlignment = Enum.TextXAlignment.Left
     stageLabel.ZIndex = 88
@@ -343,7 +380,7 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
     trackBar.Name = "TrackBar"
     trackBar.Size = UDim2.new(1, 0, 0, 8)
     trackBar.Position = UDim2.new(0, 0, 0, 25)
-    trackBar.BackgroundColor3 = Color3.fromRGB(12, 14, 18)
+    trackBar.BackgroundColor3 = Color3.fromRGB(221, 217, 206)
     trackBar.BorderSizePixel = 0
     trackBar.ZIndex = 87
     trackBar.Parent = progressHUD
@@ -411,7 +448,7 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
     detailLabel.BackgroundTransparency = 1
     detailLabel.Font = UITheme.Fonts.Body
     detailLabel.Text = "Synchronizing survival environment..."
-    detailLabel.TextColor3 = Color3.fromRGB(150, 160, 175)
+    detailLabel.TextColor3 = Color3.fromRGB(116, 119, 113)
     detailLabel.TextSize = 11
     detailLabel.TextXAlignment = Enum.TextXAlignment.Left
     detailLabel.ZIndex = 88
@@ -425,7 +462,7 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
     sectorLabel.BackgroundTransparency = 1
     sectorLabel.Font = UITheme.Fonts.Body
     sectorLabel.Text = "SECTOR // ALPINE WILDERNESS"
-    sectorLabel.TextColor3 = Color3.fromRGB(120, 130, 145)
+    sectorLabel.TextColor3 = Color3.fromRGB(150, 148, 137)
     sectorLabel.TextSize = 11
     sectorLabel.TextXAlignment = Enum.TextXAlignment.Right
     sectorLabel.ZIndex = 88
@@ -439,6 +476,7 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
     spinnerHolder.AnchorPoint = Vector2.new(1, 1)
     spinnerHolder.BackgroundTransparency = 1
     spinnerHolder.ZIndex = 85
+    spinnerHolder.Visible = false
     spinnerHolder.Parent = container
 
     local spinner = LoadingScreen.CreateSpinner(spinnerHolder, "INITIALIZING WORLD...")
@@ -448,7 +486,7 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
     fadeCurtain.Name = "FadeCurtain"
     fadeCurtain.Size = UDim2.fromScale(1, 1)
     fadeCurtain.Position = UDim2.fromScale(0, 0)
-    fadeCurtain.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    fadeCurtain.BackgroundColor3 = Color3.fromRGB(249, 247, 240)
     fadeCurtain.BackgroundTransparency = 0
     fadeCurtain.BorderSizePixel = 0
     fadeCurtain.ZIndex = 95
@@ -492,15 +530,12 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
             setProgress(0, options and options.Status, options and options.Detail)
         end
         if options and options.Tip then
-            tipBody.Text = options.Tip
+            headphoneTip.Text = options.Tip
         else
-            tipBody.Text = SURVIVAL_TIPS[math.random(1, #SURVIVAL_TIPS)]
+            headphoneTip.Text = SURVIVAL_TIPS[math.random(1, #SURVIVAL_TIPS)]
         end
 
         container.Visible = true
-        if bgVideo then
-            bgVideo:Play()
-        end
         fadeCurtain.BackgroundTransparency = 0
 
         local fadeTween = TweenService:Create(fadeCurtain, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -538,14 +573,10 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
             spinner.SetStatus(statusText)
         end,
         SetTip = function(tipText: string)
-            tipBody.Text = tipText
+            headphoneTip.Text = tipText
         end,
         Hide = hideLoading,
         Destroy = function()
-            if bgVideo then
-                bgVideo:Pause()
-                bgVideo:Destroy()
-            end
             spinner.Destroy()
             container:Destroy()
         end,

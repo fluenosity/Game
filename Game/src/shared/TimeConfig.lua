@@ -30,12 +30,12 @@ TimeConfig.PhaseDurations = {
 
 -- Starting state
 TimeConfig.StartDay = 0
-TimeConfig.StartHour = 22.0
+TimeConfig.StartHour = 14.0
 
 -- Development / Testing Controls
 -- Set FreezeTime to true to freeze time at FreezeHour for development & building
 TimeConfig.FreezeTime = true
-TimeConfig.FreezeHour = 22.0  -- 22.0 = night campfire survival ambiance matching reference image
+TimeConfig.FreezeHour = 14.0  -- 14.0 = midday clear daylight
 TimeConfig.TimeSpeedMultiplier = 1.0  -- Multiplier for clock speed when not frozen
 
 -- Maximum day (game ends after surviving night 5)

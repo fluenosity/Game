@@ -68,8 +68,8 @@ local FemaleBase = {
         HasSmile = true,
         MicroGazeRangeDeg = 1.2,
         HeadRestTiltDeg = 1.0,
-        NeckPostureBackDeg = 6.0,   -- Aligns neck straight and back
-        HeadPostureBackDeg = 9.0,   -- Pulls head back, eliminating forward hunch
+        NeckPostureBackDeg = 11.0,  -- Aligns neck straight and back (neutralizes forward hunch)
+        HeadPostureBackDeg = 14.5,  -- Pulls head back into confident upright posture
     },
 }
 
@@ -95,8 +95,8 @@ local MaleBase = {
         HasSmile = false,
         MicroGazeRangeDeg = 1.0,
         HeadRestTiltDeg = 0.5,
-        NeckPostureBackDeg = 4.5,
-        HeadPostureBackDeg = 7.0,
+        NeckPostureBackDeg = 9.0,   -- Aligns masculine neck upright
+        HeadPostureBackDeg = 12.0,  -- Pulls head back into level gaze
     },
 }
 

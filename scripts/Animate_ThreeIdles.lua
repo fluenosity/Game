@@ -19,6 +19,8 @@ end
 
 local EMOTE_TRANSITION_TIME = 0.1
 
+local animTable = {}
+
 local currentAnim = ""
 local currentAnimInstance = nil
 local currentAnimTrack = nil
@@ -38,15 +40,25 @@ local function getNextIdleAnimation()
 	else
 		idleStep = 1
 	end
-	local idx = idleCycle[idleStep]
-	local animSet = animTable["idle"]
+	local idx = idleCycle[idleStep] or 1
+	local animSet = animTable and animTable["idle"]
 	local nextAnim = (animSet and animSet[idx] and animSet[idx].anim) or (animSet and animSet[1] and animSet[1].anim)
+	if not nextAnim then
+		local idleFolder = script:FindFirstChild("idle")
+		if idleFolder then
+			local animObj = idleFolder:FindFirstChild("Animation1") or idleFolder:FindFirstChildWhichIsA("Animation")
+			if animObj then return animObj end
+		end
+		local fallback = Instance.new("Animation")
+		fallback.Name = "idle"
+		fallback.AnimationId = "rbxassetid://103828063959982"
+		return fallback
+	end
 	return nextAnim
 end
 
 local PreloadedAnims = {}
 
-local animTable = {}
 local animNames = {
 	idle =     {
 		{ id = "rbxassetid://103828063959982", weight = 10 }, -- StaticIDLEMAIND (10s primary static resting idle)
@@ -453,7 +465,8 @@ local toolAnim = "None"
 local toolAnimTime = 0
 
 local jumpAnimTime = 0
-local jumpAnimDuration = 0.31
+local jumpAnimDuration = 0.65 -- Calibrated to Mixamo RunningJumpMain (0.90s @ 1.50x speed = 0.60s)
+local lastLandTime = 0
 
 local toolTransitionTime = 0.1
 local fallTransitionTime = 0.2
@@ -540,6 +553,7 @@ local smallButNotZero = 0.0001
 local normalizedWalkSpeed = 0.47 -- Calibrated for default WalkSpeed = 6 (walk weight = 1.0)
 local normalizedRunSpeed  = 1.25 -- Calibrated for sprint WalkSpeed = 16 (run weight = 1.0)
 
+local lastRunSpeed = -999
 local function setRunSpeed(speed)
 	local runSpeed = rootMotionCompensation(speed)
 
@@ -558,8 +572,13 @@ local function setRunSpeed(speed)
 		timeWarp = math.clamp(runSpeed/normalizedRunSpeed, 0.75, 1.35)
 		runAnimationWeight = 1
 	end
-	currentAnimTrack:AdjustWeight(walkAnimationWeight)
-	runAnimTrack:AdjustWeight(runAnimationWeight)
+
+	-- Smooth weight adjustment when run speed actually changes
+	if math.abs(runSpeed - lastRunSpeed) > 0.05 then
+		lastRunSpeed = runSpeed
+		currentAnimTrack:AdjustWeight(walkAnimationWeight, 0.15)
+		runAnimTrack:AdjustWeight(runAnimationWeight, 0.15)
+	end
 	currentAnimTrack:AdjustSpeed(timeWarp)
 	runAnimTrack:AdjustSpeed(timeWarp)
 end
@@ -692,6 +711,13 @@ local function switchToAnim(anim, animName, transitionTime, humanoid)
 
 			currentAnimTrack:Play(transitionTime, initWalkWeight, timeWarp)
 			runAnimTrack:Play(transitionTime, initRunWeight, timeWarp)
+
+			-- Phase-match landing stride: if transitioning directly from jump into run,
+			-- start runAnimTrack at t = 0.27s (where left leg is forward & right leg back,
+			-- matching RunningJumpMain's touchdown pose with zero foot-swapping glitch)
+			if (os.clock() - lastLandTime < 0.35) and rSpeed > normalizedWalkSpeed then
+				runAnimTrack.TimePosition = 0.27
+			end
 
 			if (runAnimKeyframeHandler ~= nil) then
 				runAnimKeyframeHandler:disconnect()
@@ -829,12 +855,16 @@ function onRunning(speed)
 	local hasMoveIntent = Humanoid.MoveDirection.Magnitude > 0.05
 	if speed > speedThreshold * heightScale or hasMoveIntent then
 		local scale = 16.0
-		playAnimation("walk", 0.2, Humanoid)
+		if currentAnim ~= "walk" then
+			playAnimation("walk", 0.25, Humanoid)
+		end
 		setAnimationSpeed(speed / scale)
 		pose = "Running"
 	else
 		if emoteNames[currentAnim] == nil and not currentlyPlayingEmote then
-			playAnimation("idle", 0.2, Humanoid)
+			if currentAnim ~= "idle" then
+				playAnimation("idle", 0.30, Humanoid)
+			end
 			pose = "Standing"
 		end
 	end
@@ -854,7 +884,8 @@ function onJumping()
 		Humanoid:ChangeState(Enum.HumanoidStateType.Running)
 		return
 	end
-	playAnimation("jump", 0.12, Humanoid)
+	playAnimation("jump", 0.15, Humanoid)
+	setAnimationSpeed(1.50) -- Synchronize jump animation contact timing with Roblox physics flight time (~0.38s)
 	jumpAnimTime = jumpAnimDuration
 	pose = "Jumping"
 end
@@ -872,8 +903,14 @@ function onGettingUp()
 end
 
 function onFreeFall()
+	if os.clock() - lastLandTime < 0.35 then
+		return
+	end
+	if Humanoid.FloorMaterial ~= Enum.Material.Air then
+		return
+	end
 	if (jumpAnimTime <= 0) then
-		if currentAnim ~= "jump" then
+		if currentAnim ~= "jump" and currentAnim ~= "fall" then
 			playAnimation("fall", fallTransitionTime, Humanoid)
 		end
 	end
@@ -949,7 +986,7 @@ function stepAnimate(currentTime)
 		jumpAnimTime = jumpAnimTime - deltaTime
 	end
 
-	if (pose == "FreeFall" and jumpAnimTime <= 0) then
+	if (pose == "FreeFall" and jumpAnimTime <= 0 and Humanoid.FloorMaterial == Enum.Material.Air and (os.clock() - lastLandTime >= 0.35)) then
 		if currentAnim ~= "jump" and currentAnim ~= "fall" then
 			playAnimation("fall", fallTransitionTime, Humanoid)
 		end
@@ -957,11 +994,21 @@ function stepAnimate(currentTime)
 		playAnimation("sit", 0.5, Humanoid)
 		return
 	elseif (pose == "Running") then
-		playAnimation("walk", 0.14, Humanoid)
 		local hrp = Humanoid.RootPart
 		local moveVel = hrp and hrp.AssemblyLinearVelocity or Vector3.zero
 		local hSpeed = Vector3.new(moveVel.X, 0, moveVel.Z).Magnitude
-		setAnimationSpeed(hSpeed / 16.0)
+		local isMoving = hSpeed > 0.75 or Humanoid.MoveDirection.Magnitude > 0.05
+		if not isMoving then
+			if currentAnim ~= "idle" then
+				playAnimation("idle", 0.30, Humanoid)
+			end
+			pose = "Standing"
+		else
+			if currentAnim ~= "walk" then
+				playAnimation("walk", 0.25, Humanoid)
+			end
+			setAnimationSpeed(hSpeed / 16.0)
+		end
 	elseif (pose == "Dead" or pose == "GettingUp" or pose == "FallingDown" or pose == "Seated" or pose == "PlatformStanding") then
 		stopAllAnimations()
 		amplitude = 0.1
@@ -1007,19 +1054,25 @@ Humanoid.Seated:connect(onSeated)
 Humanoid.PlatformStanding:connect(onPlatformStanding)
 Humanoid.Swimming:connect(onSwimming)
 
--- Smooth landing transition: immediately reset jumpAnimTime and transition seamlessly to locomotion/idle
+-- Smooth landing transition: seamlessly crossfade JumpAnim into locomotion or idle
 local function onLanded()
+	lastLandTime = os.clock()
 	jumpAnimTime = 0
-	if currentAnimTrack and (currentAnim == "jump" or currentAnim == "fall") then
-		currentAnimTrack:Stop(0.08)
-	end
 	local hrp = Humanoid.RootPart
 	local moveVel = hrp and hrp.AssemblyLinearVelocity or Vector3.zero
 	local hSpeed = Vector3.new(moveVel.X, 0, moveVel.Z).Magnitude
-	if hSpeed > 0.75 or Humanoid.MoveDirection.Magnitude > 0.05 then
-		onRunning(hSpeed)
+	local isMoving = hSpeed > 0.75 or Humanoid.MoveDirection.Magnitude > 0.05
+	if isMoving then
+		if currentAnim ~= "walk" then
+			playAnimation("walk", 0.25, Humanoid)
+		end
+		setAnimationSpeed(hSpeed / 16.0)
+		pose = "Running"
 	else
-		playAnimation("idle", 0.12, Humanoid)
+		if currentAnim ~= "idle" then
+			idleStep = 1 -- Always land smoothly into primary static resting idle
+			playAnimation("idle", 0.30, Humanoid)
+		end
 		pose = "Standing"
 	end
 end

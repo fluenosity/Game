@@ -17,48 +17,56 @@ local UITheme = require(script.Parent:WaitForChild("UITheme"))
 UITheme.InitAudioRouting()
 local envGroup = UITheme.GetEnvironmentSoundGroup()
 
--- 2. Create / Get Forest Crickets Ambient Sound
+local Lighting = game:GetService("Lighting")
+
+-- 2. Create / Get Forest Crickets Ambient Sound (Nighttime only)
 local CRICKETS_ASSET_ID = "rbxassetid://9112764546" -- Official Roblox Licenced Crickets Night SFX
 
 local function setupCricketsSound(): Sound
     local existing = SoundService:FindFirstChild("ForestNightCrickets") :: Sound?
     if existing and existing:IsA("Sound") then
         existing.SoundGroup = envGroup
-        if not existing.IsPlaying then
-            existing:Play()
-        end
         return existing
     end
     
     local crickets = Instance.new("Sound")
     crickets.Name = "ForestNightCrickets"
     crickets.SoundId = CRICKETS_ASSET_ID
-    crickets.Volume = 0.32 -- Gentle, relaxing background audio
+    crickets.Volume = 0
     crickets.Looped = true
     crickets.SoundGroup = envGroup
     crickets.Parent = SoundService
-    
-    task.spawn(function()
-        -- Wait for sound to load and start playback
-        if not crickets.IsLoaded then
-            crickets.Loaded:Wait()
-        end
-        crickets:Play()
-    end)
     
     return crickets
 end
 
 local cricketsSound = setupCricketsSound()
 
--- Keep sound alive and playing smoothly across map changes
+-- Dynamic Time-of-Day Ambient Audio:
+-- Crickets only chirp during nighttime (ClockTime < 6.0 or ClockTime > 18.0).
+-- During daytime (ClockTime 14:00 dev mode), night crickets are muted to eliminate high-frequency chirping/tinging.
+local function updateAmbientCycle()
+    local clock = Lighting.ClockTime
+    local isNight = (clock < 6.0 or clock > 18.0)
+    if isNight then
+        if not cricketsSound.IsPlaying then
+            pcall(function() cricketsSound:Play() end)
+        end
+        cricketsSound.Volume = 0.20
+    else
+        cricketsSound.Volume = 0
+        if cricketsSound.IsPlaying then
+            pcall(function() cricketsSound:Stop() end)
+        end
+    end
+end
+
+updateAmbientCycle()
+Lighting:GetPropertyChangedSignal("ClockTime"):Connect(updateAmbientCycle)
+
 task.spawn(function()
     while true do
-        task.wait(5.0)
-        if cricketsSound and cricketsSound.Parent and not cricketsSound.IsPlaying then
-            pcall(function()
-                cricketsSound:Play()
-            end)
-        end
+        task.wait(4.0)
+        updateAmbientCycle()
     end
 end)

@@ -41,6 +41,9 @@
         "FluenosityClient": {
           "$path": "src/client",
           "$ignoreUnknownInstances": true
+        },
+        "RbxCharacterSounds": {
+          "$path": "src/client_override/RbxCharacterSounds.client.lua"
         }
       }
     }

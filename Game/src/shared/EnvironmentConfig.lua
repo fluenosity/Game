@@ -299,16 +299,16 @@ EnvironmentConfig.POST_PROCESSING = {
     EnableTerrainDecoration = true,
     
     Lighting = {
-        Brightness = 0.8,
-        Ambient = Color3.fromRGB(25, 30, 45),
-        OutdoorAmbient = Color3.fromRGB(22, 28, 45),
+        Brightness = 2.8,
+        Ambient = Color3.fromRGB(75, 90, 110),
+        OutdoorAmbient = Color3.fromRGB(115, 132, 150),
         ShadowSoftness = 0.15,
-        ClockTime = 22.0, -- Night setting matching reference screenshot and "choose champ view at night"
+        ClockTime = 14.5,
         GeographicLatitude = 48.0,
         ExposureCompensation = 0.02,
         EnvironmentDiffuseScale = 1.0,
         EnvironmentSpecularScale = 0.85,
-        FogEnd = 400, -- Atmospheric misty night forest
+        FogEnd = 2400, -- High FogEnd so foreground/midground terrain is crisp
     },
     Atmosphere = {
         Density = 0.34,                           -- Balanced aerial perspective

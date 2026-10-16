@@ -33,7 +33,7 @@ export type SurvivorCharacter = {
 	AltIdles: { [string]: string },
 }
 
-Config.CharacterOrder = { "Sophie", "Jody", "Bryce" }
+Config.CharacterOrder = { "Sophie", "Jody", "Bryce", "Remy" }
 
 Config.Characters = {
 	Sophie = {

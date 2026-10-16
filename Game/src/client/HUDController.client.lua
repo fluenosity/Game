@@ -71,6 +71,7 @@ local activeHumanoid: Humanoid? = nil
 local characterJumpConn: RBXScriptConnection? = nil
 local characterHealthConn: RBXScriptConnection? = nil
 local jumpCooldownThread: thread? = nil
+local isJumpInCooldown = false
 local isJumpInputHeld = false
 local JUMP_RECOVERY_GAP = 0.10 -- Snappy 100ms grounded recovery gap (prevents hold-to-bunnyhop & mid-air spam)
 
@@ -81,6 +82,29 @@ local function isJumpPhysicallyHeld(): boolean
         return UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonA)
     end)
     return ok and isDown == true
+end
+
+local function hasMovementInput(): boolean
+    if activeHumanoid and activeHumanoid.MoveDirection.Magnitude > 0.05 then
+        return true
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.W)
+        or UserInputService:IsKeyDown(Enum.KeyCode.A)
+        or UserInputService:IsKeyDown(Enum.KeyCode.S)
+        or UserInputService:IsKeyDown(Enum.KeyCode.D)
+        or UserInputService:IsKeyDown(Enum.KeyCode.Up)
+        or UserInputService:IsKeyDown(Enum.KeyCode.Down)
+        or UserInputService:IsKeyDown(Enum.KeyCode.Left)
+        or UserInputService:IsKeyDown(Enum.KeyCode.Right) then
+        return true
+    end
+    if activeCharacter and activeCharacter.PrimaryPart then
+        local vel = activeCharacter.PrimaryPart.AssemblyLinearVelocity
+        if Vector3.new(vel.X, 0, vel.Z).Magnitude > 0.8 then
+            return true
+        end
+    end
+    return false
 end
 
 -- Client inventory state (12 slots)
@@ -729,8 +753,14 @@ local function setupCharacter(character: Model)
     isFatigued = false
     activeHumanoid.WalkSpeed = normalWalkSpeed
     activeHumanoid.UseJumpPower = true
-    activeHumanoid.JumpPower = normalJumpPower
-    activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+    activeHumanoid.JumpPower = 0 -- Proactively 0 in idle; elevated to normalJumpPower during active movement
+    activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+    isJumpInCooldown = false
+    if jumpCooldownThread then
+        task.cancel(jumpCooldownThread)
+        jumpCooldownThread = nil
+    end
+
     if player:GetAttribute("IsTPP") == true then
         player.CameraMode = Enum.CameraMode.Classic
         player.CameraMinZoomDistance = 6
@@ -757,54 +787,56 @@ local function setupCharacter(character: Model)
     -- 1. One Space = One Jump (no continuous bunny-hopping when holding Space).
     -- 2. Spam Prevention: Character must complete the jump, land, and finish the recovery gap
     --    before another jump can ever trigger.
+    -- 3. Movement Enforcement: Jumping is strictly permitted ONLY while actively moving.
     characterJumpConn = activeHumanoid.Jumping:Connect(function(isActive: boolean)
         if isActive and activeHumanoid.Health > 0 then
             -- Verify active movement intent: idle jumping is strictly blocked
-            local moveMag = activeHumanoid.MoveDirection.Magnitude
-            local hSpeed = 0
-            if activeCharacter and activeCharacter.PrimaryPart then
-                local vel = activeCharacter.PrimaryPart.AssemblyLinearVelocity
-                hSpeed = Vector3.new(vel.X, 0, vel.Z).Magnitude
-            end
-            if moveMag <= 0.05 and hSpeed <= 1.2 then
-                -- Player is standing still: abort jump immediately
-                activeHumanoid:ChangeState(Enum.HumanoidStateType.Running)
+            local isMoving = hasMovementInput()
+            if not isMoving then
+                -- Player is standing still: abort jump immediately and ensure no physics launch
+                activeHumanoid.JumpPower = 0
                 activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+                activeHumanoid:ChangeState(Enum.HumanoidStateType.Running)
                 return
             end
 
-            -- Immediately lock jumping state so mid-air spam or holding space is blocked
-            activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+            -- Valid moving jump: start debounce & allow full physics launch
+            if isJumpInCooldown then return end
+            isJumpInCooldown = true
 
             if jumpCooldownThread then
                 task.cancel(jumpCooldownThread)
             end
 
             jumpCooldownThread = task.spawn(function()
-                -- 1. Wait until character leaves the ground (becomes airborne)
+                -- 1. Let the physics engine execute the full upward jump impulse
                 local t0 = os.clock()
-                while activeHumanoid and activeHumanoid.FloorMaterial ~= Enum.Material.Air and (os.clock() - t0 < 0.35) do
+                while activeHumanoid and activeHumanoid.FloorMaterial ~= Enum.Material.Air and (os.clock() - t0 < 0.20) do
                     task.wait()
                 end
 
-                -- 2. Wait until character lands back on the ground
+                -- 2. Once airborne, disable jumping state to prevent mid-air spam / bunny-hop
+                if activeHumanoid then
+                    activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+                end
+
+                -- 3. Wait until character lands back on the ground
                 t0 = os.clock()
                 while activeHumanoid and activeHumanoid.FloorMaterial == Enum.Material.Air and (os.clock() - t0 < 8.0) do
                     task.wait()
                 end
 
-                -- 3. Recovery gap: Let the landing animation & physical compression finish cleanly
+                -- 4. Recovery gap: Let the landing animation finish cleanly
                 task.wait(JUMP_RECOVERY_GAP)
 
-                -- 4. Hold prevention: Wait until player releases the jump key
+                -- 5. Hold prevention: Wait until player releases the jump key
                 while isJumpPhysicallyHeld() do
                     task.wait()
                 end
 
-                -- 5. Re-enable jumping for the next fresh jump press
-                if activeHumanoid and not isFatigued then
-                    activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-                end
+                -- 6. Clear cooldown flag and reset thread pointer!
+                isJumpInCooldown = false
+                jumpCooldownThread = nil
             end)
 
             if not UNLIMITED_STAMINA_DEV then
@@ -882,25 +914,20 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
     -- Movement speed arbitration (attacks stay mobile; Walk = 6, Sprint = 16)
     local isAttacking = (activeCharacter and activeCharacter:GetAttribute("IsAttacking") == true)
 
+    -- Continuously enforce: jumping requires active movement (idle jump strictly blocked)
+    if activeHumanoid and jumpCooldownThread == nil then
+        local isMovingOrRunning = hasMovementInput()
+        local canJump = isMovingOrRunning and not isFatigued
+        activeHumanoid.JumpPower = canJump and normalJumpPower or 0
+        activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, canJump)
+    end
+
     if UNLIMITED_STAMINA_DEV then
         currentStamina = maxStamina
         isFatigued = false
         if activeHumanoid then
             local targetSpeed = isSprinting and sprintWalkSpeed or normalWalkSpeed
             activeHumanoid.WalkSpeed = targetSpeed
-            activeHumanoid.JumpPower = normalJumpPower
-
-            -- Continuously enforce: jumping requires active movement (idle jump strictly blocked)
-            if jumpCooldownThread == nil then
-                local moveMag = activeHumanoid.MoveDirection.Magnitude
-                local hSpeed = 0
-                if activeCharacter and activeCharacter.PrimaryPart then
-                    local vel = activeCharacter.PrimaryPart.AssemblyLinearVelocity
-                    hSpeed = Vector3.new(vel.X, 0, vel.Z).Magnitude
-                end
-                local isMovingOrRunning = (moveMag > 0.05) or (hSpeed > 1.2)
-                activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, isMovingOrRunning and not isFatigued)
-            end
         end
         vitalsInstance.SetStamina(maxStamina, maxStamina)
     else
