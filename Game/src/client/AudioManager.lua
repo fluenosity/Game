@@ -250,6 +250,7 @@ local MATERIAL_MAP: { [Enum.Material]: string } = {
     [Enum.Material.Ground] = "Dirt",
     [Enum.Material.Mud] = "Dirt",
     [Enum.Material.Sand] = "Dirt",
+    [Enum.Material.Snow] = "Dirt",
     [Enum.Material.Rock] = "Stone",
     [Enum.Material.Slate] = "Stone",
     [Enum.Material.Basalt] = "Stone",
@@ -257,12 +258,20 @@ local MATERIAL_MAP: { [Enum.Material]: string } = {
     [Enum.Material.Brick] = "Stone",
     [Enum.Material.Cobblestone] = "Stone",
     [Enum.Material.Pavement] = "Stone",
+    [Enum.Material.Sandstone] = "Stone",
+    [Enum.Material.Limestone] = "Stone",
+    [Enum.Material.Asphalt] = "Stone",
+    [Enum.Material.CrackedLava] = "Stone",
+    [Enum.Material.Ice] = "Stone",
+    [Enum.Material.Glacier] = "Stone",
+    [Enum.Material.Salt] = "Stone",
     [Enum.Material.Wood] = "Wood",
     [Enum.Material.WoodPlanks] = "Wood",
     [Enum.Material.Metal] = "Metal",
     [Enum.Material.CorrodedMetal] = "Metal",
     [Enum.Material.DiamondPlate] = "Metal",
     [Enum.Material.Water] = "Water",
+    [Enum.Material.Air] = "Grass",
 }
 
 local MATERIAL_FOOTSTEPS: { [string]: { SoundIds: { string }, BasePitch: number, BaseVol: number } } = {
@@ -326,6 +335,7 @@ local MATERIAL_LANDINGS: { [string]: { SoundId: string, Pitch: number, Volume: n
 
 local lastMaterialIndices: { [string]: number } = {}
 local lastStepTimesByPart: { [Instance]: number } = setmetatable({}, { __mode = "k" })
+local partFootstepPools: { [Instance]: { [string]: Sound } } = setmetatable({}, { __mode = "k" })
 local fallbackLastStepTime = 0
 
 -- -----------------------------------------------------------------------------
@@ -343,6 +353,64 @@ local function getUISoundGroup(): SoundGroup
     local sfxGroup = UITheme.GetSFXSoundGroup()
     uiSoundGroup = sfxGroup
     return sfxGroup
+end
+
+local function getPartMaterialFootstepSound(attachPart: BasePart?, matName: string, footIndex: number, soundId: string): Sound
+    local group = getUISoundGroup()
+    if not attachPart then
+        local sound = Instance.new("Sound")
+        sound.SoundId = soundId
+        sound.SoundGroup = group
+        sound.Parent = group
+        return sound
+    end
+
+    local pool = partFootstepPools[attachPart]
+    if not pool then
+        pool = {}
+        partFootstepPools[attachPart] = pool
+        attachPart.AncestryChanged:Once(function(_, parent)
+            if not parent then
+                partFootstepPools[attachPart] = nil
+            end
+        end)
+    end
+
+    local poolKey = matName .. "_" .. tostring(footIndex)
+    local sound = pool[poolKey]
+    if not sound or not sound.Parent then
+        local existing = attachPart:FindFirstChild("Footstep_" .. poolKey)
+        if existing and existing:IsA("Sound") then
+            sound = existing
+        else
+            sound = Instance.new("Sound")
+            sound.Name = "Footstep_" .. poolKey
+            sound.SoundId = soundId
+            sound.SoundGroup = group
+            sound.RollOffMode = Enum.RollOffMode.InverseTapered
+            sound.RollOffMinDistance = 3
+            sound.RollOffMaxDistance = 50
+            sound.Parent = attachPart
+        end
+        pool[poolKey] = sound
+    end
+    if sound.SoundId ~= soundId then
+        sound.SoundId = soundId
+    end
+
+    return sound
+end
+
+--- Pre-warms dedicated footstep Sound instances for all material archetypes on the character
+function AudioManager.PrewarmFootsteps(attachPart: BasePart?): ()
+    if not attachPart then return end
+    for matName, cfg in pairs(MATERIAL_FOOTSTEPS) do
+        local ids = cfg.SoundIds
+        if #ids >= 1 then
+            getPartMaterialFootstepSound(attachPart, matName, 1, ids[1])
+            getPartMaterialFootstepSound(attachPart, matName, 2, ids[2] or ids[1])
+        end
+    end
 end
 
 -- Retrieves or instantiates a pooled Sound instance for playback
@@ -439,8 +507,8 @@ end
 --- Play high-fidelity, material-reactive footstep with round-robin variation and left/right stereo/pitch cadence
 function AudioManager.PlayFootstep(floorMaterial: Enum.Material?, isSprinting: boolean?, isLeftFoot: boolean?, attachPart: BasePart?): ()
     local now = os.clock()
-    -- Fast debounce per character to allow crisp high-speed footfalls without skipping (0.10s sprint, 0.14s walk)
-    local minGap = if isSprinting then 0.10 else 0.14
+    -- Fast safety debounce (0.04s) guarantees zero skipped footsteps even during rapid sprints
+    local minGap = 0.04
     local lastStepTime = if attachPart then (lastStepTimesByPart[attachPart] or 0) else fallbackLastStepTime
     if now - lastStepTime < minGap then
         return
@@ -463,7 +531,7 @@ function AudioManager.PlayFootstep(floorMaterial: Enum.Material?, isSprinting: b
     elseif isLeftFoot == true then
         soundId = ids[1]
     elseif isLeftFoot == false then
-        soundId = ids[2]
+        soundId = ids[2] or ids[1]
     else
         local lastIdx = lastMaterialIndices[matName] or 0
         local nextIdx = if lastIdx == 1 then 2 else 1
@@ -471,7 +539,9 @@ function AudioManager.PlayFootstep(floorMaterial: Enum.Material?, isSprinting: b
         soundId = ids[nextIdx]
     end
 
-    local basePitch = pool.BasePitch
+    -- Crisp, short, tactile footstep tuning ("prefer short")
+    -- Slightly increased base pitch (1.08x) produces short, snappy ground contacts with zero dragging tail
+    local basePitch = pool.BasePitch * 1.08
     local baseVol = pool.BaseVol
 
     -- Distinct Left vs Right foot acoustic signature (Left = slightly deeper, Right = slightly crisper)
@@ -483,108 +553,46 @@ function AudioManager.PlayFootstep(floorMaterial: Enum.Material?, isSprinting: b
         end
     end
 
-    -- Sprinting: +20% volume, +3% energetic pitch
+    -- Sprinting: +20% volume, +6% crisp energetic pitch
     if isSprinting then
         baseVol = baseVol * 1.20
-        basePitch = basePitch * 1.03
+        basePitch = basePitch * 1.06
     end
 
     -- Organic micro-pitch variance (+/- 2%)
     local pitchVariance = (math.random() - 0.5) * 0.04
-    local finalPitch = math.clamp(basePitch + pitchVariance, 0.80, 1.40)
+    local finalPitch = math.clamp(basePitch + pitchVariance, 0.85, 1.45)
 
-    local group = getUISoundGroup()
-    local sound = Instance.new("Sound")
-    sound.Name = "Footstep_" .. matName .. (if isLeftFoot == true then "_L" elseif isLeftFoot == false then "_R" else "")
-    sound.SoundId = soundId
+    local footIndex = if isLeftFoot == true then 1 else 2
+    local sound = getPartMaterialFootstepSound(attachPart, matName, footIndex, soundId)
     sound.Volume = baseVol
     sound.PlaybackSpeed = finalPitch
-    sound.SoundGroup = group
-    sound.RollOffMode = Enum.RollOffMode.InverseTapered
-    sound.RollOffMinDistance = 3
-    sound.RollOffMaxDistance = 50
-
-    if attachPart and attachPart:IsA("BasePart") then
-        sound.Parent = attachPart
-    else
-        sound.Parent = group
-    end
+    sound.TimePosition = 0
     sound:Play()
-
-    sound.Ended:Once(function()
-        sound:Destroy()
-    end)
-    task.delay(0.9, function()
-        if sound and sound.Parent then
-            sound:Destroy()
-        end
-    end)
 end
 
---- Play responsive landing audio based on ground material and impact speed
+--- Play responsive landing audio based on ground material (triggers natural terrain footstep contact)
 function AudioManager.PlayLanding(floorMaterial: Enum.Material?, impactSpeed: number?, attachPart: BasePart?): ()
     local matName = AudioManager.GetMaterialName(floorMaterial)
-    local landingCfg = MATERIAL_LANDINGS[matName] or MATERIAL_LANDINGS["Grass"]
+    local pool = MATERIAL_FOOTSTEPS[matName] or MATERIAL_FOOTSTEPS["Grass"]
+    local ids = pool.SoundIds
+    if #ids == 0 then return end
 
-    local spd = impactSpeed or 10
-    local volMultiplier = math.clamp(spd / 12, 0.7, 1.5)
+    -- Solid terrain touchdown contact (using the exact physical terrain sound)
+    local soundId = ids[1]
+    local basePitch = pool.BasePitch * 0.98 -- Slightly deeper, weight-bearing touchdown pitch
+    local baseVol = pool.BaseVol * 1.35     -- Solid tactile body touchdown volume
 
-    local group = getUISoundGroup()
-    local sound = Instance.new("Sound")
-    sound.Name = "Landing_" .. matName
-    sound.SoundId = landingCfg.SoundId
-    sound.Volume = landingCfg.Volume * volMultiplier
-    sound.PlaybackSpeed = landingCfg.Pitch + ((math.random() - 0.5) * 0.04)
-    sound.SoundGroup = group
-    sound.RollOffMode = Enum.RollOffMode.InverseTapered
-    sound.RollOffMinDistance = 3
-    sound.RollOffMaxDistance = 50
-
-    if attachPart and attachPart:IsA("BasePart") then
-        sound.Parent = attachPart
-    else
-        sound.Parent = group
-    end
+    local sound = getPartMaterialFootstepSound(attachPart, matName, 1, soundId)
+    sound.Volume = baseVol
+    sound.PlaybackSpeed = basePitch
+    sound.TimePosition = 0
     sound:Play()
-
-    sound.Ended:Once(function()
-        sound:Destroy()
-    end)
-    task.delay(1.2, function()
-        if sound and sound.Parent then
-            sound:Destroy()
-        end
-    end)
 end
 
---- Play athletic jump takeoff sound (soft clothing rustle, zero cartoon spring/ting)
+--- Jump takeoff audio (silenced for clean, clutter-free jumps)
 function AudioManager.PlayJumpTakeoff(attachPart: BasePart?): ()
-    local group = getUISoundGroup()
-    local sound = Instance.new("Sound")
-    sound.Name = "JumpTakeoff"
-    sound.SoundId = "rbxassetid://15675075163"
-    sound.Volume = 0.14
-    sound.PlaybackSpeed = 1.00 + ((math.random() - 0.5) * 0.05)
-    sound.SoundGroup = group
-    sound.RollOffMode = Enum.RollOffMode.InverseTapered
-    sound.RollOffMinDistance = 3
-    sound.RollOffMaxDistance = 45
-
-    if attachPart and attachPart:IsA("BasePart") then
-        sound.Parent = attachPart
-    else
-        sound.Parent = group
-    end
-    sound:Play()
-
-    sound.Ended:Once(function()
-        sound:Destroy()
-    end)
-    task.delay(0.8, function()
-        if sound and sound.Parent then
-            sound:Destroy()
-        end
-    end)
+    -- Deliberately silent
 end
 
 --- Scans a UI container and attaches hover and click SFX to all text and image buttons

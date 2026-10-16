@@ -149,12 +149,14 @@ local ANIM_FOOTSTEP_TIMELINES: { [string]: { Right: number, Left: number, IsRun:
 }
 
 type FootstepTracker = {
-    LastNormPos: number,
+    IsActive: boolean,
+    StepTimer: number,
+    NextIsLeft: boolean,
+    StepInterval: number,
+    StopGraceTime: number,
     LastTrack: AnimationTrack?,
-    LastTriggerClock: number,
     LastHRPPos: Vector3?,
-    StepDistanceAccum: number,
-    IsLeftStep: boolean,
+    LastFloorMaterial: Enum.Material?,
 }
 
 local characterTrackers: { [Model]: FootstepTracker } = setmetatable({}, { __mode = "k" })
@@ -163,49 +165,71 @@ local function getCharacterTracker(char: Model): FootstepTracker
     local tracker = characterTrackers[char]
     if not tracker then
         tracker = {
-            LastNormPos = -1.0,
+            IsActive = false,
+            StepTimer = 0,
+            NextIsLeft = false,
+            StepInterval = 0.28,
+            StopGraceTime = 0,
             LastTrack = nil,
-            LastTriggerClock = 0.0,
             LastHRPPos = nil,
-            StepDistanceAccum = STEP_STRIDE_WALK * 0.75,
-            IsLeftStep = true,
+            LastFloorMaterial = nil,
         }
         characterTrackers[char] = tracker
     end
     return tracker
 end
 
-local function findLocomotionTrack(animator: Animator): (AnimationTrack?, boolean, { Right: number, Left: number, IsRun: boolean }?)
+local function findLocomotionTrack(animator: Animator, wantsSprint: boolean?): (AnimationTrack?, boolean, { Right: number, Left: number, IsRun: boolean }?)
     local bestTrack: AnimationTrack? = nil
-    local bestEffectiveWeight = 0.01
     local isRun = false
     local matchedTimeline: { Right: number, Left: number, IsRun: boolean }? = nil
 
-    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-        local effectiveWeight = math.max(track.WeightCurrent, track.WeightTarget)
-        if track.IsPlaying and effectiveWeight > bestEffectiveWeight then
-            local tName = track.Name
+    local playingTracks = animator:GetPlayingAnimationTracks()
+
+    -- 1. Lock strictly to the preferred track based on sprint intent (prevents weight-jitter flip-flopping)
+    for _, track in ipairs(playingTracks) do
+        if track.IsPlaying then
             local aId = track.Animation and track.Animation.AnimationId or ""
             local cleanId = string.match(aId, "%d+") or ""
             local timeline = ANIM_FOOTSTEP_TIMELINES[cleanId]
 
-            if timeline then
-                if timeline.IsRun or not isRun then
-                    bestTrack = track
-                    bestEffectiveWeight = effectiveWeight
-                    isRun = timeline.IsRun
-                    matchedTimeline = timeline
+            if wantsSprint == true then
+                if (timeline and timeline.IsRun) or string.find(string.lower(track.Name), "run") then
+                    return track, true, timeline or { Right = 0.05, Left = 0.52, IsRun = true }
                 end
-            elseif tName == "RunAnim" or string.find(string.lower(tName), "run") then
+            else
+                if (timeline and not timeline.IsRun) or string.find(string.lower(track.Name), "walk") then
+                    return track, false, timeline or { Right = 0.17, Left = 0.58, IsRun = false }
+                end
+            end
+        end
+    end
+
+    -- 2. Fallback: select whichever locomotion track has highest current weight
+    local bestWeight = 0.01
+    for _, track in ipairs(playingTracks) do
+        local w = track.WeightCurrent
+        if track.IsPlaying and w > bestWeight then
+            local aId = track.Animation and track.Animation.AnimationId or ""
+            local cleanId = string.match(aId, "%d+") or ""
+            local timeline = ANIM_FOOTSTEP_TIMELINES[cleanId]
+            local tName = track.Name
+
+            if timeline then
                 bestTrack = track
-                bestEffectiveWeight = effectiveWeight
+                bestWeight = w
+                isRun = timeline.IsRun
+                matchedTimeline = timeline
+            elseif string.find(string.lower(tName), "run") then
+                bestTrack = track
+                bestWeight = w
                 isRun = true
                 matchedTimeline = { Right = 0.05, Left = 0.52, IsRun = true }
-            elseif (tName == "WalkAnim" or string.find(string.lower(tName), "walk")) and not isRun then
+            elseif string.find(string.lower(tName), "walk") then
                 bestTrack = track
-                bestEffectiveWeight = effectiveWeight
+                bestWeight = w
                 isRun = false
-                matchedTimeline = { Right = 0.18, Left = 0.62, IsRun = false }
+                matchedTimeline = { Right = 0.17, Left = 0.58, IsRun = false }
             end
         end
     end
@@ -229,7 +253,8 @@ local function evaluateCharacterFootsteps(
     if not isLocal then
         -- Co-op Audio Culling: Skip remote players beyond audible range (60 studs)
         if not camera or (hrp.Position - camera.CFrame.Position).Magnitude > 60 then
-            tracker.LastNormPos = -1.0
+            tracker.IsActive = false
+            tracker.StepTimer = 0
             tracker.LastTrack = nil
             tracker.LastHRPPos = nil
             return
@@ -239,126 +264,130 @@ local function evaluateCharacterFootsteps(
     local isMoving = false
     local isGrounded = false
     local isSprinting = false
+    local detectedFloorMat: Enum.Material? = hum.FloorMaterial
+    local isDeliberateJump = (hum:GetState() == Enum.HumanoidStateType.Jumping)
 
     if isLocal then
         isMoving = isMovingLocal == true
-        isGrounded = state.IsGrounded
         isSprinting = wantsSprintLocal == true
     else
         local moveVel = hrp.AssemblyLinearVelocity * Vector3.new(1, 0, 1)
         local moveSpeed = moveVel.Magnitude
         isMoving = (moveSpeed > 1.2) or (hum.MoveDirection.Magnitude > 0.05)
-        isGrounded = (hum.FloorMaterial ~= Enum.Material.Air)
-        isSprinting = (moveSpeed > 20)
+        isSprinting = (moveSpeed > 12)
     end
 
-    if not isMoving or not isGrounded then
-        tracker.LastNormPos = -1.0
-        tracker.LastTrack = nil
-        tracker.LastHRPPos = nil
-        tracker.StepDistanceAccum = STEP_STRIDE_WALK * 0.75
+    -- Deep Ground and Floor Material Detection (Rock-solid across terrain boundaries):
+    if detectedFloorMat ~= Enum.Material.Air and detectedFloorMat ~= nil then
+        isGrounded = true
+    elseif hum:GetState() == Enum.HumanoidStateType.Running or hum:GetState() == Enum.HumanoidStateType.RunningNoPhysics then
+        isGrounded = true
+    end
+
+    -- Downward raycast (6.0 studs) provides seamless resilience across terrain seams/elevation ruts
+    if hrp then
+        local rayParams = RaycastParams.new()
+        rayParams.FilterDescendantsInstances = { char }
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+        local hit = workspace:Raycast(hrp.Position, Vector3.new(0, -6.0, 0), rayParams)
+        if hit then
+            if not isDeliberateJump then
+                isGrounded = true
+            end
+            if detectedFloorMat == Enum.Material.Air or detectedFloorMat == nil then
+                detectedFloorMat = hit.Material
+            end
+        end
+    end
+
+    -- Locomotion Cadence Discontinuation Check:
+    -- Footsteps and stride cadence ONLY stop when:
+    -- 1. Character has actually stopped moving (no input, zero horizontal speed)
+    -- 2. Character is in a deliberate high jump (Jumping state) or freefalling fast (> 15 studs/s down)
+    local isAirborneJump = isDeliberateJump or (not isGrounded and hrp.AssemblyLinearVelocity.Y < -15)
+
+    if not isMoving or isAirborneJump then
+        tracker.StopGraceTime = tracker.StopGraceTime + dt
+        if tracker.StopGraceTime > 0.16 then
+            tracker.IsActive = false
+            tracker.StepTimer = 0
+            tracker.LastTrack = nil
+        end
         if isLocal then
             state.WalkCycleClock = state.WalkCycleClock + dt * 1.8 -- Idle breathing cadence
         end
         return
+    else
+        tracker.StopGraceTime = 0
     end
 
     local animator = if isLocal then (activeAnimator or hum:FindFirstChildOfClass("Animator")) else hum:FindFirstChildOfClass("Animator")
     local activeTrack: AnimationTrack? = nil
     local isRunTrack = isSprinting
-    local matchedTimeline: { Right: number, Left: number, IsRun: boolean }? = nil
 
     if animator then
-        activeTrack, isRunTrack, matchedTimeline = findLocomotionTrack(animator)
+        activeTrack, isRunTrack = findLocomotionTrack(animator, isSprinting)
     end
+
+    -- Derive exact cadence interval per single step:
+    -- Athletic sprint: ~3.4 to 3.7 steps/sec -> interval ~ 0.26s - 0.28s (rapid!)
+    -- Walk: calibrated to normalWalkSpeed (6) -> interval ~ 0.50s - 0.64s
+    local targetInterval: number
+    if activeTrack and activeTrack.Length > 0.1 then
+        local animSpeed = math.max(0.65, math.abs(activeTrack.Speed))
+        local halfCycle = (activeTrack.Length / animSpeed) * 0.5
+        if isRunTrack then
+            targetInterval = math.clamp(halfCycle, 0.25, 0.29)
+        else
+            targetInterval = math.clamp(halfCycle, 0.50, 0.64)
+        end
+    else
+        targetInterval = if isRunTrack then 0.28 else 0.58
+    end
+    -- Smoothly adapt interval without abrupt jumps:
+    tracker.StepInterval = tracker.StepInterval + (targetInterval - tracker.StepInterval) * math.clamp(dt * 8, 0, 1)
 
     local stepTriggered = false
     local triggeredIsLeft = false
 
-    if activeTrack and activeTrack.Length > 0.1 then
-        local trackLen = activeTrack.Length
-        local currentTimePos = activeTrack.TimePosition % trackLen
-        local normPos = currentTimePos / trackLen
-
-        if isLocal then
-            -- Phase-lock local FPP viewmodel arm swing and camera motion smoothly to skeletal master cycle:
-            local targetClock = normPos * (math.pi * 2)
-            local diff = (targetClock - state.WalkCycleClock + math.pi) % (2 * math.pi) - math.pi
-            state.WalkCycleClock = state.WalkCycleClock + diff * math.clamp(dt * 6, 0, 1)
+    if not tracker.IsActive then
+        -- Initial takeoff detection: check active animation track phase at movement start
+        local initialIsLeft = false
+        if activeTrack and activeTrack.Length > 0.1 then
+            local normPos = (activeTrack.TimePosition % activeTrack.Length) / activeTrack.Length
+            initialIsLeft = (normPos >= 0.28 and normPos < 0.78)
         end
 
-        local rStep = if matchedTimeline then matchedTimeline.Right else (if isRunTrack then 0.05 else 0.18)
-        local lStep = if matchedTimeline then matchedTimeline.Left else (if isRunTrack then 0.52 else 0.62)
-
-        if tracker.LastTrack == activeTrack and tracker.LastNormPos >= 0 then
-            local crossedR = false
-            local crossedL = false
-
-            if normPos >= tracker.LastNormPos then
-                crossedR = (tracker.LastNormPos < rStep and normPos >= rStep)
-                crossedL = (tracker.LastNormPos < lStep and normPos >= lStep)
-            else
-                -- Loop wrap-around across 0.0 boundary
-                crossedR = (tracker.LastNormPos < rStep or normPos >= rStep)
-                crossedL = (tracker.LastNormPos < lStep or normPos >= lStep)
-            end
-
-            local nowClock = os.clock()
-            local minInterval = if isRunTrack then 0.11 else 0.16
-            if crossedR and (nowClock - tracker.LastTriggerClock >= minInterval) then
-                tracker.LastTriggerClock = nowClock
-                stepTriggered = true
-                triggeredIsLeft = false -- Right foot touchdown
-            elseif crossedL and (nowClock - tracker.LastTriggerClock >= minInterval) then
-                tracker.LastTriggerClock = nowClock
-                stepTriggered = true
-                triggeredIsLeft = true -- Left foot touchdown
-            end
-        end
-
-        tracker.LastNormPos = normPos
-        tracker.LastTrack = activeTrack
+        tracker.IsActive = true
+        tracker.StepTimer = 0
+        stepTriggered = true
+        triggeredIsLeft = initialIsLeft
+        tracker.NextIsLeft = not initialIsLeft -- Next step alternates to opposite foot
     else
-        -- Fallback distance accumulator (ensures continuous audio if replication yields)
-        local currentPos = hrp.Position
-        local sprintFactor = if isRunTrack then 1.0 else 0.0
-        local strideTarget = STEP_STRIDE_WALK + (sprintFactor * (STEP_STRIDE_SPRINT - STEP_STRIDE_WALK))
+        -- Continuous Cadence Stride Engine (Pure rock-solid metronome):
+        tracker.StepTimer = tracker.StepTimer + dt
 
-        if tracker.LastHRPPos then
-            local deltaPos = (currentPos - tracker.LastHRPPos) * Vector3.new(1, 0, 1)
-            local distMoved = deltaPos.Magnitude
-            if distMoved < 4.0 then
-                tracker.StepDistanceAccum += distMoved
+        -- Check if next footstep in the pair is due
+        if tracker.StepTimer >= tracker.StepInterval then
+            tracker.StepTimer = tracker.StepTimer - tracker.StepInterval
+            if tracker.StepTimer > tracker.StepInterval * 0.5 then
+                tracker.StepTimer = 0
             end
-        else
-            tracker.StepDistanceAccum = strideTarget * 0.75
-        end
-        tracker.LastHRPPos = currentPos
-
-        if tracker.StepDistanceAccum >= strideTarget then
-            tracker.StepDistanceAccum = tracker.StepDistanceAccum % strideTarget
-            tracker.IsLeftStep = not tracker.IsLeftStep
             stepTriggered = true
-            triggeredIsLeft = tracker.IsLeftStep
-        end
-
-        if isLocal then
-            local strideFreq = 4.0 + (currentSprintAlpha * 3.8)
-            state.WalkCycleClock = state.WalkCycleClock + dt * strideFreq
+            triggeredIsLeft = tracker.NextIsLeft
+            tracker.NextIsLeft = not tracker.NextIsLeft -- Alternate foot: R -> L -> R -> L -> R -> L
         end
     end
 
+    if isLocal then
+        -- Phase-lock local FPP viewmodel arm swing and camera motion to the exact cadence:
+        local strideFreq = (math.pi * 2) / (tracker.StepInterval * 2)
+        state.WalkCycleClock = state.WalkCycleClock + dt * strideFreq
+    end
+
     if stepTriggered then
-        local floorMat = hum.FloorMaterial
-        if (floorMat == Enum.Material.Air or floorMat == nil) and hrp then
-            local rayParams = RaycastParams.new()
-            rayParams.FilterDescendantsInstances = { char }
-            rayParams.FilterType = Enum.RaycastFilterType.Exclude
-            local rayResult = workspace:Raycast(hrp.Position, Vector3.new(0, -4.5, 0), rayParams)
-            if rayResult then
-                floorMat = rayResult.Material
-            end
-        end
+        local floorMat = (detectedFloorMat ~= Enum.Material.Air and detectedFloorMat ~= nil) and detectedFloorMat or tracker.LastFloorMaterial or Enum.Material.Grass
+        tracker.LastFloorMaterial = floorMat
 
         AudioManager.PlayFootstep(floorMat, isRunTrack, triggeredIsLeft, hrp)
     end
@@ -611,6 +640,7 @@ local function cacheCharacterJoints(char: Model)
                 silenceDefaultSound(c)
             end
             table.insert(characterConnections, hrp.ChildAdded:Connect(silenceDefaultSound))
+            AudioManager.PrewarmFootsteps(hrp)
         end
 
         -- Ensure natural human skin tone on skin mesh parts
@@ -629,34 +659,52 @@ local function cacheCharacterJoints(char: Model)
             AudioManager.Play("HeavyLanding")
         end))
 
+        local jumpInitiated = false
+        local freefallStartTime = 0
+
         table.insert(characterConnections, activeHumanoid.StateChanged:Connect(function(oldState, newState)
             if newState == Enum.HumanoidStateType.Jumping then
                 state.IsAirborne = true
                 state.IsGrounded = false
-                AudioManager.PlayJumpTakeoff(hrp)
+                jumpInitiated = true
             elseif newState == Enum.HumanoidStateType.Freefall then
-                state.IsAirborne = true
-                state.IsGrounded = false
-            elseif newState == Enum.HumanoidStateType.Landed then
+                freefallStartTime = os.clock()
+                if activeHumanoid.FloorMaterial == Enum.Material.Air then
+                    state.IsAirborne = true
+                    state.IsGrounded = false
+                else
+                    state.IsAirborne = false
+                    state.IsGrounded = true
+                end
+            elseif newState == Enum.HumanoidStateType.Running or newState == Enum.HumanoidStateType.RunningNoPhysics or newState == Enum.HumanoidStateType.Landed then
                 state.IsAirborne = false
                 state.IsGrounded = true
+            end
 
-                -- Responsive material landing audio
-                local impactSpeed = math.abs(state.LastVerticalVelocity)
-                if impactSpeed > 5 then
-                    local force = math.clamp(impactSpeed * 0.12, 0.8, 3.5)
-                    landingSpring.Velocity = Vector3.new(0, force, 0)
+            -- When jump finishes (touchdown on the ground):
+            local hasLanded = (newState == Enum.HumanoidStateType.Landed)
+                or (oldState == Enum.HumanoidStateType.Freefall and (newState == Enum.HumanoidStateType.Running or newState == Enum.HumanoidStateType.RunningNoPhysics))
+
+            if hasLanded then
+                local fallDuration = os.clock() - freefallStartTime
+                local shouldPlayLanding = jumpInitiated or (fallDuration > 0.35)
+
+                if shouldPlayLanding then
+                    jumpInitiated = false
+                    freefallStartTime = 0
+
+                    landingSpring.Velocity = Vector3.new(0, 1.8, 0)
                     local floorMat = activeHumanoid.FloorMaterial
-                    if floorMat == Enum.Material.Air and hrp then
+                    if (floorMat == Enum.Material.Air or floorMat == nil) and hrp then
                         local rayParams = RaycastParams.new()
                         rayParams.FilterDescendantsInstances = { char }
                         rayParams.FilterType = Enum.RaycastFilterType.Exclude
-                        local rayResult = workspace:Raycast(hrp.Position, Vector3.new(0, -4.5, 0), rayParams)
+                        local rayResult = workspace:Raycast(hrp.Position, Vector3.new(0, -6.0, 0), rayParams)
                         if rayResult then
                             floorMat = rayResult.Material
                         end
                     end
-                    AudioManager.PlayLanding(floorMat, impactSpeed, hrp)
+                    AudioManager.PlayLanding(floorMat, nil, hrp)
                 end
             end
         end))
@@ -685,24 +733,39 @@ local function hookRemotePlayer(otherPlayer: Player)
         local conns = remotePlayerConnections[otherPlayer] or {}
         remotePlayerConnections[otherPlayer] = conns
 
+        local remoteJumpInitiated = false
+        local remoteFreefallStartTime = 0
+
         local stateConn = hum.StateChanged:Connect(function(oldState, newState)
             if not camera or not hrp.Parent then return end
             if (hrp.Position - camera.CFrame.Position).Magnitude > 60 then return end
 
             if newState == Enum.HumanoidStateType.Jumping then
-                AudioManager.PlayJumpTakeoff(hrp)
-            elseif newState == Enum.HumanoidStateType.Landed then
-                local impactSpeed = math.abs(lastYVel)
-                if impactSpeed > 5 then
+                remoteJumpInitiated = true
+            elseif newState == Enum.HumanoidStateType.Freefall then
+                remoteFreefallStartTime = os.clock()
+            end
+
+            local hasLanded = (newState == Enum.HumanoidStateType.Landed)
+                or (oldState == Enum.HumanoidStateType.Freefall and (newState == Enum.HumanoidStateType.Running or newState == Enum.HumanoidStateType.RunningNoPhysics))
+
+            if hasLanded then
+                local fallDuration = os.clock() - remoteFreefallStartTime
+                local shouldPlayLanding = remoteJumpInitiated or (fallDuration > 0.35)
+
+                if shouldPlayLanding then
+                    remoteJumpInitiated = false
+                    remoteFreefallStartTime = 0
+
                     local floorMat = hum.FloorMaterial
                     if (floorMat == Enum.Material.Air or floorMat == nil) and hrp then
                         local rayParams = RaycastParams.new()
                         rayParams.FilterDescendantsInstances = { char }
                         rayParams.FilterType = Enum.RaycastFilterType.Exclude
-                        local hit = workspace:Raycast(hrp.Position, Vector3.new(0, -4.5, 0), rayParams)
+                        local hit = workspace:Raycast(hrp.Position, Vector3.new(0, -6.0, 0), rayParams)
                         if hit then floorMat = hit.Material end
                     end
-                    AudioManager.PlayLanding(floorMat, impactSpeed, hrp)
+                    AudioManager.PlayLanding(floorMat, nil, hrp)
                 end
             end
         end)
