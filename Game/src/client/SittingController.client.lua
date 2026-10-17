@@ -271,22 +271,6 @@ requestStandUp = function()
         if keyConn then keyConn:Disconnect() keyConn = nil end
         if currentToken ~= transitionToken then return end
 
-        -- Stop any lingering animations
-        stopTrack(sitToStandTrack, 0.15)
-        stopTrack(standToSitTrack, 0.10)
-
-        -- NOW unseat character once the stand-up animation has completed!
-        -- Character stays safely seated during the rising motion so Roblox physics NEVER snaps into standing!
-        if activeHumanoid then
-            activeHumanoid.Sit = false
-            activeHumanoid.WalkSpeed = (savedWalkSpeed and savedWalkSpeed > 0) and savedWalkSpeed or 6
-            activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-            activeHumanoid.AutoRotate = true
-        end
-
-        -- Restore strict First-Person camera lock on stand up
-        localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
-
         isStandingUp = false
         isCurrentlySeated = false
         currentOccupiedSeat = nil
@@ -298,8 +282,16 @@ requestStandUp = function()
 
     local function cancelForMovement()
         if sitToStandTrack and sitToStandTrack.IsPlaying then
-            sitToStandTrack:Stop(0.1)
+            sitToStandTrack:Stop(0.15)
         end
+        stopTrack(standToSitTrack, 0.10)
+        if activeHumanoid then
+            activeHumanoid.Sit = false
+            activeHumanoid.WalkSpeed = (savedWalkSpeed and savedWalkSpeed > 0) and savedWalkSpeed or 6
+            activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+            activeHumanoid.AutoRotate = true
+        end
+        localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
         finishStandUp()
     end
 
@@ -312,7 +304,7 @@ requestStandUp = function()
     -- Play SitToStand rising directly from the held sitting pose:
     if sitToStandTrack then
         sitToStandTrack:Play(0.12)
-        sitToStandTrack:AdjustSpeed(1.20) -- ~1.85s natural rise
+        sitToStandTrack:AdjustSpeed(1.15) -- Natural rise
     end
     -- Fade out the held StandToSit pose smoothly as SitToStand begins
     stopTrack(standToSitTrack, 0.15)
@@ -334,8 +326,32 @@ requestStandUp = function()
         end)
     end
 
-    -- Natural stand-up completion timing
+    -- 1. At 1.70s, character is upright on both feet. Unseat in Roblox physics:
+    -- This triggers Animate to transition into Idle, while SitToStand holds the standing pose!
     task.delay(1.70, function()
+        if isStandingUp and currentToken == transitionToken then
+            if activeHumanoid then
+                activeHumanoid.Sit = false
+                activeHumanoid.WalkSpeed = (savedWalkSpeed and savedWalkSpeed > 0) and savedWalkSpeed or 6
+                activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+                activeHumanoid.AutoRotate = true
+            end
+            localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+        end
+    end)
+
+    -- 2. At 1.85s (150ms after unseating), Animate is running idle underneath.
+    -- Smoothly fade out SitToStand over 0.25s into the active idle animation:
+    task.delay(1.85, function()
+        if isStandingUp and currentToken == transitionToken then
+            if sitToStandTrack and sitToStandTrack.IsPlaying then
+                sitToStandTrack:Stop(0.25)
+            end
+        end
+    end)
+
+    -- 3. At 2.10s, finish cleanup cleanly
+    task.delay(2.10, function()
         if isStandingUp and currentToken == transitionToken then
             finishStandUp()
         end

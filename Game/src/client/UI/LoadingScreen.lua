@@ -168,41 +168,86 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
     titleConstraint.MaxTextSize = 32
     titleConstraint.Parent = brandTitle
 
-    -- Bottom Area: Status text + thin progress bar
+    -- Bottom Area: status text, percentage, flat progress bar
+    local TEXT_DARK = Color3.fromRGB(28, 28, 28)
+    local TEXT_MUTED = Color3.fromRGB(120, 120, 120)
+
     local statusLabel = Instance.new("TextLabel")
     statusLabel.Name = "StatusLabel"
     statusLabel.AnchorPoint = Vector2.new(0.5, 1)
-    statusLabel.Position = UDim2.new(0.5, 0, 1, -52)
-    statusLabel.Size = UDim2.new(0.8, 0, 0, 18)
+    statusLabel.Position = UDim2.new(0.5, 0, 1, -74)
+    statusLabel.Size = UDim2.new(0.6, 0, 0, 20)
     statusLabel.BackgroundTransparency = 1
     statusLabel.Font = Enum.Font.GothamMedium
     statusLabel.Text = "LOADING"
-    statusLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
-    statusLabel.TextSize = 11
+    statusLabel.TextColor3 = TEXT_DARK
+    statusLabel.TextSize = 15
     statusLabel.TextXAlignment = Enum.TextXAlignment.Center
     statusLabel.ZIndex = 86
     statusLabel.Parent = container
 
-    -- Track
+    local statusConstraint = Instance.new("UITextSizeConstraint")
+    statusConstraint.MinTextSize = 12
+    statusConstraint.MaxTextSize = 17
+    statusConstraint.Parent = statusLabel
+
+    local percentLabel = Instance.new("TextLabel")
+    percentLabel.Name = "PercentLabel"
+    percentLabel.AnchorPoint = Vector2.new(0.5, 1)
+    percentLabel.Position = UDim2.new(0.5, 0, 1, -54)
+    percentLabel.Size = UDim2.new(0.6, 0, 0, 18)
+    percentLabel.BackgroundTransparency = 1
+    percentLabel.Font = Enum.Font.Gotham
+    percentLabel.Text = "0.00%"
+    percentLabel.TextColor3 = TEXT_MUTED
+    percentLabel.TextSize = 13
+    percentLabel.ZIndex = 86
+    percentLabel.Parent = container
+
+    -- Track (flat, thick pill)
     local track = Instance.new("Frame")
     track.Name = "Track"
     track.AnchorPoint = Vector2.new(0.5, 1)
-    track.Position = UDim2.new(0.5, 0, 1, -28)
-    track.Size = UDim2.new(0.36, 0, 0, 2)
-    track.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+    track.Position = UDim2.new(0.5, 0, 1, -30)
+    track.Size = UDim2.new(0.3, 0, 0, 10)
+    track.BackgroundColor3 = Color3.fromRGB(225, 225, 225)
     track.BorderSizePixel = 0
     track.ZIndex = 86
     track.Parent = container
+
+    local trackSizeLimit = Instance.new("UISizeConstraint")
+    trackSizeLimit.MinSize = Vector2.new(200, 10)
+    trackSizeLimit.MaxSize = Vector2.new(340, 10)
+    trackSizeLimit.Parent = track
 
     local trackCorner = Instance.new("UICorner")
     trackCorner.CornerRadius = UDim.new(1, 0)
     trackCorner.Parent = track
 
-    -- Fill
+    -- Small dots just outside both ends of the bar
+    local function makeEndDot(name: string, xScale: number, xOffset: number)
+        local dot = Instance.new("Frame")
+        dot.Name = name
+        dot.AnchorPoint = Vector2.new(0.5, 0.5)
+        dot.Position = UDim2.new(xScale, xOffset, 0.5, 0)
+        dot.Size = UDim2.fromOffset(5, 5)
+        dot.BackgroundColor3 = TEXT_DARK
+        dot.BorderSizePixel = 0
+        dot.ZIndex = 86
+        dot.Parent = track
+
+        local endDotCorner = Instance.new("UICorner")
+        endDotCorner.CornerRadius = UDim.new(1, 0)
+        endDotCorner.Parent = dot
+    end
+    makeEndDot("StartDot", 0, -12)
+    makeEndDot("EndDot", 1, 12)
+
+    -- Fill (solid, flat). Swap to Color3.fromRGB(200, 100, 30) for an orange bar.
     local fill = Instance.new("Frame")
     fill.Name = "Fill"
-    fill.Size = UDim2.fromScale(0.02, 1)
-    fill.BackgroundColor3 = Color3.fromRGB(200, 100, 30)
+    fill.Size = UDim2.fromScale(0.04, 1)
+    fill.BackgroundColor3 = TEXT_DARK
     fill.BorderSizePixel = 0
     fill.ZIndex = 87
     fill.Parent = track
@@ -210,6 +255,14 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
     local fillCorner = Instance.new("UICorner")
     fillCorner.CornerRadius = UDim.new(1, 0)
     fillCorner.Parent = fill
+
+    -- Percentage counts up smoothly via a NumberValue
+    local percentValue = Instance.new("NumberValue")
+    percentValue.Value = 0
+    percentValue.Changed:Connect(function(value: number)
+        percentLabel.Text = string.format("%.2f%%", value)
+    end)
+    local percentTween: Tween? = nil
 
     -- Native Smooth Transition Curtain (pure white)
     local fadeCurtain = Instance.new("Frame")
@@ -226,11 +279,19 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
     local currentRatio = 0
 
     local function setProgress(ratio: number, statusText: string?, _detailText: string?)
-        currentRatio = math.clamp(ratio, 0.02, 1)
+        currentRatio = math.clamp(ratio, 0, 1)
 
-        TweenService:Create(fill, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Size = UDim2.fromScale(currentRatio, 1),
+        local info = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        TweenService:Create(fill, info, {
+            Size = UDim2.fromScale(math.max(currentRatio, 0.04), 1),
         }):Play()
+
+        if percentTween then
+            percentTween:Cancel()
+        end
+        local tween = TweenService:Create(percentValue, info, { Value = currentRatio * 100 })
+        percentTween = tween
+        tween:Play()
 
         if statusText and statusText ~= "" then
             statusLabel.Text = statusText:upper()
@@ -250,7 +311,7 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
         if options and options.Progress then
             setProgress(options.Progress, options.Status, options.Detail)
         else
-            setProgress(0.02, options and options.Status, options and options.Detail)
+            setProgress(0, options and options.Status, options and options.Detail)
         end
 
         container.Visible = true
@@ -296,6 +357,7 @@ function LoadingScreen.Create(parent: Instance): LoadingScreenInstance
         end,
         Hide = hideLoading,
         Destroy = function()
+            percentValue:Destroy()
             container:Destroy()
         end,
     }

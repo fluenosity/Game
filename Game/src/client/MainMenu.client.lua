@@ -424,6 +424,17 @@ screenGui.DisplayOrder = 100
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = playerGui
 
+local introBlackCover: Frame? = nil
+if not GameConfig.ShouldSkipSplashScreen() then
+    introBlackCover = Instance.new("Frame")
+    introBlackCover.Name = "IntroBlackCover"
+    introBlackCover.Size = UDim2.fromScale(1, 1)
+    introBlackCover.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    introBlackCover.BorderSizePixel = 0
+    introBlackCover.ZIndex = 80
+    introBlackCover.Parent = screenGui
+end
+
 --------------------------------------------------------------------------------
 -- ATMOSPHERIC GLASS & VIGNETTE (Live 3D World Visible Behind Glassmorphic UI)
 --------------------------------------------------------------------------------
@@ -1517,158 +1528,163 @@ local function runCinematicIntro()
     isBusy = true
 
     ----------------------------------------------------------------------------
-    -- PHASE 1: Clean photosensitivity notice + studio splash before live campsite menu.
+    -- PHASE 1: MODULAR INTRO SEQUENCE (WARNING -> SPLASH -> HEADPHONES)
     ----------------------------------------------------------------------------
     if not GameConfig.ShouldSkipSplashScreen() then
-        -- Step 1A: Photosensitivity / Epilepsy Health Warning Screen (Black bg)
-        local warningScreen = Instance.new("Frame")
-        warningScreen.Name = "PhotosensitivityWarning"
-        warningScreen.Size = UDim2.fromScale(1, 1)
-        warningScreen.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        warningScreen.BorderSizePixel = 0
-        warningScreen.ZIndex = 90
-        warningScreen.Parent = screenGui
+        -- Step 1: Warning Screen (Photosensitivity & Epilepsy + Psychological Disclaimer)
+        UI.WarningScreen.Show(screenGui)
 
-        local warningContainer = Instance.new("Frame")
-        warningContainer.Name = "WarningContainer"
-        warningContainer.AnchorPoint = Vector2.new(0.5, 0.5)
-        warningContainer.Position = UDim2.fromScale(0.5, 0.5)
-        warningContainer.Size = UDim2.new(0.82, 0, 0.85, 0)
-        warningContainer.BackgroundTransparency = 1
-        warningContainer.ZIndex = 91
-        warningContainer.Parent = warningScreen
+        -- Step 2: Studio Splash Screen ("A FLUENOSITY STUDIO PRODUCTION", Pure White)
+        UI.SplashScreen.Show(screenGui)
 
-        local warningLayout = Instance.new("UIListLayout")
-        warningLayout.FillDirection = Enum.FillDirection.Vertical
-        warningLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        warningLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-        warningLayout.Padding = UDim.new(0, 16)
-        warningLayout.Parent = warningContainer
-
-        -- BIG BOLD WARNING TITLE
-        local warningBigTitle = Instance.new("TextLabel")
-        warningBigTitle.Name = "WarningBigTitle"
-        warningBigTitle.Size = UDim2.new(1, 0, 0, 36)
-        warningBigTitle.BackgroundTransparency = 1
-        warningBigTitle.Font = Enum.Font.GothamBold
-        warningBigTitle.Text = "WARNING: PHOTOSENSITIVITY/EPILEPSY SEIZURES"
-        warningBigTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-        warningBigTitle.TextSize = 22
-        warningBigTitle.TextWrapped = true
-        warningBigTitle.TextTransparency = 1
-        warningBigTitle.ZIndex = 92
-        warningBigTitle.Parent = warningContainer
-
-        local warningSubTitle = Instance.new("TextLabel")
-        warningSubTitle.Name = "WarningSubTitle"
-        warningSubTitle.Size = UDim2.new(1, 0, 0, 26)
-        warningSubTitle.BackgroundTransparency = 1
-        warningSubTitle.Font = Enum.Font.GothamBold
-        warningSubTitle.Text = "READ THIS NOTICE BEFORE PLAYING"
-        warningSubTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-        warningSubTitle.TextSize = 17
-        warningSubTitle.TextWrapped = true
-        warningSubTitle.TextTransparency = 1
-        warningSubTitle.ZIndex = 92
-        warningSubTitle.Parent = warningContainer
-
-        local warningBody = Instance.new("TextLabel")
-        warningBody.Name = "WarningBody"
-        warningBody.Size = UDim2.new(1, 0, 0, 250)
-        warningBody.BackgroundTransparency = 1
-        warningBody.Font = Enum.Font.Gotham
-        warningBody.Text = "A very small percentage of people may experience epileptic seizures or blackouts when exposed to certain kinds of flashing lights or light patterns. These persons, or even people who have no history of seizures or epilepsy, may experience epileptic symptoms or seizures while playing video games.\n\nIf you or any of your relatives has an epileptic condition or has had seizures of any kind, consult your physician before playing any video game.\n\nIMMEDIATELY DISCONTINUE use and consult a physician if you or your child experience any of the following symptoms: dizziness, altered vision, eye or muscle twitching, involuntary movements, loss of awareness, disorientation, or convulsions. Parents should watch for or ask their children about the above symptoms.\n\nYou may reduce risk of photosensitive epileptic seizures by taking the following precautions: sit farther from the screen, use a smaller screen, play in a well-lit room, do not play when you are drowsy or fatigued."
-        warningBody.TextColor3 = Color3.fromRGB(205, 205, 205)
-        warningBody.TextSize = 12
-        warningBody.TextWrapped = true
-        warningBody.TextTransparency = 1
-        warningBody.ZIndex = 92
-        warningBody.Parent = warningContainer
-
-        local fadeInWarning1 = TweenService:Create(warningBigTitle, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            TextTransparency = 0,
-        })
-        local fadeInWarning2 = TweenService:Create(warningSubTitle, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            TextTransparency = 0,
-        })
-        local fadeInWarning3 = TweenService:Create(warningBody, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            TextTransparency = 0,
-        })
-        fadeInWarning1:Play()
-        fadeInWarning2:Play()
-        fadeInWarning3:Play()
-        fadeInWarning1.Completed:Wait()
-
-        task.wait(2.2)
-
-        local fadeOutWarning1 = TweenService:Create(warningBigTitle, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            TextTransparency = 1,
-        })
-        local fadeOutWarning2 = TweenService:Create(warningSubTitle, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            TextTransparency = 1,
-        })
-        local fadeOutWarning3 = TweenService:Create(warningBody, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            TextTransparency = 1,
-        })
-        fadeOutWarning1:Play()
-        fadeOutWarning2:Play()
-        fadeOutWarning3:Play()
-        fadeOutWarning1.Completed:Wait()
-        warningScreen:Destroy()
-
-        -- Step 1B: Studio Splash Screen (Pure white, centered text only, no flame icon)
-        local splashScreen = Instance.new("Frame")
-        splashScreen.Name = "StudioSplash"
-        splashScreen.Size = UDim2.fromScale(1, 1)
-        splashScreen.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        splashScreen.BorderSizePixel = 0
-        splashScreen.ZIndex = 60
-        splashScreen.Parent = screenGui
-
-        local studioTitle = Instance.new("TextLabel")
-        studioTitle.Name = "StudioTitle"
-        studioTitle.Size = UDim2.new(0.9, 0, 0, 36)
-        studioTitle.Position = UDim2.fromScale(0.5, 0.5)
-        studioTitle.AnchorPoint = Vector2.new(0.5, 0.5)
-        studioTitle.BackgroundTransparency = 1
-        studioTitle.Font = (UITheme.Fonts and UITheme.Fonts.Studio) or Enum.Font.GothamMedium
-        studioTitle.Text = "A FLUENOSITY STUDIO GAME"
-        studioTitle.TextColor3 = Color3.fromRGB(36, 36, 36)
-        studioTitle.TextScaled = false
-        studioTitle.TextSize = 20
-        studioTitle.TextTransparency = 1
-        studioTitle.ZIndex = 61
-        studioTitle.Parent = splashScreen
-
-        local studioConstraint = Instance.new("UITextSizeConstraint")
-        studioConstraint.MaxTextSize = 22
-        studioConstraint.MinTextSize = 12
-        studioConstraint.Parent = studioTitle
-
-        local fadeInText = TweenService:Create(studioTitle, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            TextTransparency = 0,
-        })
-        fadeInText:Play()
-        fadeInText.Completed:Wait()
-
-        task.wait(1.0)
-
-        local fadeOutText = TweenService:Create(studioTitle, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            TextTransparency = 1,
-        })
-        fadeOutText:Play()
-        fadeOutText.Completed:Wait()
-
-        local splashTransition = TweenService:Create(splashScreen, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
-            BackgroundTransparency = 1,
-        })
-        splashTransition:Play()
-        splashTransition.Completed:Wait()
-        splashScreen:Destroy()
+        -- Step 3: Headphone Advisory Screen ("HEADPHONES RECOMMENDED", Spatial Audio)
+        UI.HeadphoneAdvisory.Show(screenGui)
     end
 
-    -- Start gentle ambient embers (orange center spark dot removed per request)
+    -- Smoothly dissolve the intro black cover to reveal the wide live campsite vista
+    if introBlackCover and introBlackCover.Parent then
+        local fadeCover = TweenService:Create(introBlackCover, TweenInfo.new(0.65, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 1,
+        })
+        fadeCover:Play()
+        fadeCover.Completed:Wait()
+        introBlackCover:Destroy()
+        introBlackCover = nil
+    end
+
+    -- Start gentle ambient embers
     emberSystem:Start()
+
+    ----------------------------------------------------------------------------
+    -- PHASE 2: "PRESS ANY KEY / TAP TO ENTER CAMP" GATEWAY
+    -- Holds on the wide cinematic campsite vista with live music & drone camera.
+    ----------------------------------------------------------------------------
+    local gatewayContainer = Instance.new("Frame")
+    gatewayContainer.Name = "GatewayContainer"
+    gatewayContainer.Size = UDim2.fromScale(1, 1)
+    gatewayContainer.BackgroundTransparency = 1
+    gatewayContainer.ZIndex = 40
+    gatewayContainer.Parent = screenGui
+
+    local gatewayDetector = Instance.new("TextButton")
+    gatewayDetector.Name = "GatewayDetector"
+    gatewayDetector.Size = UDim2.fromScale(1, 1)
+    gatewayDetector.BackgroundTransparency = 1
+    gatewayDetector.Text = ""
+    gatewayDetector.AutoButtonColor = false
+    gatewayDetector.ZIndex = 41
+    gatewayDetector.Parent = gatewayContainer
+
+    local promptFrame = Instance.new("Frame")
+    promptFrame.Name = "PromptFrame"
+    promptFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    promptFrame.Position = UDim2.new(0.5, 0, 0.88, 0)
+    promptFrame.Size = UDim2.new(0.9, 0, 0, 60)
+    promptFrame.BackgroundTransparency = 1
+    promptFrame.ZIndex = 42
+    promptFrame.Parent = gatewayContainer
+
+    local promptLayout = Instance.new("UIListLayout")
+    promptLayout.FillDirection = Enum.FillDirection.Vertical
+    promptLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    promptLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    promptLayout.Padding = UDim.new(0, 4)
+    promptLayout.Parent = promptFrame
+
+    local isTouchOnly = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+    local mainPrompt = Instance.new("TextLabel")
+    mainPrompt.Name = "MainPrompt"
+    mainPrompt.Size = UDim2.new(1, 0, 0, 26)
+    mainPrompt.BackgroundTransparency = 1
+    mainPrompt.Font = Enum.Font.GothamBold
+    mainPrompt.Text = if isTouchOnly then "TAP TO ENTER CAMP" else "PRESS ANY KEY TO ENTER CAMP"
+    mainPrompt.TextColor3 = Color3.fromRGB(255, 255, 255)
+    mainPrompt.TextSize = 18
+    mainPrompt.TextStrokeTransparency = 0.55
+    mainPrompt.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    mainPrompt.TextTransparency = 1
+    mainPrompt.ZIndex = 43
+    mainPrompt.Parent = promptFrame
+
+    local subPrompt = Instance.new("TextLabel")
+    subPrompt.Name = "SubPrompt"
+    subPrompt.Size = UDim2.new(1, 0, 0, 18)
+    subPrompt.BackgroundTransparency = 1
+    subPrompt.Font = Enum.Font.GothamMedium
+    subPrompt.Text = if isTouchOnly then "[ TAP SCREEN TO CONTINUE ]" else "[ CLICK ANYWHERE TO CONTINUE ]"
+    subPrompt.TextColor3 = Color3.fromRGB(245, 140, 40)
+    subPrompt.TextSize = 11
+    subPrompt.TextStrokeTransparency = 0.6
+    subPrompt.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    subPrompt.TextTransparency = 1
+    subPrompt.ZIndex = 43
+    subPrompt.Parent = promptFrame
+
+    -- Fade in the gateway prompt
+    local fadeInPrompt1 = TweenService:Create(mainPrompt, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 })
+    local fadeInPrompt2 = TweenService:Create(subPrompt, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 })
+    fadeInPrompt1:Play()
+    fadeInPrompt2:Play()
+    fadeInPrompt1.Completed:Wait()
+
+    -- Pulsing glow breathing animation
+    local isPulsingGateway = true
+    task.spawn(function()
+        while isPulsingGateway and promptFrame.Parent do
+            local p1 = TweenService:Create(mainPrompt, TweenInfo.new(1.0, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { TextTransparency = 0.45 })
+            local p2 = TweenService:Create(subPrompt, TweenInfo.new(1.0, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { TextTransparency = 0.55 })
+            p1:Play()
+            p2:Play()
+            p1.Completed:Wait()
+            if not isPulsingGateway or not promptFrame.Parent then break end
+            local p3 = TweenService:Create(mainPrompt, TweenInfo.new(1.0, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { TextTransparency = 0.0 })
+            local p4 = TweenService:Create(subPrompt, TweenInfo.new(1.0, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { TextTransparency = 0.0 })
+            p3:Play()
+            p4:Play()
+            p3.Completed:Wait()
+        end
+    end)
+
+    -- Wait for key press or click/tap
+    local gatewayPassed = false
+    local gatewayInputConn: RBXScriptConnection? = nil
+    local gatewayClickConn: RBXScriptConnection? = nil
+    local resumeGatewayThread = coroutine.running()
+
+    local function triggerGateway()
+        if gatewayPassed then return end
+        gatewayPassed = true
+        isPulsingGateway = false
+        if gatewayInputConn then gatewayInputConn:Disconnect() gatewayInputConn = nil end
+        if gatewayClickConn then gatewayClickConn:Disconnect() gatewayClickConn = nil end
+
+        UITheme.PlayClick()
+
+        -- Fade out the prompt quickly
+        local fadeOut1 = TweenService:Create(mainPrompt, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { TextTransparency = 1 })
+        local fadeOut2 = TweenService:Create(subPrompt, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { TextTransparency = 1 })
+        fadeOut1:Play()
+        fadeOut2:Play()
+        fadeOut1.Completed:Wait()
+        gatewayContainer:Destroy()
+
+        task.spawn(resumeGatewayThread)
+    end
+
+    gatewayClickConn = gatewayDetector.MouseButton1Click:Connect(triggerGateway)
+    gatewayInputConn = UserInputService.InputBegan:Connect(function(input, gpe)
+        if not gpe and (
+            input.UserInputType == Enum.UserInputType.Keyboard
+            or input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch
+            or input.UserInputType == Enum.UserInputType.Gamepad1
+        ) then
+            triggerGateway()
+        end
+    end)
+
+    coroutine.yield()
 
     ----------------------------------------------------------------------------
     -- PHASE 3: STAGGERED ENTRANCE FROM THE LEFT AND RIGHT

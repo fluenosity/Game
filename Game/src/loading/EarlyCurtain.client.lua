@@ -17,6 +17,13 @@ local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
 local loadingStartedAt = os.clock()
 local MINIMUM_LOADING_SECONDS = 4
 
+-- ── Palette ───────────────────────────────────────────────────────────────────
+local EMBER = Color3.fromRGB(200, 100, 30)
+local FILL_COLOR = Color3.fromRGB(28, 28, 28) -- swap to EMBER for an orange bar
+local TRACK_COLOR = Color3.fromRGB(225, 225, 225)
+local TEXT_DARK = Color3.fromRGB(28, 28, 28)
+local TEXT_MUTED = Color3.fromRGB(120, 120, 120)
+
 -- ── Root GUI ──────────────────────────────────────────────────────────────────
 local gui = Instance.new("ScreenGui")
 gui.Name = "DontLetTheFireDie_EarlyCurtain"
@@ -43,7 +50,7 @@ title.Size = UDim2.new(0.9, 0, 0, 42)
 title.BackgroundTransparency = 1
 title.Font = Enum.Font.Oswald
 title.Text = "DON'T LET THE FIRE DIE"
-title.TextColor3 = Color3.fromRGB(28, 28, 28)
+title.TextColor3 = TEXT_DARK
 title.TextScaled = false
 title.TextSize = 28
 title.Parent = background
@@ -53,48 +60,114 @@ titleConstraint.MinTextSize = 14
 titleConstraint.MaxTextSize = 32
 titleConstraint.Parent = title
 
--- ── Bottom area: status text + thin progress bar ──────────────────────────────
+-- ── Bottom area: status, percentage, progress bar (stacked, bottom-centre) ────
+-- Layout from the bottom up:  bar  →  percentage  →  status text
+
+-- Status text (top line)
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Name = "StatusLabel"
 statusLabel.AnchorPoint = Vector2.new(0.5, 1)
-statusLabel.Position = UDim2.new(0.5, 0, 1, -52)
-statusLabel.Size = UDim2.new(0.5, 0, 0, 18)
+statusLabel.Position = UDim2.new(0.5, 0, 1, -74)
+statusLabel.Size = UDim2.new(0.6, 0, 0, 20)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Font = Enum.Font.GothamMedium
 statusLabel.Text = "LOADING"
-statusLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
-statusLabel.TextSize = 11
+statusLabel.TextColor3 = TEXT_DARK
+statusLabel.TextSize = 15
 statusLabel.Parent = background
 
--- Track
+local statusConstraint = Instance.new("UITextSizeConstraint")
+statusConstraint.MinTextSize = 12
+statusConstraint.MaxTextSize = 17
+statusConstraint.Parent = statusLabel
+
+-- Percentage (second line)
+local percentLabel = Instance.new("TextLabel")
+percentLabel.Name = "PercentLabel"
+percentLabel.AnchorPoint = Vector2.new(0.5, 1)
+percentLabel.Position = UDim2.new(0.5, 0, 1, -54)
+percentLabel.Size = UDim2.new(0.6, 0, 0, 18)
+percentLabel.BackgroundTransparency = 1
+percentLabel.Font = Enum.Font.Gotham
+percentLabel.Text = "0.00%"
+percentLabel.TextColor3 = TEXT_MUTED
+percentLabel.TextSize = 13
+percentLabel.Parent = background
+
+-- Track (flat, thick pill)
 local track = Instance.new("Frame")
 track.Name = "Track"
 track.AnchorPoint = Vector2.new(0.5, 1)
-track.Position = UDim2.new(0.5, 0, 1, -28)
-track.Size = UDim2.new(0.36, 0, 0, 2)
-track.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+track.Position = UDim2.new(0.5, 0, 1, -30)
+track.Size = UDim2.new(0.3, 0, 0, 10)
+track.BackgroundColor3 = TRACK_COLOR
 track.BorderSizePixel = 0
 track.Parent = background
+
+local trackSizeLimit = Instance.new("UISizeConstraint")
+trackSizeLimit.MinSize = Vector2.new(200, 10)
+trackSizeLimit.MaxSize = Vector2.new(340, 10)
+trackSizeLimit.Parent = track
+
 local trackCorner = Instance.new("UICorner")
 trackCorner.CornerRadius = UDim.new(1, 0)
 trackCorner.Parent = track
 
--- Fill
+-- Small dots just outside both ends of the bar
+local function makeEndDot(name: string, xScale: number, xOffset: number)
+	local dot = Instance.new("Frame")
+	dot.Name = name
+	dot.AnchorPoint = Vector2.new(0.5, 0.5)
+	dot.Position = UDim2.new(xScale, xOffset, 0.5, 0)
+	dot.Size = UDim2.fromOffset(5, 5)
+	dot.BackgroundColor3 = TEXT_DARK
+	dot.BorderSizePixel = 0
+	dot.Parent = track
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = dot
+end
+makeEndDot("StartDot", 0, -12)
+makeEndDot("EndDot", 1, 12)
+
+-- Fill (solid, flat)
 local fill = Instance.new("Frame")
 fill.Name = "Fill"
-fill.Size = UDim2.fromScale(0.02, 1)
-fill.BackgroundColor3 = Color3.fromRGB(200, 100, 30)
+fill.Size = UDim2.fromScale(0.04, 1)
+fill.BackgroundColor3 = FILL_COLOR
 fill.BorderSizePixel = 0
+fill.ZIndex = 2
 fill.Parent = track
+
 local fillCorner = Instance.new("UICorner")
 fillCorner.CornerRadius = UDim.new(1, 0)
 fillCorner.Parent = fill
 
+-- ── Progress logic ────────────────────────────────────────────────────────────
+-- The percentage text counts up smoothly (like the reference) via a NumberValue.
+local percentValue = Instance.new("NumberValue")
+percentValue.Value = 0
+percentValue.Changed:Connect(function(value: number)
+	percentLabel.Text = string.format("%.2f%%", value)
+end)
+
+local FILL_TWEEN = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local currentPercentTween: Tween? = nil
+
 local function setProgress(ratio: number, message: string)
 	statusLabel.Text = message
-	TweenService:Create(fill, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Size = UDim2.fromScale(math.clamp(ratio, 0.02, 1), 1),
+	local clamped = math.clamp(ratio, 0, 1)
+
+	TweenService:Create(fill, FILL_TWEEN, {
+		Size = UDim2.fromScale(math.max(clamped, 0.02), 1),
 	}):Play()
+
+	if currentPercentTween then
+		currentPercentTween:Cancel()
+	end
+	local tween = TweenService:Create(percentValue, FILL_TWEEN, { Value = clamped * 100 })
+	currentPercentTween = tween
+	tween:Play()
 end
 
 local function preloadMenuAssets()
@@ -168,27 +241,14 @@ if player:GetAttribute("InitialMenuAssetsReady") ~= true then
 	warn("[EarlyCurtain] Menu asset preparation timed out; continuing with Roblox streaming.")
 end
 
+-- Make sure the bar visibly finishes at 100% before the curtain lifts.
+setProgress(1, "READY")
+
 local remainingLoadingTime = MINIMUM_LOADING_SECONDS - (os.clock() - loadingStartedAt)
 if remainingLoadingTime > 0 then
 	task.wait(remainingLoadingTime)
 end
 
-task.wait(0.1)
-local fade = TweenService:Create(background, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-	BackgroundTransparency = 1,
-})
-fade:Play()
-for _, descendant in ipairs(background:GetDescendants()) do
-	if descendant:IsA("TextLabel") then
-		TweenService:Create(descendant, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			TextTransparency = 1,
-		}):Play()
-	elseif descendant:IsA("Frame") and descendant ~= background then
-		TweenService:Create(descendant, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			BackgroundTransparency = 1,
-		}):Play()
-	end
-end
-fade.Completed:Wait()
+percentValue:Destroy()
 gui:Destroy()
 player:SetAttribute("EarlyCurtainFinished", true)

@@ -21,6 +21,9 @@ local UI = {
     Toggle      = require(script:WaitForChild("Toggle")),
     SystemMenu  = require(script:WaitForChild("SystemMenu")),
     LoadingScreen = require(script:WaitForChild("LoadingScreen")),
+    WarningScreen = require(script:WaitForChild("WarningScreen")),
+    SplashScreen = require(script:WaitForChild("SplashScreen")),
+    HeadphoneAdvisory = require(script:WaitForChild("HeadphoneAdvisory")),
 }
 
 return UI
