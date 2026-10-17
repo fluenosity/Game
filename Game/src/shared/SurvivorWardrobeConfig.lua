@@ -60,7 +60,7 @@ Config.Characters = {
 
 	Jody = {
 		Id = "Jody",
-		DisplayName = "Magret",
+		DisplayName = "Jody",
 		Gender = "Female",
 		Role = "THE COMBAT SURVIVALIST",
 		Tagline = "Fierce guardian hardened by cold winters.",
@@ -71,7 +71,7 @@ Config.Characters = {
 			Endurance = 85,
 			Crafting = 65,
 		},
-		Archetype = "Female Combat Rig • Reinforced Posture • 10-Piece Skinned Mesh",
+		Archetype = "Female Combat Rig • Reinforced Posture • Normalized Armature",
 		RecommendedIdle = "rbxassetid://103828063959982",
 		AltIdles = {
 			["Static Resting Idle"] = "rbxassetid://103828063959982",

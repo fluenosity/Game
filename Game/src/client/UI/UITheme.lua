@@ -49,6 +49,11 @@ UITheme.Colors = {
     EmberHot        = Color3.fromRGB(255, 160, 45),
     EmberGold       = Color3.fromRGB(255, 215, 80),
     EmberCrimson    = Color3.fromRGB(205, 45, 25),
+    EmberDeep       = Color3.fromRGB(160, 36, 16),
+
+    -- Wood & Natural Tones
+    WoodCharcoal    = Color3.fromRGB(32, 28, 26),
+    WoodCedar       = Color3.fromRGB(120, 72, 44),
 
     -- Button Specific Tints
     ButtonPrimaryBg   = Color3.fromRGB(38, 26, 20),

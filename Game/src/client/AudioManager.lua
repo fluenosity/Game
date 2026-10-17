@@ -355,13 +355,21 @@ local function getUISoundGroup(): SoundGroup
     return sfxGroup
 end
 
+local localFootstepPool: { [string]: Sound } = {}
+
 local function getPartMaterialFootstepSound(attachPart: BasePart?, matName: string, footIndex: number, soundId: string): Sound
     local group = getUISoundGroup()
     if not attachPart then
-        local sound = Instance.new("Sound")
-        sound.SoundId = soundId
-        sound.SoundGroup = group
-        sound.Parent = group
+        local poolKey = matName .. "_" .. tostring(footIndex)
+        local sound = localFootstepPool[poolKey]
+        if not sound or sound.Parent ~= group then
+            sound = Instance.new("Sound")
+            sound.Name = "LocalFootstep_" .. poolKey
+            sound.SoundId = soundId
+            sound.SoundGroup = group
+            sound.Parent = group
+            localFootstepPool[poolKey] = sound
+        end
         return sound
     end
 

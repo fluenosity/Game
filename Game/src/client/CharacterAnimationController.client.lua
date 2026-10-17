@@ -500,7 +500,18 @@ local function evaluateCharacterFootsteps(
         local floorMat = (detectedFloorMat ~= Enum.Material.Air and detectedFloorMat ~= nil) and detectedFloorMat or tracker.LastFloorMaterial or Enum.Material.Grass
         tracker.LastFloorMaterial = floorMat
 
-        AudioManager.PlayFootstep(floorMat, isRunTrack, triggeredIsLeft, hrp)
+        -- In FPP, local player's footsteps play in centered 2D stereo (soundAttachPart = nil)
+        -- so movement/strafing (W+A) never pans your own feet to the right or left ear.
+        -- In TPP or for remote co-op players, attach to hrp for natural 3D world spatial audio!
+        local soundAttachPart: BasePart? = hrp
+        if isLocal then
+            local isTPP = player:GetAttribute("IsTPP") == true
+            if not isTPP then
+                soundAttachPart = nil
+            end
+        end
+
+        AudioManager.PlayFootstep(floorMat, isRunTrack, triggeredIsLeft, soundAttachPart)
     end
 end
 
@@ -857,7 +868,9 @@ local function cacheCharacterJoints(char: Model)
                             floorMat = rayResult.Material
                         end
                     end
-                    AudioManager.PlayLanding(floorMat, nil, hrp)
+                    local isTPP = player:GetAttribute("IsTPP") == true
+                    local soundAttachPart: BasePart? = if isTPP then hrp else nil
+                    AudioManager.PlayLanding(floorMat, nil, soundAttachPart)
                 end
             end
         end))
