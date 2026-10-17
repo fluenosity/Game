@@ -66,8 +66,8 @@ function WarningScreen.Show(parent: Instance, onCompleted: (() -> ())?)
     photoTitle.AutomaticSize = Enum.AutomaticSize.Y
     photoTitle.BackgroundTransparency = 1
     photoTitle.Font = Enum.Font.GothamBold
-    photoTitle.Text = "WARNING: PHOTOSENSITIVITY/EPILEPSY SEIZURES"
-    photoTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    photoTitle.Text = "WARNING: PHOTOSENSITIVITY / EPILEPSY SEIZURES"
+    photoTitle.TextColor3 = Color3.fromRGB(245, 140, 40)
     photoTitle.TextSize = 20
     photoTitle.TextWrapped = true
     photoTitle.TextTransparency = 1
