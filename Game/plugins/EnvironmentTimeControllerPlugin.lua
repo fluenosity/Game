@@ -7,9 +7,11 @@
     Features:
     - Instant 1-click Presets: Dawn (06:00), Noon (12:00), Afternoon (14:00 Dev), Dusk (17:30), Night (20:00), Midnight (00:00).
     - Smooth Real-time Scrubber: Drag the slider to scrub sun/moon arc across the sky in real-time.
+    - Direct Numeric Hour Input: Type exact hours (e.g., 14.0, 12, 6.5) with instant feedback.
     - Day Progression Selector: Days 0 to 5 (escalating darkness, cloud oppression & survival fog).
     - Instant Cloud & Weather Presets: Alpine Clear, Fluffy Midday, Overcast, Stormy, Milky Way Night.
     - Studio Time Simulation (Play/Pause with 1x, 10x, 60x, 360x speeds) to preview full cycles.
+    - Bidirectional Sync: Changes in Studio's Properties panel automatically reflect in the plugin!
     - Glassmorphic Obsidian / Ember UI aesthetic with ChangeHistoryService undo support.
 ]]
 
@@ -17,7 +19,6 @@ local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
-local UserInputService = game:GetService("UserInputService")
 
 -- -----------------------------------------------------------------------------
 -- Helper: Safe Require of Shared Systems
@@ -56,10 +57,17 @@ end
 -- State
 -- -----------------------------------------------------------------------------
 
-local currentHour: number = 14.0
+local currentHour: number = Lighting.ClockTime or 14.0
 local currentDay: number = 0
 local isSimulating: boolean = false
+local isDraggingSlider: boolean = false
 local simSpeed: number = 60.0 -- 60x = 1 game minute per real second
+
+-- Forward declarations of UI update callbacks
+local updateUIElements: () -> ()
+local updateSliderVisual: (hour: number) -> ()
+local updateDayButtonsVisual: () -> ()
+local updatePlayPauseButtonVisual: () -> ()
 
 -- -----------------------------------------------------------------------------
 -- Core Time Application Logic
@@ -103,6 +111,15 @@ local function applyTime(hour: number, day: number, recordWaypoint: boolean?)
 	end
 end
 
+local function pauseSimulation()
+	if isSimulating then
+		isSimulating = false
+		if updatePlayPauseButtonVisual then
+			updatePlayPauseButtonVisual()
+		end
+	end
+end
+
 local function formatTimeDisplay(hour: number): (string, string)
 	local totalMins = math.floor(hour * 60)
 	local h = math.floor(totalMins / 60)
@@ -138,15 +155,24 @@ local btnQuickDusk = toolbar:CreateButton("🌇 Dusk (17:30)", "Set to sunset go
 local btnQuickMidnight = toolbar:CreateButton("🌌 Midnight (00:00)", "Set to deep starry galaxy night (00:00)", "rbxassetid://2626744426")
 
 btnQuickNoon.Click:Connect(function()
+	pauseSimulation()
 	applyTime(14.0, currentDay, true)
+	if updateSliderVisual then updateSliderVisual(14.0) end
+	if updateUIElements then updateUIElements() end
 end)
 
 btnQuickDusk.Click:Connect(function()
+	pauseSimulation()
 	applyTime(17.5, currentDay, true)
+	if updateSliderVisual then updateSliderVisual(17.5) end
+	if updateUIElements then updateUIElements() end
 end)
 
 btnQuickMidnight.Click:Connect(function()
+	pauseSimulation()
 	applyTime(0.0, currentDay, true)
+	if updateSliderVisual then updateSliderVisual(0.0) end
+	if updateUIElements then updateUIElements() end
 end)
 
 -- -----------------------------------------------------------------------------
@@ -158,11 +184,11 @@ local widgetInfo = DockWidgetPluginGuiInfo.new(
 	false,
 	false,
 	320,
-	560,
+	580,
 	280,
 	420
 )
-local widget = plugin:CreateDockWidgetPluginGui("EnvironmentTimeWidget", widgetInfo)
+local widget = plugin:CreateDockWidgetPluginGui("EnvironmentTimeWidget_V2", widgetInfo)
 widget.Title = "🌅 World Time & Atmosphere"
 
 btnTogglePanel.Click:Connect(function()
@@ -176,7 +202,7 @@ rootScroll.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
 rootScroll.BorderSizePixel = 0
 rootScroll.ScrollBarThickness = 4
 rootScroll.ScrollBarImageColor3 = Color3.fromRGB(255, 140, 50)
-rootScroll.CanvasSize = UDim2.new(0, 0, 0, 680)
+rootScroll.CanvasSize = UDim2.new(0, 0, 0, 720)
 rootScroll.Parent = widget
 
 local rootPad = Instance.new("UIPadding")
@@ -191,14 +217,11 @@ rootList.Padding = UDim.new(0, 10)
 rootList.SortOrder = Enum.SortOrder.LayoutOrder
 rootList.Parent = rootScroll
 
--- -----------------------------------------------------------------------------
--- UI Component Builders (Glassmorphic Luxury Aesthetic)
--- -----------------------------------------------------------------------------
-
-local function createCard(layoutOrder: number, height: number): Frame
+-- Helper: Card Generator
+local function createCard(layoutOrder: number, heightOffset: number): Frame
 	local card = Instance.new("Frame")
-	card.Size = UDim2.new(1, 0, 0, height)
-	card.BackgroundColor3 = Color3.fromRGB(26, 27, 33)
+	card.Size = UDim2.new(1, 0, 0, heightOffset)
+	card.BackgroundColor3 = Color3.fromRGB(26, 28, 35)
 	card.BorderSizePixel = 0
 	card.LayoutOrder = layoutOrder
 	card.Parent = rootScroll
@@ -208,13 +231,13 @@ local function createCard(layoutOrder: number, height: number): Frame
 	corner.Parent = card
 
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(48, 50, 62)
+	stroke.Color = Color3.fromRGB(48, 52, 65)
 	stroke.Thickness = 1
 	stroke.Parent = card
 
 	local pad = Instance.new("UIPadding")
-	pad.PaddingTop = UDim.new(0, 10)
-	pad.PaddingBottom = UDim.new(0, 10)
+	pad.PaddingTop = UDim.new(0, 8)
+	pad.PaddingBottom = UDim.new(0, 8)
 	pad.PaddingLeft = UDim.new(0, 10)
 	pad.PaddingRight = UDim.new(0, 10)
 	pad.Parent = card
@@ -236,33 +259,75 @@ local function createSectionTitle(parent: Instance, text: string)
 end
 
 -- -----------------------------------------------------------------------------
--- Card 1: Time & Phase Display Header
+-- Card 1: Time & Phase Display Header + Direct Input Box
 -- -----------------------------------------------------------------------------
 
-local headerCard = createCard(1, 80)
+local headerCard = createCard(1, 95)
 local timeLabel = Instance.new("TextLabel")
-timeLabel.Size = UDim2.new(1, 0, 0, 32)
+timeLabel.Size = UDim2.new(1, 0, 0, 28)
 timeLabel.BackgroundTransparency = 1
 timeLabel.Text = "14:00 (2:00 PM)"
 timeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 timeLabel.Font = Enum.Font.GothamBold
-timeLabel.TextSize = 22
+timeLabel.TextSize = 20
 timeLabel.TextXAlignment = Enum.TextXAlignment.Center
 timeLabel.Parent = headerCard
 
+local headerRow = Instance.new("Frame")
+headerRow.Size = UDim2.new(1, 0, 0, 24)
+headerRow.Position = UDim2.new(0, 0, 0, 32)
+headerRow.BackgroundTransparency = 1
+headerRow.Parent = headerCard
+
 local phasePill = Instance.new("TextLabel")
-phasePill.Size = UDim2.new(0, 120, 0, 22)
-phasePill.Position = UDim2.new(0.5, -60, 0, 36)
+phasePill.Size = UDim2.new(0.55, -4, 1, 0)
+phasePill.Position = UDim2.new(0, 0, 0, 0)
 phasePill.BackgroundColor3 = Color3.fromRGB(40, 75, 110)
 phasePill.TextColor3 = Color3.fromRGB(200, 230, 255)
 phasePill.Font = Enum.Font.GothamBold
 phasePill.TextSize = 11
 phasePill.Text = "☀️ DAY PHASE"
-phasePill.Parent = headerCard
+phasePill.Parent = headerRow
 
 local phaseCorner = Instance.new("UICorner")
-phaseCorner.CornerRadius = UDim.new(0, 11)
+phaseCorner.CornerRadius = UDim.new(0, 6)
 phaseCorner.Parent = phasePill
+
+-- Direct numeric hour input box
+local timeInput = Instance.new("TextBox")
+timeInput.Size = UDim2.new(0.45, -4, 1, 0)
+timeInput.Position = UDim2.new(0.55, 4, 0, 0)
+timeInput.BackgroundColor3 = Color3.fromRGB(36, 40, 52)
+timeInput.TextColor3 = Color3.fromRGB(255, 200, 100)
+timeInput.PlaceholderText = "Hour (0-24)"
+timeInput.PlaceholderColor3 = Color3.fromRGB(130, 135, 150)
+timeInput.Font = Enum.Font.GothamBold
+timeInput.TextSize = 12
+timeInput.ClearTextOnFocus = false
+timeInput.Text = string.format("%.1f", currentHour)
+timeInput.Parent = headerRow
+
+local inputCorner = Instance.new("UICorner")
+inputCorner.CornerRadius = UDim.new(0, 6)
+inputCorner.Parent = timeInput
+
+local inputStroke = Instance.new("UIStroke")
+inputStroke.Color = Color3.fromRGB(60, 65, 80)
+inputStroke.Thickness = 1
+inputStroke.Parent = timeInput
+
+timeInput.FocusLost:Connect(function(enterPressed)
+	local num = tonumber(timeInput.Text)
+	if num then
+		pauseSimulation()
+		local clamped = math.clamp(num, 0, 24)
+		applyTime(clamped, currentDay, true)
+		if updateSliderVisual then updateSliderVisual(clamped) end
+		if updateUIElements then updateUIElements() end
+	else
+		timeInput.Text = string.format("%.1f", currentHour)
+	end
+end)
 
 -- -----------------------------------------------------------------------------
 -- Card 2: Preset Time Buttons
@@ -292,9 +357,10 @@ local TIME_PRESETS = {
 	{ Name = "🌌 Midnight", Hour = 0.0, Color = Color3.fromRGB(35, 30, 70) },
 }
 
-local function updateUIElements()
+updateUIElements = function()
 	local timeStr, phase = formatTimeDisplay(currentHour)
 	timeLabel.Text = timeStr
+	timeInput.Text = string.format("%.1f", currentHour)
 
 	if phase == "DAWN" then
 		phasePill.Text = "🌅 DAWN"
@@ -332,19 +398,22 @@ for idx, p in ipairs(TIME_PRESETS) do
 	corner.Parent = b
 
 	b.Activated:Connect(function()
+		pauseSimulation()
 		applyTime(p.Hour, currentDay, true)
+		if updateSliderVisual then updateSliderVisual(p.Hour) end
 		updateUIElements()
 	end)
 end
 
 -- -----------------------------------------------------------------------------
--- Card 3: Continuous Time Slider (Real-time Scrubbing)
+-- Card 3: Continuous Time Slider (Real-time Scrubbing with Mouse Coordinate Fix)
 -- -----------------------------------------------------------------------------
 
 local sliderCard = createCard(3, 85)
 createSectionTitle(sliderCard, "🎛️ SCRUB TIME (0.0 - 24.0)")
 
 local sliderTrack = Instance.new("TextButton")
+sliderTrack.Name = "SliderTrack"
 sliderTrack.Size = UDim2.new(1, 0, 0, 18)
 sliderTrack.Position = UDim2.new(0, 0, 0, 32)
 sliderTrack.BackgroundColor3 = Color3.fromRGB(15, 16, 20)
@@ -392,38 +461,57 @@ knobStroke.Color = Color3.fromRGB(255, 140, 40)
 knobStroke.Thickness = 2
 knobStroke.Parent = knob
 
-local isDraggingSlider = false
-
-local function updateSliderVisual(hour: number)
+updateSliderVisual = function(hour: number)
 	local alpha = math.clamp(hour / 24, 0, 1)
 	sliderFill.Size = UDim2.new(alpha, 0, 1, 0)
 	knob.Position = UDim2.new(alpha, 0, 0.5, 0)
 end
 
-local function handleSliderInput(inputPos: Vector2)
+-- Robust slider drag: reads plugin mouse position relative to track
+local mouse = plugin:GetMouse()
+
+local function handleSliderFromMouse()
 	local trackAbsPos = sliderTrack.AbsolutePosition
 	local trackAbsSize = sliderTrack.AbsoluteSize
-	local alpha = math.clamp((inputPos.X - trackAbsPos.X) / trackAbsSize.X, 0, 1)
-	local targetHourVal = alpha * 24.0
+	if trackAbsSize.X <= 0 then return end
+
+	local mouseX = mouse.X
+	local alpha = math.clamp((mouseX - trackAbsPos.X) / trackAbsSize.X, 0, 1)
+	local targetHourVal = math.floor((alpha * 24.0) * 10 + 0.5) / 10
+
+	pauseSimulation()
 	applyTime(targetHourVal, currentDay, false)
 	updateSliderVisual(targetHourVal)
 	updateUIElements()
 end
 
-sliderTrack.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		isDraggingSlider = true
-		handleSliderInput(Vector2.new(input.Position.X, input.Position.Y))
+sliderTrack.MouseButton1Down:Connect(function()
+	isDraggingSlider = true
+	handleSliderFromMouse()
+end)
+
+sliderTrack.MouseMoved:Connect(function()
+	if isDraggingSlider then
+		handleSliderFromMouse()
 	end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-	if isDraggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
-		handleSliderInput(Vector2.new(input.Position.X, input.Position.Y))
+sliderTrack.MouseButton1Up:Connect(function()
+	if isDraggingSlider then
+		isDraggingSlider = false
+		pcall(function()
+			ChangeHistoryService:SetWaypoint(string.format("Scrub Time to %.1f", currentHour))
+		end)
 	end
 end)
 
-UserInputService.InputEnded:Connect(function(input)
+rootScroll.MouseMoved:Connect(function()
+	if isDraggingSlider then
+		handleSliderFromMouse()
+	end
+end)
+
+rootScroll.InputEnded:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 and isDraggingSlider then
 		isDraggingSlider = false
 		pcall(function()
@@ -453,7 +541,7 @@ dayLayout.Parent = dayGrid
 
 local dayButtons: { [number]: TextButton } = {}
 
-local function updateDayButtonsVisual()
+updateDayButtonsVisual = function()
 	for d, b in pairs(dayButtons) do
 		if d == currentDay then
 			b.BackgroundColor3 = Color3.fromRGB(255, 140, 40)
@@ -576,8 +664,7 @@ local playCorner = Instance.new("UICorner")
 playCorner.CornerRadius = UDim.new(0, 6)
 playCorner.Parent = btnPlayPause
 
-btnPlayPause.Activated:Connect(function()
-	isSimulating = not isSimulating
+updatePlayPauseButtonVisual = function()
 	if isSimulating then
 		btnPlayPause.Text = "⏸ PAUSE"
 		btnPlayPause.BackgroundColor3 = Color3.fromRGB(180, 60, 50)
@@ -585,6 +672,11 @@ btnPlayPause.Activated:Connect(function()
 		btnPlayPause.Text = "▶ PLAY TIME"
 		btnPlayPause.BackgroundColor3 = Color3.fromRGB(45, 140, 80)
 	end
+end
+
+btnPlayPause.Activated:Connect(function()
+	isSimulating = not isSimulating
+	updatePlayPauseButtonVisual()
 end)
 
 local speeds = {
@@ -628,11 +720,11 @@ for _, spd in ipairs(speeds) do
 end
 
 -- -----------------------------------------------------------------------------
--- RunService Step for Time Simulation & Dynamic Refresh
+-- RunService Step for Time Simulation (ONLY when isSimulating is explicitly true!)
 -- -----------------------------------------------------------------------------
 
 RunService.Heartbeat:Connect(function(dt: number)
-	if isSimulating then
+	if isSimulating and not isDraggingSlider then
 		local advanceHours = (dt * simSpeed) / 3600 -- simSpeed real seconds = 1 hour
 		local newHour = (currentHour + advanceHours) % 24
 		applyTime(newHour, currentDay, false)
@@ -641,10 +733,24 @@ RunService.Heartbeat:Connect(function(dt: number)
 	end
 end)
 
--- Initial Sync
-applyTime(14.0, 0, false)
-updateSliderVisual(14.0)
+-- -----------------------------------------------------------------------------
+-- Bidirectional Sync: Keep plugin UI aligned with Lighting.ClockTime
+-- -----------------------------------------------------------------------------
+
+Lighting:GetPropertyChangedSignal("ClockTime"):Connect(function()
+	if not isDraggingSlider and not isSimulating then
+		if math.abs(Lighting.ClockTime - currentHour) > 0.05 then
+			currentHour = Lighting.ClockTime
+			updateSliderVisual(currentHour)
+			updateUIElements()
+		end
+	end
+end)
+
+-- Initial State: Sync to current Lighting.ClockTime or midday 14:00
+currentHour = Lighting.ClockTime or 14.0
+updateSliderVisual(currentHour)
 updateDayButtonsVisual()
 updateUIElements()
 
-print("[EnvironmentPlugin] World Time & Atmosphere Controller Plugin Loaded!")
+print("[EnvironmentPlugin] World Time & Atmosphere Controller Plugin V2 Loaded (Simulation OFF by default, Slider Coordinate Fix Applied)!")
