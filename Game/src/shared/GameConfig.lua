@@ -26,7 +26,7 @@ export type GameConfigType = {
 local GameConfig = {
     -- Master Developer Switch
     -- Set to true during development/testing; set to false for full production game flow.
-    DEV_MODE = true,
+    DEV_MODE = false,
 
     -- 1. SKIP SPLASH SCREEN
     -- Keep the requested loading -> studio splash -> main menu sequence active in Studio too.
@@ -44,9 +44,14 @@ local GameConfig = {
 
     -- 4. FAST LOADING SCREEN
     -- If true: Skips or shortens artificial loading screen transitions for rapid testing.
-    FAST_LOADING_SCREEN = true,
+    FAST_LOADING_SCREEN = false,
 
-    -- 5. USE STARTER CHARACTER DEV OVERRIDE
+    -- 5. SKIP LOADING SCREEN
+    -- If true: Completely skips all loading screens (curtain, shader compilation, preloader) for instant direct spawn.
+    -- If false: Runs full authored loading sequence.
+    SKIP_LOADING_SCREEN = false,
+
+    -- 6. USE STARTER CHARACTER DEV OVERRIDE
     -- If true: Spawns the player using StarterPlayer.StarterCharacter directly,
     -- allowing developers to test custom rigs and Mixamo animations without going through the wardrobe roster.
     USE_STARTER_CHARACTER = false,
@@ -67,6 +72,10 @@ end
 
 function GameConfig.ShouldFastLoad(): boolean
     return GameConfig.DEV_MODE and GameConfig.FAST_LOADING_SCREEN
+end
+
+function GameConfig.ShouldSkipLoadingScreen(): boolean
+    return GameConfig.DEV_MODE and GameConfig.SKIP_LOADING_SCREEN
 end
 
 function GameConfig.ShouldUseStarterCharacter(): boolean

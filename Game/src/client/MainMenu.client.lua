@@ -144,6 +144,18 @@ end)
 -- DEV CONFIG CHECK: SKIP MAIN MENU
 -- =============================================================================
 if skipMainMenu then
+    if GameConfig.ShouldSkipLoadingScreen and GameConfig.ShouldSkipLoadingScreen() then
+        gameplayTransitionAuthorized = true
+        setMenuInputLocked(false)
+        player:SetAttribute("IsInGameplay", true)
+        setCharacterControlsEnabled(true)
+        if camera then
+            camera.CameraType = Enum.CameraType.Custom
+        end
+        print("[MainMenu] Direct Play: Zero loading screens active (instant spawn).")
+        return
+    end
+
     -- Fast Direct Play with Clean Shader & Asset Loading Screen (Prevents Pop-in & Flickering)
     local devScreenGui = Instance.new("ScreenGui")
     devScreenGui.Name = "DontLetTheFireDie_DevLoadingGui"

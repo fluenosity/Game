@@ -78,18 +78,31 @@ function SurvivorRigAdapter.AdaptModel(rawModel: Model, characterId: string?): M
     end
 
     if not rootCarrier then
-        -- If no RootPart was present in the FBX, promote the main body mesh as the carrier
-        local bodyMesh = char:FindFirstChildWhichIsA("MeshPart")
-        if bodyMesh then
-            bodyMesh.Name = "Beta_Surface"
-            rootCarrier = bodyMesh
+        -- Find whichever part actually holds the bone hierarchy
+        local hipsInChar = char:FindFirstChild("mixamorig:Hips", true)
+        if hipsInChar then
+            local curr = hipsInChar.Parent
+            while curr and curr.Parent ~= char and not curr:IsA("BasePart") do
+                curr = curr.Parent
+            end
+            if curr and curr:IsA("BasePart") then
+                curr.Name = "Beta_Surface"
+                rootCarrier = curr
+            end
+        end
+        if not rootCarrier then
+            local bodyMesh = char:FindFirstChild("Body") or char:FindFirstChildWhichIsA("MeshPart")
+            if bodyMesh and bodyMesh:IsA("BasePart") then
+                bodyMesh.Name = "Beta_Surface"
+                rootCarrier = bodyMesh
+            end
         end
     end
 
     assert(rootCarrier ~= nil, "Failed to identify root carrier part in model")
 
     -- 6. Locate mixamorig:Hips and setup HumanoidRootPart
-    local hips = rootCarrier:FindFirstChild("mixamorig:Hips", true) :: Bone?
+    local hips = rootCarrier:FindFirstChild("mixamorig:Hips", true) or char:FindFirstChild("mixamorig:Hips", true) :: Bone?
     assert(hips ~= nil, "Failed to locate mixamorig:Hips bone in model")
 
     local hipsWorldPos = hips.WorldPosition

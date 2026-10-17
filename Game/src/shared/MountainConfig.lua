@@ -40,6 +40,8 @@ MountainConfig.MaterialThresholds = {
 
 -- Boundary & Barrier settings
 MountainConfig.Barrier = {
+	-- Auto Teleport disabled (Physical barrier walls in workspace handle boundary containment)
+	AutoTeleport = false,
 	-- Circular boundary radius
 	Radius = 720,
 	-- Warning threshold (studs from center where horror dread and vignette activate)

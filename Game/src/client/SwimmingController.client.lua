@@ -531,8 +531,10 @@ local function updateSwimming(dt: number)
     end
 
     -- Smoothly elevate CameraOffset while swimming so camera view is clearly resting above the water surface
-    local targetCamOffsetY = isSwimmingActive and 0.75 or 0.0
-    activeHumanoid.CameraOffset = activeHumanoid.CameraOffset:Lerp(Vector3.new(0, targetCamOffsetY, 0), math.clamp(dt * 7, 0, 1))
+    if isSwimmingActive then
+        local targetCamOffsetY = 0.75
+        activeHumanoid.CameraOffset = activeHumanoid.CameraOffset:Lerp(Vector3.new(0, targetCamOffsetY, 0), math.clamp(dt * 7, 0, 1))
+    end
 
     local waterSurfaceY = currentWaterSurfaceY
     local rootY = activeRootPart.Position.Y

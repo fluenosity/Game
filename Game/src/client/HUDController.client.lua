@@ -241,7 +241,7 @@ local function isCursorFree(): boolean
     return isAltHeld or isAltToggled or isAnyModalOpen()
 end
 
-local isTPP = player:GetAttribute("IsTPP") ~= false -- Default to true for testing realistic 3D character!
+local isTPP = player:GetAttribute("IsTPP") == true -- Default to false (FPP) as specified in project directives
 player:SetAttribute("IsTPP", isTPP)
 topRightWidget.SetPerspective(isTPP)
 
@@ -259,15 +259,15 @@ local function enforcePerspective()
     local cam = workspace.CurrentCamera
     if isTPP then
         player.CameraMode = Enum.CameraMode.Classic
-        player.CameraMinZoomDistance = 7
         player.CameraMaxZoomDistance = 22
+        player.CameraMinZoomDistance = 7
         if cam and cam.CameraType ~= Enum.CameraType.Custom then
             cam.CameraType = Enum.CameraType.Custom
         end
     else
-        player.CameraMode = Enum.CameraMode.LockFirstPerson
         player.CameraMinZoomDistance = 0.5
         player.CameraMaxZoomDistance = 0.5
+        player.CameraMode = Enum.CameraMode.LockFirstPerson
         if cam and cam.CameraType ~= Enum.CameraType.Custom then
             cam.CameraType = Enum.CameraType.Custom
         end
@@ -330,8 +330,8 @@ local function updateMouseBehavior()
         savedCameraRotation = nil
         modalBypassBtn.Modal = false
         player.CameraMode = Enum.CameraMode.Classic
-        player.CameraMinZoomDistance = 7
         player.CameraMaxZoomDistance = 22
+        player.CameraMinZoomDistance = 7
         if cam and cam.CameraType ~= Enum.CameraType.Custom then
             cam.CameraType = Enum.CameraType.Custom
         end
@@ -344,9 +344,9 @@ local function updateMouseBehavior()
         -- Active first-person gameplay: lock mouse to center, hide OS cursor, show GTA V reticle
         savedCameraRotation = nil
         modalBypassBtn.Modal = false
-        player.CameraMode = Enum.CameraMode.LockFirstPerson
         player.CameraMinZoomDistance = 0.5
         player.CameraMaxZoomDistance = 0.5
+        player.CameraMode = Enum.CameraMode.LockFirstPerson
         if cam and cam.CameraType ~= Enum.CameraType.Custom then
             cam.CameraType = Enum.CameraType.Custom
         end
@@ -367,7 +367,7 @@ player:GetAttributeChangedSignal("IsSeated"):Connect(function()
 end)
 
 player:GetAttributeChangedSignal("IsTPP"):Connect(function()
-    local val = player:GetAttribute("IsTPP") ~= false
+    local val = player:GetAttribute("IsTPP") == true
     if isTPP ~= val then
         isTPP = val
         updateMouseBehavior()

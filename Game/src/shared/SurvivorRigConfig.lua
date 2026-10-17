@@ -130,7 +130,7 @@ SurvivorRigConfig.Profiles = {
 
     JODY = {
         Id = "JODY",
-        DisplayName = "Jody",
+        DisplayName = "Magret",
         Gender = FemaleBase.Gender,
         Description = "Combat Specialist & Survivalist",
         TargetHeight = FemaleBase.TargetHeight,
@@ -138,8 +138,22 @@ SurvivorRigConfig.Profiles = {
         LegCorrectionAngleDeg = FemaleBase.LegCorrectionAngleDeg,
         LegClearanceAngleDeg = FemaleBase.LegClearanceAngleDeg,
         ArmClearanceAngleDeg = FemaleBase.ArmClearanceAngleDeg,
-        BoneNamespace = "mixamorig6", -- Will be automatically normalized to mixamorig
-        MeshParts = { "Ch37_Body" },
+        MeshParts = { "Body", "Bottoms", "default", "Eyelashes", "Eyewear", "Gloves", "Hair", "Hats", "Shoes", "Tops", "Ch37_Body" },
+        Locomotion = FemaleBase.Locomotion,
+        Facial = FemaleBase.Facial,
+    } :: SurvivorProfile,
+
+    Magret = {
+        Id = "JODY",
+        DisplayName = "Magret",
+        Gender = FemaleBase.Gender,
+        Description = "Combat Specialist & Survivalist",
+        TargetHeight = FemaleBase.TargetHeight,
+        HipHeight = 1.92,
+        LegCorrectionAngleDeg = FemaleBase.LegCorrectionAngleDeg,
+        LegClearanceAngleDeg = FemaleBase.LegClearanceAngleDeg,
+        ArmClearanceAngleDeg = FemaleBase.ArmClearanceAngleDeg,
+        MeshParts = { "Body", "Bottoms", "default", "Eyelashes", "Eyewear", "Gloves", "Hair", "Hats", "Shoes", "Tops" },
         Locomotion = FemaleBase.Locomotion,
         Facial = FemaleBase.Facial,
     } :: SurvivorProfile,

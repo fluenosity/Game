@@ -100,6 +100,8 @@ local currentAirborneAlpha = 0
 local currentHeadPostureAlpha = 0
 local currentLocomotionAngle = 0
 local lastYaw = 0
+local currentRecoil = Vector3.zero
+local currentLeanZ = 0
 
 -- -----------------------------------------------------------------------------
 -- 3. ANIMATION STATE MACHINE
@@ -582,9 +584,9 @@ local function playWeaponSound(character: Model?, soundName: string): boolean
     return false
 end
 
-local bodyParts: { BasePart } = {}
+local headHiddenParts: { BasePart } = {}
+local visibleBodyParts: { BasePart } = {}
 local armParts: { BasePart } = {}
-local headParts: { BasePart } = {}
 local characterConnections: { RBXScriptConnection } = {}
 local defaultHipHeight = 2.0
 local locomotionTracks: { [string]: AnimationTrack } = {}
@@ -672,9 +674,11 @@ local function cacheCharacterJoints(char: Model)
         end
     end))
 
-    table.clear(bodyParts)
+
+
+    table.clear(headHiddenParts)
+    table.clear(visibleBodyParts)
     table.clear(armParts)
-    table.clear(headParts)
 
     -- Discover R15 joints
     joints.RightShoulder = char:FindFirstChild("RightShoulder", true)
@@ -710,12 +714,40 @@ local function cacheCharacterJoints(char: Model)
         end
     end
 
-    -- Cache all body parts, meshes, clothing, and accessories for FPP/TPP visibility switching
+    -- Separate head/hair (hidden in FPP to prevent camera obstruction) from torso/limbs/clothes (visible in FPP when looking down)
     local function registerPart(p: Instance)
-        if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+        if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" and p.Name ~= "Beta_Surface" then
             local isToolPart = p:FindFirstAncestorWhichIsA("Tool") ~= nil
-            if not isToolPart and not table.find(bodyParts, p) then
-                table.insert(bodyParts, p)
+            if isToolPart then return end
+
+            local nameLower = p.Name:lower()
+            local isHeadOrHair = nameLower:find("hair") ~= nil
+                or nameLower:find("eyelash") ~= nil
+                or nameLower:find("eyeleash") ~= nil
+                or nameLower:find("eyes") ~= nil
+                or nameLower:find("brow") ~= nil
+                or nameLower:find("teeth") ~= nil
+                or nameLower:find("mouth") ~= nil
+                or nameLower:find("tongue") ~= nil
+                or nameLower:find("beard") ~= nil
+                or nameLower:find("mustache") ~= nil
+                or nameLower:find("hat") ~= nil
+                or nameLower:find("cap") ~= nil
+                or nameLower:find("eyewear") ~= nil
+                or nameLower:find("glasses") ~= nil
+                or nameLower:find("mask") ~= nil
+                or nameLower:find("helmet") ~= nil
+                or p.Name == "Head"
+                or p:FindFirstAncestorWhichIsA("Accessory") ~= nil
+
+            if isHeadOrHair then
+                if not table.find(headHiddenParts, p) then
+                    table.insert(headHiddenParts, p)
+                end
+            else
+                if not table.find(visibleBodyParts, p) then
+                    table.insert(visibleBodyParts, p)
+                end
             end
         end
     end
@@ -733,20 +765,6 @@ local function cacheCharacterJoints(char: Model)
         local p = char:FindFirstChild(partName)
         if p and p:IsA("BasePart") then
             table.insert(armParts, p)
-        end
-    end
-
-    -- Cache head and head accessories for clipping prevention
-    local head = char:FindFirstChild("Head")
-    if head and head:IsA("BasePart") then
-        table.insert(headParts, head)
-    end
-    for _, item in ipairs(char:GetChildren()) do
-        if item:IsA("Accessory") then
-            local handle = item:FindFirstChild("Handle")
-            if handle and handle:IsA("BasePart") then
-                table.insert(headParts, handle)
-            end
         end
     end
 
@@ -1244,22 +1262,31 @@ RunService.PreSimulation:Connect(function(dt: number)
     -- Main Idle Detection (StaticIDLEMAIND only):
     -- Head posture correction is applied in the main standing idle animation.
     -- During walk, running, and sitting, posture remains natural.
+    local isTPP = player:GetAttribute("IsTPP") == true
+    local isFPP = not isTPP
+
     local isMainIdle = false
+    local isFlavorIdle = false
     if activeAnimator then
         for _, track in ipairs(activeAnimator:GetPlayingAnimationTracks()) do
             if track.IsPlaying and track.Animation and track.Animation.AnimationId then
-                if string.find(track.Animation.AnimationId, "103828063959982") then
+                local animId = track.Animation.AnimationId
+                if string.find(animId, "103828063959982") then
                     isMainIdle = true
-                    break
+                elseif string.find(animId, "132876566376642") or string.find(animId, "137772468102995") then
+                    isFlavorIdle = true
                 end
             end
         end
     end
 
-    local targetHeadAlpha = (isMainIdle and 1 or 0)
+    -- In TPP: Head posture correction is only applied in main standing idle (StaticIDLEMAIND)
+    -- In FPP: Keep head pulled back at all times, with additional backward tilt during running
+    -- so that the forward-leaning run animation never pushes the head or eyebrows into the camera!
+    local targetHeadAlpha = (isFPP or isMainIdle) and 1.0 or 0.0
     currentHeadPostureAlpha = currentHeadPostureAlpha + (targetHeadAlpha - currentHeadPostureAlpha) * math.clamp(dt * 12, 0, 1)
 
-    -- Upright Head & Neck Posture Alignment (Active in Main Idle):
+    -- Upright Head & Neck Posture Alignment:
     if not joints.NeckBone and activeCharacter then
         joints.NeckBone = activeCharacter:FindFirstChild("mixamorig:Neck", true)
     end
@@ -1269,6 +1296,28 @@ RunService.PreSimulation:Connect(function(dt: number)
 
     local neckBack = (profile.Facial and profile.Facial.NeckPostureBackDeg or 11.0) * currentHeadPostureAlpha
     local headBack = (profile.Facial and profile.Facial.HeadPostureBackDeg or 14.5) * currentHeadPostureAlpha
+
+    if isFPP then
+        -- In FPP: Pull head back so camera stays completely in front of nose
+        headBack = headBack + 10.0
+        neckBack = neckBack + 6.0
+
+        if isFlavorIdle then
+            -- Flavor idle (deep breath/shift) bends head forward: counter it locally so camera stays clear
+            neckBack = neckBack + 12.0
+            headBack = headBack + 20.0
+        end
+
+        -- Running compensation: Mixamo's run animation bends the torso and neck forward aggressively
+        -- Pull head & neck back dynamically so the face/eyebrows stay safely behind the camera at all speeds!
+        if wantsSprint or horizontalSpeed >= 9.5 then
+            neckBack = neckBack + 16.0
+            headBack = headBack + 26.0
+        elseif isMoving then
+            neckBack = neckBack + 8.0
+            headBack = headBack + 14.0
+        end
+    end
 
     if joints.NeckBone and joints.NeckBone:IsA("Bone") and neckBack > 0.05 then
         local neckBone = joints.NeckBone :: Bone
@@ -1281,9 +1330,9 @@ RunService.PreSimulation:Connect(function(dt: number)
         local restTilt = (profile.Facial and profile.Facial.HeadRestTiltDeg or 0.0) * currentHeadPostureAlpha
 
         local saccadeClock = now * 0.42
-        local gazeYaw = math.sin(saccadeClock * 0.75 + math.sin(saccadeClock * 1.4)) * math.rad(gazeRange) * currentHeadPostureAlpha
-        local gazePitch = math.cos(saccadeClock * 0.85) * math.rad(gazeRange * 0.6) * currentHeadPostureAlpha
-        local friendlyTilt = math.rad(restTilt)
+        local gazeYaw = (not isFPP) and math.sin(saccadeClock * 0.75 + math.sin(saccadeClock * 1.4)) * math.rad(gazeRange) * currentHeadPostureAlpha or 0
+        local gazePitch = (not isFPP) and math.cos(saccadeClock * 0.85) * math.rad(gazeRange * 0.6) * currentHeadPostureAlpha or 0
+        local friendlyTilt = (not isFPP) and math.rad(restTilt) or 0
 
         if headBack > 0.05 or gazeYaw ~= 0 or gazePitch ~= 0 then
             local totalPitch = math.rad(headBack) + gazePitch
@@ -1321,7 +1370,7 @@ RunService.PreSimulation:Connect(function(dt: number)
         end
     end
 
-    local isTPP = player:GetAttribute("IsTPP") == true
+    isTPP = player:GetAttribute("IsTPP") == true
 
     ----------------------------------------------------------------------------
     -- EUPHORIA-LEVEL PHYSICAL SPRINGS EVALUATION
@@ -1540,28 +1589,32 @@ end)
 RunService.RenderStepped:Connect(function(dt: number)
     if not camera or not activeCharacter then return end
 
-    -- 1. Manage Character Visibility: FPP (hide body/clothes/head) vs TPP (show all)
+    -- 1. Manage Character Visibility: FPP (hide head/face/hair) vs TPP (show all)
     local isTPP = player:GetAttribute("IsTPP") == true
     if isTPP then
         -- In Third-Person Perspective (TPP): All body meshes, clothing, accessories, and shoes are visible
-        for _, part in ipairs(bodyParts) do
+        for _, part in ipairs(headHiddenParts) do
+            if part and part.Parent then
+                part.LocalTransparencyModifier = 0
+            end
+        end
+        for _, part in ipairs(visibleBodyParts) do
             if part and part.Parent then
                 part.LocalTransparencyModifier = 0
             end
         end
     else
-        -- In First-Person Perspective (FPP): Hide survivor character body, clothing, hair, eyelashes, shoes, and accessories
-        -- so they never clip or bounce into the camera view
-        for _, part in ipairs(bodyParts) do
+        -- In First-Person Perspective (FPP):
+        -- Hide head, face, hair, eyes, and eyelashes so they never obstruct the camera or create a face blob
+        for _, part in ipairs(headHiddenParts) do
             if part and part.Parent then
                 part.LocalTransparencyModifier = 1
             end
         end
-
-        -- If separate R15 arms exist, keep arms visible for classic viewmodel
-        for _, armPart in ipairs(armParts) do
-            if armPart and armPart.Parent then
-                armPart.LocalTransparencyModifier = 0
+        -- Keep torso (jacket/shirt), legs (pants/shorts), footwear (sneakers/socks), and arms visible for body awareness!
+        for _, part in ipairs(visibleBodyParts) do
+            if part and part.Parent then
+                part.LocalTransparencyModifier = 0
             end
         end
     end
@@ -1578,7 +1631,7 @@ RunService.RenderStepped:Connect(function(dt: number)
     end
 
     -- 2. Update Spring Dampers
-    local recoil = camRecoilSpring:Update(dt)
+    currentRecoil = camRecoilSpring:Update(dt)
     local sway = camSwaySpring:Update(dt)
 
     -- Dynamic sprint FOV expansion (smoothly ramp from 70 up to 76 for speed sensation)
@@ -1586,40 +1639,28 @@ RunService.RenderStepped:Connect(function(dt: number)
         camera.FieldOfView = 70 + (currentSprintAlpha * 6)
     end
 
-    -- 3. Camera Offset adjustments (Eye height, Death & Campfire)
-    if activeHumanoid then
+    -- 3. Camera Offset adjustments (Neutral in FPP, handled via stable eye pivot)
+    local isSwimming = (activeHumanoid and activeHumanoid:GetState() == Enum.HumanoidStateType.Swimming)
+        or (activeCharacter ~= nil and activeCharacter:GetAttribute("IsSwimming") == true)
+
+    if activeHumanoid and not isSwimming then
+        local targetXOffset = 0.0
         local targetYOffset = 0.0
         local targetZOffset = 0.0
         if state.SpecialAction == "Died" then
             targetYOffset = -2.8 -- Collapse into snow
         elseif state.SpecialAction == "CampfireLight" then
             targetYOffset = -1.6 -- Kneel at campfire
-        elseif not isTPP then
-            -- Elevate first-person camera to true eye level (mixamorig:Head is 2.34 studs above HRP)
-            -- Slight forward offset (-0.35 studs) gives a clear unobstructed forward view
-            targetYOffset = 2.34
-            targetZOffset = -0.35
         end
 
         local currentOffset = activeHumanoid.CameraOffset
+        local newX = currentOffset.X + (targetXOffset - currentOffset.X) * math.clamp(dt * 12, 0, 1)
         local newY = currentOffset.Y + (targetYOffset - currentOffset.Y) * math.clamp(dt * 12, 0, 1)
         local newZ = currentOffset.Z + (targetZOffset - currentOffset.Z) * math.clamp(dt * 12, 0, 1)
-        activeHumanoid.CameraOffset = Vector3.new(0, newY, newZ)
+        activeHumanoid.CameraOffset = Vector3.new(newX, newY, newZ)
     end
 
-    -- 4. Apply Stable Horizon to Camera CFrame (Zero screen bending / roll in FPP)
-    if player:GetAttribute("IsInGameplay") == true and not ModalManager.IsAnyModalOpen() then
-        local recoilCF = CFrame.Angles(recoil.X, recoil.Y, recoil.Z)
-        if state.SpecialAction == "Died" then
-            recoilCF = recoilCF * CFrame.Angles(math.rad(48), 0, math.rad(18)) -- Head planted into snow
-        end
-        -- In FPP: Zero camera roll (flat, rock-steady horizon, zero motion fatigue)
-        -- In TPP: Ultra-mild bank roll
-        local bankRollCF = isTPP and CFrame.Angles(0, 0, -currentLeanZ * 0.2) or CFrame.identity
-        camera.CFrame = camera.CFrame * recoilCF * bankRollCF
-    end
-
-    -- 5. Camera-Driven Player Rotation (Main player body rotates with camera look)
+    -- 4. Camera-Driven Player Rotation (Main player body rotates with camera look)
     -- When Seated: Character body rotation is strictly locked to the seat facing vector; freecam look is decoupled
     if player:GetAttribute("IsInGameplay") == true and not ModalManager.IsAnyModalOpen() then
         if activeHRP and activeHumanoid and activeHumanoid.Health > 0 and state.SpecialAction == "None" then
@@ -1640,14 +1681,11 @@ RunService.RenderStepped:Connect(function(dt: number)
                     end
                 else
                     -- On land: horizontal yaw rotation blended with dynamic diagonal locomotion angle
-                    local camLook = camera.CFrame.LookVector
-                    local horizLook = Vector3.new(camLook.X, 0, camLook.Z)
-                    if horizLook.Magnitude > 0.001 then
-                        horizLook = horizLook.Unit
-                        local angledLook = CFrame.Angles(0, currentLocomotionAngle, 0):VectorToWorldSpace(horizLook)
-                        local p = activeHRP.Position
-                        activeHRP.CFrame = CFrame.lookAt(p, p + angledLook)
-                    end
+                    -- Use yaw from ToEulerAnglesYXZ for rock-solid stability even when looking straight up at sky
+                    local _, yaw, _ = camera.CFrame:ToEulerAnglesYXZ()
+                    local baseFacing = CFrame.fromEulerAnglesYXZ(0, yaw + currentLocomotionAngle, 0)
+                    local p = activeHRP.Position
+                    activeHRP.CFrame = CFrame.new(p) * baseFacing
                 end
             end
         end
@@ -1657,6 +1695,78 @@ RunService.RenderStepped:Connect(function(dt: number)
         end
     end
 
+end)
+
+-- -----------------------------------------------------------------------------
+-- 10. FINAL CAMERA PASS (Runs after Roblox CameraModule to guarantee exact eye position)
+-- -----------------------------------------------------------------------------
+RunService:BindToRenderStep("FPPFinalCameraPass", Enum.RenderPriority.Camera.Value + 10, function()
+    if not camera or not activeCharacter then return end
+    if player:GetAttribute("IsInGameplay") ~= true or ModalManager.IsAnyModalOpen() then return end
+
+    local isTPP = player:GetAttribute("IsTPP") == true
+    local recoilCF = CFrame.Angles(currentRecoil.X, currentRecoil.Y, currentRecoil.Z)
+    if state.SpecialAction == "Died" then
+        recoilCF = recoilCF * CFrame.Angles(math.rad(48), 0, math.rad(18)) -- Head planted into snow
+    end
+
+    if isTPP then
+        -- Third-Person Perspective (TPP): Ultra-mild bank roll + recoil
+        local bankRollCF = CFrame.Angles(0, 0, -currentLeanZ * 0.2)
+        camera.CFrame = camera.CFrame * recoilCF * bankRollCF
+    else
+        -- First-Person Perspective (FPP):
+        -- Pitch clamping:
+        -- -52° downward clamp allows looking down at jacket, sleeves, hands, legs, and sneakers with 0 neck peering.
+        -- +75° upward clamp allows looking high into the sky and stars without camera dipping.
+        local camCF = camera.CFrame
+        local pitch, yaw, _ = camCF:ToEulerAnglesYXZ()
+        local MIN_FPP_PITCH = math.rad(-52)
+        local MAX_FPP_PITCH = math.rad(75)
+        local clampedPitch = math.clamp(pitch, MIN_FPP_PITCH, MAX_FPP_PITCH)
+
+        -- Production-Grade Fixed Eye-Pivot:
+        -- HRP local space: -Z = character forward (in front of face), +Z = behind character.
+        -- Base eye height: Y = 2.40 studs (female) / 2.52 studs (male) at true eye bridge level.
+        -- Base eye depth: Z = -0.76 studs = strictly in FRONT of the nose, mouth, and face
+        -- so the head and face mesh are 100% behind the camera's near clipping plane.
+        if activeHRP and state.SpecialAction ~= "Died" then
+            local baseEyeY = 2.40
+            local baseEyeZ = -0.76  -- negative = in FRONT of character nose (HRP -Z is forward)
+            local charGender = player:GetAttribute("SelectedGender") or player:GetAttribute("CurrentCharacterGender")
+            if charGender == "Male" then
+                baseEyeY = 2.52
+                baseEyeZ = -0.80
+            end
+
+            if state.SpecialAction == "CampfireLight" then
+                baseEyeY = baseEyeY - 1.3 -- Kneeling at campfire
+            end
+
+            -- Dynamic head tracking: if animated head bone shifts forward during flavor idle or sprint,
+            -- smoothly shift camera forward with it so the face stays 100% behind the camera!
+            if joints.HeadBone and joints.HeadBone:IsA("Bone") then
+                local headLocal = activeHRP.CFrame:PointToObjectSpace(joints.HeadBone.WorldPosition)
+                if headLocal.Z < -0.30 then
+                    local extraForward = (-0.30 - headLocal.Z) * 0.85
+                    baseEyeZ = baseEyeZ - extraForward
+                end
+            end
+
+            -- Natural human neck cervical bend: when looking down, head pitches slightly forward
+            local downAlpha = math.clamp(-clampedPitch / math.rad(52), 0, 1)
+            local neckBendForward = downAlpha * 0.22
+            local neckBendDown = downAlpha * 0.06
+
+            -- Subtle landing impact dip (landingSpring.Position is a Vector3 field, not a method)
+            local landingDip = math.clamp(landingSpring.Position.Y * 0.08, -0.25, 0.25)
+
+            local eyeWorldPos = activeHRP.CFrame:PointToWorldSpace(Vector3.new(0, (baseEyeY - landingDip) - neckBendDown, baseEyeZ - neckBendForward))
+            camera.CFrame = CFrame.new(eyeWorldPos) * CFrame.fromEulerAnglesYXZ(clampedPitch, yaw, 0) * recoilCF
+        else
+            camera.CFrame = CFrame.new(camCF.Position) * CFrame.fromEulerAnglesYXZ(clampedPitch, yaw, 0) * recoilCF
+        end
+    end
 end)
 
 return CharacterAnimationController

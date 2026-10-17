@@ -17,6 +17,17 @@ local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
 local loadingStartedAt = os.clock()
 local MINIMUM_LOADING_SECONDS = 4
 
+-- Check GameConfig to bypass early curtain if direct spawn is requested
+local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared", 3)
+local configModule = sharedFolder and sharedFolder:WaitForChild("GameConfig", 3)
+local GameConfig = configModule and require(configModule)
+if GameConfig and GameConfig.ShouldSkipLoadingScreen and GameConfig.ShouldSkipLoadingScreen() then
+	player:SetAttribute("EarlyCurtainFinished", true)
+	player:SetAttribute("InitialMenuAssetsReady", true)
+	player:SetAttribute("MenuSceneReady", true)
+	return
+end
+
 -- ── Palette ───────────────────────────────────────────────────────────────────
 local EMBER = Color3.fromRGB(200, 100, 30)
 local FILL_COLOR = Color3.fromRGB(28, 28, 28) -- swap to EMBER for an orange bar
