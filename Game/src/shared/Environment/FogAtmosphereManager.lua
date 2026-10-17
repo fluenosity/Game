@@ -30,12 +30,12 @@ export type AtmospherePreset = {
 
 local PRESETS: { [string]: AtmospherePreset } = {
 	AlpineCrisp = {
-		Density = 0.28,
-		Offset = 0.18,
-		Haze = 0.35,
-		Color = Color3.fromRGB(175, 200, 225),
-		Decay = Color3.fromRGB(95, 120, 145),
-		Glare = 0.08,
+		Density = 0.41,
+		Offset = 0.857,
+		Haze = 0.0,
+		Color = Color3.fromRGB(97, 99, 97),
+		Decay = Color3.fromRGB(106, 112, 125),
+		Glare = 2.86,
 		FogStart = 0,
 		FogEnd = 2400,
 		FogColor = Color3.fromRGB(195, 180, 165),
@@ -63,28 +63,28 @@ local PRESETS: { [string]: AtmospherePreset } = {
 		FogColor = Color3.fromRGB(120, 128, 140),
 	},
 	NightValley = {
-		Density = 0.26,
-		Offset = 0.18,
-		Haze = 0.35,
-		Color = Color3.fromRGB(55, 72, 105),
-		Decay = Color3.fromRGB(20, 28, 45),
+		Density = 0.30,
+		Offset = 0.857,
+		Haze = 0.0,
+		Color = Color3.fromRGB(60, 75, 105),
+		Decay = Color3.fromRGB(22, 28, 45),
 		Glare = 0.0,
 		FogStart = 0,
 		FogEnd = 2400,
-		FogColor = Color3.fromRGB(18, 22, 36),
+		FogColor = Color3.fromRGB(16, 20, 32),
 	},
 }
 
 local cachedAtmosphere: Atmosphere? = nil
 local currentPreset: string = "AlpineCrisp"
 
--- Current active values
-local targetDensity: number = 0.28
-local targetOffset: number = 0.18
-local targetHaze: number = 0.35
-local targetColor: Color3 = Color3.fromRGB(175, 200, 225)
-local targetDecay: Color3 = Color3.fromRGB(95, 120, 145)
-local targetGlare: number = 0.08
+-- Current active values matching authored studio editor
+local targetDensity: number = 0.41
+local targetOffset: number = 0.857
+local targetHaze: number = 0.0
+local targetColor: Color3 = Color3.fromRGB(97, 99, 97)
+local targetDecay: Color3 = Color3.fromRGB(106, 112, 125)
+local targetGlare: number = 2.86
 
 local targetFogStart: number = 0
 local targetFogEnd: number = 2400
@@ -113,6 +113,19 @@ function FogAtmosphereManager.EnsureAtmosphere(): Atmosphere
 	local existing = Lighting:FindFirstChildOfClass("Atmosphere")
 	if existing then
 		cachedAtmosphere = existing
+		-- Adopt authored properties if not empty
+		targetDensity = existing.Density
+		targetOffset = existing.Offset
+		targetHaze = existing.Haze
+		targetColor = existing.Color
+		targetDecay = existing.Decay
+		targetGlare = existing.Glare
+		currentDensity = targetDensity
+		currentOffset = targetOffset
+		currentHaze = targetHaze
+		currentColor = targetColor
+		currentDecay = targetDecay
+		currentGlare = targetGlare
 		return existing
 	end
 
@@ -204,18 +217,30 @@ function FogAtmosphereManager.Update(dt: number, baseParams: BaseAtmosphereParam
 	local activeFogEnd = (baseParams and baseParams.FogEnd) or targetFogEnd
 	local activeFogColor = (baseParams and baseParams.FogColor) or targetFogColor
 
-	-- Smooth exponential lerp
-	local blend = math.clamp(dt * 3.5, 0, 1)
-	currentDensity = currentDensity + (activeDensity - currentDensity) * blend
-	currentOffset = currentOffset + (activeOffset - currentOffset) * blend
-	currentHaze = currentHaze + (activeHaze - currentHaze) * blend
-	currentColor = currentColor:Lerp(activeColor, blend)
-	currentDecay = currentDecay:Lerp(activeDecay, blend)
-	currentGlare = currentGlare + (activeGlare - currentGlare) * blend
+	if baseParams then
+		currentDensity = activeDensity
+		currentOffset = activeOffset
+		currentHaze = activeHaze
+		currentColor = activeColor
+		currentDecay = activeDecay
+		currentGlare = activeGlare
+		currentFogStart = activeFogStart
+		currentFogEnd = activeFogEnd
+		currentFogColor = activeFogColor
+	else
+		-- Smooth exponential lerp for preset switching
+		local blend = math.clamp(dt * 3.5, 0, 1)
+		currentDensity = currentDensity + (activeDensity - currentDensity) * blend
+		currentOffset = currentOffset + (activeOffset - currentOffset) * blend
+		currentHaze = currentHaze + (activeHaze - currentHaze) * blend
+		currentColor = currentColor:Lerp(activeColor, blend)
+		currentDecay = currentDecay:Lerp(activeDecay, blend)
+		currentGlare = currentGlare + (activeGlare - currentGlare) * blend
 
-	currentFogStart = currentFogStart + (activeFogStart - currentFogStart) * blend
-	currentFogEnd = currentFogEnd + (activeFogEnd - currentFogEnd) * blend
-	currentFogColor = currentFogColor:Lerp(activeFogColor, blend)
+		currentFogStart = currentFogStart + (activeFogStart - currentFogStart) * blend
+		currentFogEnd = currentFogEnd + (activeFogEnd - currentFogEnd) * blend
+		currentFogColor = currentFogColor:Lerp(activeFogColor, blend)
+	end
 
 	-- Apply to Atmosphere
 	atmo.Density = currentDensity

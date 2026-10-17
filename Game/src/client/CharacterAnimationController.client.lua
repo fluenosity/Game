@@ -582,6 +582,7 @@ local function playWeaponSound(character: Model?, soundName: string): boolean
     return false
 end
 
+local bodyParts: { BasePart } = {}
 local armParts: { BasePart } = {}
 local headParts: { BasePart } = {}
 local characterConnections: { RBXScriptConnection } = {}
@@ -671,6 +672,7 @@ local function cacheCharacterJoints(char: Model)
         end
     end))
 
+    table.clear(bodyParts)
     table.clear(armParts)
     table.clear(headParts)
 
@@ -708,7 +710,25 @@ local function cacheCharacterJoints(char: Model)
         end
     end
 
-    -- Cache arms for FPP viewmodel unmasking
+    -- Cache all body parts, meshes, clothing, and accessories for FPP/TPP visibility switching
+    local function registerPart(p: Instance)
+        if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+            local isToolPart = p:FindFirstAncestorWhichIsA("Tool") ~= nil
+            if not isToolPart and not table.find(bodyParts, p) then
+                table.insert(bodyParts, p)
+            end
+        end
+    end
+
+    for _, descendant in ipairs(char:GetDescendants()) do
+        registerPart(descendant)
+    end
+
+    table.insert(characterConnections, char.DescendantAdded:Connect(function(descendant)
+        registerPart(descendant)
+    end))
+
+    -- Cache arms for FPP viewmodel unmasking (when separate R15 limbs exist)
     for _, partName in ipairs({ "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm", "RightLowerArm", "RightHand" }) do
         local p = char:FindFirstChild(partName)
         if p and p:IsA("BasePart") then
@@ -1520,20 +1540,38 @@ end)
 RunService.RenderStepped:Connect(function(dt: number)
     if not camera or not activeCharacter then return end
 
-    -- 1. Unmask First-Person arms and prevent head clipping (or keep all visible in TPP)
+    -- 1. Manage Character Visibility: FPP (hide body/clothes/head) vs TPP (show all)
     local isTPP = player:GetAttribute("IsTPP") == true
-    for _, part in ipairs(armParts) do
-        part.LocalTransparencyModifier = 0
-    end
-    for _, headPart in ipairs(headParts) do
-        headPart.LocalTransparencyModifier = isTPP and 0 or 1
-    end
     if isTPP then
-        for _, acc in ipairs(activeCharacter:GetChildren()) do
-            if acc:IsA("Accessory") then
-                local h = acc:FindFirstChild("Handle")
-                if h and h:IsA("BasePart") then
-                    h.LocalTransparencyModifier = 0
+        -- In Third-Person Perspective (TPP): All body meshes, clothing, accessories, and shoes are visible
+        for _, part in ipairs(bodyParts) do
+            if part and part.Parent then
+                part.LocalTransparencyModifier = 0
+            end
+        end
+    else
+        -- In First-Person Perspective (FPP): Hide survivor character body, clothing, hair, eyelashes, shoes, and accessories
+        -- so they never clip or bounce into the camera view
+        for _, part in ipairs(bodyParts) do
+            if part and part.Parent then
+                part.LocalTransparencyModifier = 1
+            end
+        end
+
+        -- If separate R15 arms exist, keep arms visible for classic viewmodel
+        for _, armPart in ipairs(armParts) do
+            if armPart and armPart.Parent then
+                armPart.LocalTransparencyModifier = 0
+            end
+        end
+    end
+
+    -- Equipped tools and weapons in hand always stay visible in both FPP and TPP
+    for _, item in ipairs(activeCharacter:GetChildren()) do
+        if item:IsA("Tool") then
+            for _, tp in ipairs(item:GetDescendants()) do
+                if tp:IsA("BasePart") then
+                    tp.LocalTransparencyModifier = 0
                 end
             end
         end
@@ -1548,18 +1586,25 @@ RunService.RenderStepped:Connect(function(dt: number)
         camera.FieldOfView = 70 + (currentSprintAlpha * 6)
     end
 
-    -- 3. Camera Offset adjustments (Death & Campfire)
+    -- 3. Camera Offset adjustments (Eye height, Death & Campfire)
     if activeHumanoid then
         local targetYOffset = 0.0
+        local targetZOffset = 0.0
         if state.SpecialAction == "Died" then
             targetYOffset = -2.8 -- Collapse into snow
         elseif state.SpecialAction == "CampfireLight" then
             targetYOffset = -1.6 -- Kneel at campfire
+        elseif not isTPP then
+            -- Elevate first-person camera to true eye level (mixamorig:Head is 2.34 studs above HRP)
+            -- Slight forward offset (-0.35 studs) gives a clear unobstructed forward view
+            targetYOffset = 2.34
+            targetZOffset = -0.35
         end
 
         local currentOffset = activeHumanoid.CameraOffset
         local newY = currentOffset.Y + (targetYOffset - currentOffset.Y) * math.clamp(dt * 12, 0, 1)
-        activeHumanoid.CameraOffset = Vector3.new(0, newY, 0)
+        local newZ = currentOffset.Z + (targetZOffset - currentOffset.Z) * math.clamp(dt * 12, 0, 1)
+        activeHumanoid.CameraOffset = Vector3.new(0, newY, newZ)
     end
 
     -- 4. Apply Stable Horizon to Camera CFrame (Zero screen bending / roll in FPP)

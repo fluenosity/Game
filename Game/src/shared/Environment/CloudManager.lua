@@ -186,11 +186,17 @@ function CloudManager.Update(dt: number, baseCover: number?, baseDensity: number
 	local activeTargetDensity = baseDensity or targetDensity
 	local activeTargetColor = baseColor or targetColor
 
-	-- Smooth exponential lerp toward target values
-	local blendFactor = math.clamp(dt * 3.5, 0, 1)
-	currentCover = currentCover + (activeTargetCover - currentCover) * blendFactor
-	currentDensity = currentDensity + (activeTargetDensity - currentDensity) * blendFactor
-	currentColor = currentColor:Lerp(activeTargetColor, blendFactor)
+	if baseCover then
+		currentCover = activeTargetCover
+		currentDensity = activeTargetDensity
+		currentColor = activeTargetColor
+	else
+		-- Smooth exponential lerp toward target values
+		local blendFactor = math.clamp(dt * 3.5, 0, 1)
+		currentCover = currentCover + (activeTargetCover - currentCover) * blendFactor
+		currentDensity = currentDensity + (activeTargetDensity - currentDensity) * blendFactor
+		currentColor = currentColor:Lerp(activeTargetColor, blendFactor)
+	end
 
 	-- Procedural organic breathing noise
 	morphTimer = morphTimer + dt * morphSpeed

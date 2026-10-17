@@ -48,21 +48,8 @@ timeState:GetAttributeChangedSignal("CurrentDay"):Connect(function()
 	end
 end)
 
--- The menu gets a local night look. Gameplay continues to use the server's
--- authoritative clock, so the daytime development setting is preserved in play.
+-- Baseline visual initialization
 TimeVisuals.Apply(smoothedHour, currentDay)
-
-local function applyMenuAmbientFill()
-	-- Keep the menu in the game's clear afternoon palette and lift shaded trees
-	-- slightly so the forest remains readable around the warm campfire.
-	Lighting.Brightness = math.max(Lighting.Brightness, 2.8)
-	Lighting.Ambient = Color3.fromRGB(82, 93, 111)
-	Lighting.OutdoorAmbient = Color3.fromRGB(126, 142, 160)
-	-- Soft distance fog bounds for clean horizon matching the editor
-	Lighting.FogStart = 420
-	Lighting.FogEnd = 2400
-	Lighting.FogColor = Color3.fromRGB(177, 192, 208)
-end
 
 -- RenderStepped runs every frame right before GPU rendering
 RunService.RenderStepped:Connect(function(deltaTime: number)
@@ -70,9 +57,6 @@ RunService.RenderStepped:Connect(function(deltaTime: number)
 	if player:GetAttribute("IsInGameplay") ~= true then
 		smoothedHour = studioOverride or MENU_HOUR
 		TimeVisuals.Apply(smoothedHour, currentDay)
-		if not studioOverride then
-			applyMenuAmbientFill()
-		end
 		return
 	end
 

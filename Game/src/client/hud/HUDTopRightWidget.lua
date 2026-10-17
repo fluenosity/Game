@@ -27,6 +27,8 @@ export type HUDTopRightInstance = {
     SetSanctuaryStatus: (inSanctuary: boolean) -> (),
     SetOnBackpackClick: (callback: () -> ()) -> (),
     SetOnSettingsClick: (callback: () -> ()) -> (),
+    SetOnPerspectiveClick: (callback: () -> ()) -> (),
+    SetPerspective: (isTPP: boolean) -> (),
     Destroy: () -> (),
 }
 
@@ -36,7 +38,7 @@ function HUDTopRightWidget.Create(parent: Instance): HUDTopRightInstance
     -- Main Root Bar anchored flush to top-right corner (flat glass, no pill)
     local root = Instance.new("Frame")
     root.Name = "HUDTopRightWidget"
-    root.Size = UDim2.fromOffset(210, 38)
+    root.Size = UDim2.fromOffset(256, 38)
     root.Position = UDim2.new(1, 0, 0, 36) -- Flush to right edge, just below Roblox topbar
     root.AnchorPoint = Vector2.new(1, 0)
     root.BackgroundColor3 = Color3.fromRGB(10, 11, 14)
@@ -124,7 +126,57 @@ function HUDTopRightWidget.Create(parent: Instance): HUDTopRightInstance
     div.Parent = root
 
     ----------------------------------------------------------------------------
-    -- 2. QUICK BACKPACK BUTTON [ B ]
+    -- 2. QUICK PERSPECTIVE TOGGLE BUTTON [ V ]
+    ----------------------------------------------------------------------------
+    local btnPerspective = Instance.new("TextButton")
+    btnPerspective.Name = "PerspectiveButton"
+    btnPerspective.Size = UDim2.fromOffset(36, 26)
+    btnPerspective.BackgroundColor3 = Color3.fromRGB(26, 28, 34)
+    btnPerspective.BackgroundTransparency = 0.4
+    btnPerspective.BorderSizePixel = 0
+    btnPerspective.Text = ""
+    btnPerspective.AutoButtonColor = false
+    btnPerspective.LayoutOrder = 3
+    btnPerspective.ZIndex = 52
+    btnPerspective.Parent = root
+
+    local perspCorner = Instance.new("UICorner")
+    perspCorner.CornerRadius = UDim.new(0, 6)
+    perspCorner.Parent = btnPerspective
+
+    local perspStroke = Instance.new("UIStroke")
+    perspStroke.Color = Color3.fromRGB(255, 255, 255)
+    perspStroke.Transparency = 0.85
+    perspStroke.Thickness = 1
+    perspStroke.Parent = btnPerspective
+
+    local perspIcon = IconPack.CreateIcon("eye", 13, Color3.fromRGB(235, 240, 250))
+    perspIcon.Name = "PerspectiveIcon"
+    perspIcon.Position = UDim2.new(0, 5, 0.5, 0)
+    perspIcon.AnchorPoint = Vector2.new(0, 0.5)
+    perspIcon.ZIndex = 53
+    perspIcon.Parent = btnPerspective
+
+    local perspKey = Instance.new("TextLabel")
+    perspKey.Name = "KeyLabel"
+    perspKey.Size = UDim2.new(0, 12, 1, 0)
+    perspKey.Position = UDim2.new(1, -5, 0, 0)
+    perspKey.AnchorPoint = Vector2.new(1, 0)
+    perspKey.BackgroundTransparency = 1
+    perspKey.Font = Enum.Font.GothamBold
+    perspKey.Text = "V"
+    perspKey.TextColor3 = Color3.fromRGB(255, 185, 75)
+    perspKey.TextSize = 10
+    perspKey.TextXAlignment = Enum.TextXAlignment.Right
+    perspKey.ZIndex = 53
+    perspKey.Parent = btnPerspective
+
+    local perspScale = Instance.new("UIScale")
+    perspScale.Scale = 1
+    perspScale.Parent = btnPerspective
+
+    ----------------------------------------------------------------------------
+    -- 3. QUICK BACKPACK BUTTON [ B ]
     ----------------------------------------------------------------------------
     local btnBackpack = Instance.new("TextButton")
     btnBackpack.Name = "BackpackButton"
@@ -134,7 +186,7 @@ function HUDTopRightWidget.Create(parent: Instance): HUDTopRightInstance
     btnBackpack.BorderSizePixel = 0
     btnBackpack.Text = ""
     btnBackpack.AutoButtonColor = false
-    btnBackpack.LayoutOrder = 3
+    btnBackpack.LayoutOrder = 4
     btnBackpack.ZIndex = 52
     btnBackpack.Parent = root
 
@@ -174,7 +226,7 @@ function HUDTopRightWidget.Create(parent: Instance): HUDTopRightInstance
     bpScale.Parent = btnBackpack
 
     ----------------------------------------------------------------------------
-    -- 3. QUICK SETTINGS BUTTON [ ESC ]
+    -- 4. QUICK SETTINGS BUTTON [ ESC ]
     ----------------------------------------------------------------------------
     local btnSettings = Instance.new("TextButton")
     btnSettings.Name = "SettingsButton"
@@ -184,7 +236,7 @@ function HUDTopRightWidget.Create(parent: Instance): HUDTopRightInstance
     btnSettings.BorderSizePixel = 0
     btnSettings.Text = ""
     btnSettings.AutoButtonColor = false
-    btnSettings.LayoutOrder = 4
+    btnSettings.LayoutOrder = 5
     btnSettings.ZIndex = 52
     btnSettings.Parent = root
 
@@ -210,6 +262,26 @@ function HUDTopRightWidget.Create(parent: Instance): HUDTopRightInstance
     setScale.Parent = btnSettings
 
     -- Button Hover Micro-interactions (Color only, zero hover bounce)
+    btnPerspective.MouseEnter:Connect(function()
+        TweenService:Create(btnPerspective, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 0.15,
+        }):Play()
+        TweenService:Create(perspStroke, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Color = Color3.fromRGB(245, 160, 40),
+            Transparency = 0.3,
+        }):Play()
+    end)
+
+    btnPerspective.MouseLeave:Connect(function()
+        TweenService:Create(btnPerspective, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 0.4,
+        }):Play()
+        TweenService:Create(perspStroke, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Color = Color3.fromRGB(255, 255, 255),
+            Transparency = 0.85,
+        }):Play()
+    end)
+
     btnBackpack.MouseEnter:Connect(function()
         TweenService:Create(btnBackpack, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = 0.15,
@@ -251,8 +323,18 @@ function HUDTopRightWidget.Create(parent: Instance): HUDTopRightInstance
     end)
 
     -- Callbacks with tactile micro-compression and audio
+    local onPerspectiveCallback: (() -> ())? = nil
     local onBackpackCallback: (() -> ())? = nil
     local onSettingsCallback: (() -> ())? = nil
+
+    btnPerspective.Activated:Connect(function()
+        TweenService:Create(perspScale, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.94 }):Play()
+        task.delay(0.08, function()
+            TweenService:Create(perspScale, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1.0 }):Play()
+        end)
+        AudioManager.Play("Click")
+        if onPerspectiveCallback then onPerspectiveCallback() end
+    end)
 
     btnBackpack.Activated:Connect(function()
         TweenService:Create(bpScale, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.94 }):Play()
@@ -273,6 +355,13 @@ function HUDTopRightWidget.Create(parent: Instance): HUDTopRightInstance
     end)
 
     -- Attach luxury glassmorphic tooltips
+    local perspectiveTooltip = UI.Tooltip.Attach(btnPerspective, {
+        Title = "Camera Perspective",
+        Category = "HOTKEY [V]",
+        Description = "Toggle between First-Person (FPP) and Third-Person (TPP).",
+        ActionHint = "Click or press [V] to toggle",
+    })
+
     UI.Tooltip.Attach(btnBackpack, {
         Title = "Survival Backpack",
         Category = "HOTKEY [B]",
@@ -286,6 +375,27 @@ function HUDTopRightWidget.Create(parent: Instance): HUDTopRightInstance
         Description = "Adjust audio volume, look sensitivity, and options.",
         ActionHint = "Click or press [ESC] to toggle",
     })
+
+    -- Function to update perspective button visual state
+    local function updatePerspectiveState(isTPP: boolean)
+        if isTPP then
+            IconPack.ApplyTo(perspIcon, "eye", Color3.fromRGB(235, 240, 250), 0, 13)
+            UI.Tooltip.Attach(btnPerspective, {
+                Title = "First-Person View",
+                Category = "HOTKEY [V]",
+                Description = "Switch camera perspective to First-Person View (FPP).",
+                ActionHint = "Click or press [V] to switch to FPP",
+            })
+        else
+            IconPack.ApplyTo(perspIcon, "user", Color3.fromRGB(235, 240, 250), 0, 13)
+            UI.Tooltip.Attach(btnPerspective, {
+                Title = "Third-Person View",
+                Category = "HOTKEY [V]",
+                Description = "Switch camera perspective to Third-Person View (TPP).",
+                ActionHint = "Click or press [V] to switch to TPP",
+            })
+        end
+    end
 
     -- Controller Return
     local instance: HUDTopRightInstance = {
@@ -312,6 +422,14 @@ function HUDTopRightWidget.Create(parent: Instance): HUDTopRightInstance
             else
                 IconPack.ApplyTo(timeIcon, "sun", Color3.fromRGB(250, 200, 60), 0, 15)
             end
+        end,
+
+        SetOnPerspectiveClick = function(callback)
+            onPerspectiveCallback = callback
+        end,
+
+        SetPerspective = function(isTPP: boolean)
+            updatePerspectiveState(isTPP)
         end,
 
         SetOnBackpackClick = function(callback)

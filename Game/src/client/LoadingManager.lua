@@ -27,94 +27,34 @@ local GameConfig = require(sharedFolder:WaitForChild("GameConfig"))
 local EnvironmentConfig = require(sharedFolder:WaitForChild("EnvironmentConfig"))
 local WardrobeConfig = require(sharedFolder:WaitForChild("SurvivorWardrobeConfig"))
 
+local EnvironmentManager = require(sharedFolder:WaitForChild("Environment"):WaitForChild("EnvironmentManager"))
+local TimeVisuals = require(sharedFolder:WaitForChild("TimeVisuals"))
+
 local LoadingManager = {}
 
 -- Ensure lighting post-processing is fully active client-side immediately
 local function ensureAtmosphericPostProcessing(): { Instance }
-    local postCfg = EnvironmentConfig.POST_PROCESSING or {}
-    local lightCfg = postCfg.Lighting or {}
-    local atmoCfg = postCfg.Atmosphere or {}
-    local ccCfg = postCfg.ColorCorrection or {}
-    local bloomCfg = postCfg.Bloom or {}
-    local raysCfg = postCfg.SunRays or {}
-
     pcall(function()
         Lighting.Technology = Enum.Technology.Future
     end)
-    Lighting.Brightness = lightCfg.Brightness or 2.8
-    Lighting.Ambient = lightCfg.Ambient or Color3.fromRGB(75, 90, 110)
-    Lighting.OutdoorAmbient = lightCfg.OutdoorAmbient or Color3.fromRGB(115, 132, 150)
-    Lighting.ShadowSoftness = lightCfg.ShadowSoftness or 0.15
-    Lighting.ClockTime = lightCfg.ClockTime or 14.5
-    Lighting.FogEnd = lightCfg.FogEnd or 2400.0
 
-    -- Atmosphere
+    EnvironmentManager.Init()
+    TimeVisuals.Apply(14.0, 0)
+
     local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
-    if not atmo then
-        atmo = Instance.new("Atmosphere")
-        atmo.Name = "ForestAtmosphere"
-        atmo.Parent = Lighting
-    end
-    atmo.Density = atmoCfg.Density or 0.34
-    atmo.Offset = atmoCfg.Offset or 0.18
-    atmo.Color = atmoCfg.Color or Color3.fromRGB(175, 200, 225)
-    atmo.Decay = atmoCfg.Decay or Color3.fromRGB(95, 120, 145)
-    atmo.Glare = atmoCfg.Glare or 0.25
-    atmo.Haze = atmoCfg.Haze or 1.80
-
-    -- ColorCorrection
-    local cc = Lighting:FindFirstChild("ForestColorCorrection") :: ColorCorrectionEffect?
-    if not cc then
-        cc = Instance.new("ColorCorrectionEffect")
-        cc.Name = "ForestColorCorrection"
-        cc.Parent = Lighting
-    end
-    cc.Brightness = ccCfg.Brightness or 0.02
-    cc.Contrast = ccCfg.Contrast or 0.06
-    cc.Saturation = ccCfg.Saturation or 0.15
-    cc.TintColor = ccCfg.TintColor or Color3.fromRGB(255, 252, 246)
-    cc.Enabled = true
-
-    -- Bloom
-    local bloom = Lighting:FindFirstChild("ForestBloom") :: BloomEffect?
-    if not bloom then
-        bloom = Instance.new("BloomEffect")
-        bloom.Name = "ForestBloom"
-        bloom.Parent = Lighting
-    end
-    bloom.Intensity = bloomCfg.Intensity or 0.40
-    bloom.Size = bloomCfg.Size or 18
-    bloom.Threshold = bloomCfg.Threshold or 0.85
-    bloom.Enabled = true
-
-    -- SunRays
-    local rays = Lighting:FindFirstChild("ForestSunRays") :: SunRaysEffect?
-    if not rays then
-        rays = Instance.new("SunRaysEffect")
-        rays.Name = "ForestSunRays"
-        rays.Parent = Lighting
-    end
-    rays.Intensity = raysCfg.Intensity or 0.08
-    rays.Spread = raysCfg.Spread or 0.65
-    rays.Enabled = true
-
-    -- Sky (Preserve authored studio skybox)
-    local skyCfg = (EnvironmentConfig.SKY and EnvironmentConfig.SKY.Day) or {}
+    local cc = Lighting:FindFirstChild("ForestColorCorrection")
+    local bloom = Lighting:FindFirstChild("ForestBloom")
+    local rays = Lighting:FindFirstChild("ForestSunRays")
     local sky = Lighting:FindFirstChildOfClass("Sky")
-    if not sky then
-        sky = Instance.new("Sky")
-        sky.Name = "Sky"
-        sky.SkyboxBk = skyCfg.SkyboxBk or "http://www.roblox.com/asset/?id=144933338"
-        sky.SkyboxDn = skyCfg.SkyboxDn or "http://www.roblox.com/asset/?id=144931530"
-        sky.SkyboxFt = skyCfg.SkyboxFt or "http://www.roblox.com/asset/?id=144933262"
-        sky.SkyboxLf = skyCfg.SkyboxLf or "http://www.roblox.com/asset/?id=144933244"
-        sky.SkyboxRt = skyCfg.SkyboxRt or "http://www.roblox.com/asset/?id=144933299"
-        sky.SkyboxUp = skyCfg.SkyboxUp or "http://www.roblox.com/asset/?id=144931564"
-        sky.CelestialBodiesShown = true
-        sky.Parent = Lighting
-    end
 
-    return { atmo, cc, bloom, rays, sky }
+    local instances = {}
+    if atmo then table.insert(instances, atmo) end
+    if cc then table.insert(instances, cc) end
+    if bloom then table.insert(instances, bloom) end
+    if rays then table.insert(instances, rays) end
+    if sky then table.insert(instances, sky) end
+
+    return instances
 end
 
 function LoadingManager.LoadGame(loadingScreen: any, onCompleted: (() -> ())?, selection: any?)

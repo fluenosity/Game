@@ -65,6 +65,29 @@ local NIGHT_SKY: SkyboxConfig = {
 local cachedSky: Sky? = nil
 local isCurrentlyNightSky: boolean = false
 
+-- Dynamic resolver for authoritative Day Skybox (respects ReplicatedStorage.RealisticDaySkybox or custom store skybox)
+function CelestialSkyManager.GetAuthoritativeDaySky(): SkyboxConfig
+	local rs = game:GetService("ReplicatedStorage")
+	local storeSky = rs:FindFirstChild("RealisticDaySkybox") :: Sky?
+	if storeSky and storeSky:IsA("Sky") and storeSky.SkyboxBk and storeSky.SkyboxBk ~= "" and not string.find(storeSky.SkyboxBk, "91458024") then
+		return {
+			SkyboxBk = storeSky.SkyboxBk,
+			SkyboxDn = storeSky.SkyboxDn,
+			SkyboxFt = storeSky.SkyboxFt,
+			SkyboxLf = storeSky.SkyboxLf,
+			SkyboxRt = storeSky.SkyboxRt,
+			SkyboxUp = storeSky.SkyboxUp,
+			SunTextureId = storeSky.SunTextureId ~= "" and storeSky.SunTextureId or "rbxasset://sky/sun.jpg",
+			MoonTextureId = storeSky.MoonTextureId ~= "" and storeSky.MoonTextureId or "rbxasset://sky/moon.jpg",
+			SunAngularSize = storeSky.SunAngularSize > 0 and storeSky.SunAngularSize or 5,
+			MoonAngularSize = storeSky.MoonAngularSize > 0 and storeSky.MoonAngularSize or 11,
+			CelestialBodiesShown = storeSky.CelestialBodiesShown,
+			MaxStars = 1500,
+		}
+	end
+	return DAY_SKY
+end
+
 local function smoothstep(t: number): number
 	local clamped = math.clamp(t, 0, 1)
 	return clamped * clamped * (3 - 2 * clamped)
@@ -79,11 +102,17 @@ function CelestialSkyManager.EnsureSky(): Sky
 		return cachedSky
 	end
 
+	local authoritativeDay = CelestialSkyManager.GetAuthoritativeDaySky()
 	local existing = Lighting:FindFirstChildOfClass("Sky")
 	if existing then
 		cachedSky = existing
-		-- If existing sky has custom user textures (not default empty), capture them as DAY_SKY!
-		if existing.SkyboxBk and existing.SkyboxBk ~= "" and not string.find(existing.SkyboxBk, "15146674442") then
+		-- If existing sky has legacy 2012 texture 91458024, immediately purge and overwrite with realistic store skybox!
+		if existing.SkyboxBk and string.find(existing.SkyboxBk, "91458024") then
+			CelestialSkyManager.ApplyConfig(authoritativeDay)
+		elseif existing.SkyboxBk and existing.SkyboxBk ~= "" 
+			and not string.find(existing.SkyboxBk, "15146674442") 
+			and not string.find(existing.SkyboxBk, "91458024") then
+			-- Adopt custom store skybox authored by the user in Studio
 			DAY_SKY.SkyboxBk = existing.SkyboxBk
 			DAY_SKY.SkyboxDn = existing.SkyboxDn
 			DAY_SKY.SkyboxFt = existing.SkyboxFt
@@ -104,23 +133,29 @@ function CelestialSkyManager.EnsureSky(): Sky
 	sky.Parent = Lighting
 	cachedSky = sky
 
-	CelestialSkyManager.ApplyConfig(DAY_SKY)
+	CelestialSkyManager.ApplyConfig(authoritativeDay)
 	return sky
 end
 
 function CelestialSkyManager.ApplyConfig(cfg: SkyboxConfig)
 	local sky = CelestialSkyManager.EnsureSky()
-	sky.SkyboxBk = cfg.SkyboxBk
-	sky.SkyboxDn = cfg.SkyboxDn
-	sky.SkyboxFt = cfg.SkyboxFt
-	sky.SkyboxLf = cfg.SkyboxLf
-	sky.SkyboxRt = cfg.SkyboxRt
-	sky.SkyboxUp = cfg.SkyboxUp
-	sky.SunTextureId = cfg.SunTextureId
-	sky.MoonTextureId = cfg.MoonTextureId
-	sky.SunAngularSize = cfg.SunAngularSize
-	sky.MoonAngularSize = cfg.MoonAngularSize
-	sky.CelestialBodiesShown = cfg.CelestialBodiesShown
+	-- Guard: Never allow legacy 91458024 textures to be applied
+	local actualCfg = cfg
+	if cfg.SkyboxBk and string.find(cfg.SkyboxBk, "91458024") then
+		actualCfg = CelestialSkyManager.GetAuthoritativeDaySky()
+	end
+
+	sky.SkyboxBk = actualCfg.SkyboxBk
+	sky.SkyboxDn = actualCfg.SkyboxDn
+	sky.SkyboxFt = actualCfg.SkyboxFt
+	sky.SkyboxLf = actualCfg.SkyboxLf
+	sky.SkyboxRt = actualCfg.SkyboxRt
+	sky.SkyboxUp = actualCfg.SkyboxUp
+	sky.SunTextureId = actualCfg.SunTextureId
+	sky.MoonTextureId = actualCfg.MoonTextureId
+	sky.SunAngularSize = actualCfg.SunAngularSize
+	sky.MoonAngularSize = actualCfg.MoonAngularSize
+	sky.CelestialBodiesShown = actualCfg.CelestialBodiesShown
 end
 
 -- -----------------------------------------------------------------------------
@@ -132,13 +167,10 @@ function CelestialSkyManager.Update(hour: number, dt: number): (number, number)
 
 	-- 1. Determine Night vs Day Skybox
 	local isNight = (hour >= 18.25 or hour < 5.75)
-	if isNight ~= isCurrentlyNightSky then
+	local targetConfig = isNight and NIGHT_SKY or CelestialSkyManager.GetAuthoritativeDaySky()
+	if isNight ~= isCurrentlyNightSky or sky.SkyboxBk ~= targetConfig.SkyboxBk then
 		isCurrentlyNightSky = isNight
-		if isNight then
-			CelestialSkyManager.ApplyConfig(NIGHT_SKY)
-		else
-			CelestialSkyManager.ApplyConfig(DAY_SKY)
-		end
+		CelestialSkyManager.ApplyConfig(targetConfig)
 	end
 
 	-- 2. Starfield Emergence (Hermite-interpolated fade-in of stars across twilight)
@@ -175,7 +207,15 @@ end
 -- -----------------------------------------------------------------------------
 
 function CelestialSkyManager.Init()
-	CelestialSkyManager.EnsureSky()
+	local sky = CelestialSkyManager.EnsureSky()
+	local hour = Lighting.ClockTime
+	local isNight = (hour >= 18.25 or hour < 5.75)
+	isCurrentlyNightSky = isNight
+	if isNight then
+		CelestialSkyManager.ApplyConfig(NIGHT_SKY)
+	else
+		CelestialSkyManager.ApplyConfig(CelestialSkyManager.GetAuthoritativeDaySky())
+	end
 end
 
 return CelestialSkyManager

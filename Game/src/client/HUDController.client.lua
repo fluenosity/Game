@@ -243,6 +243,14 @@ end
 
 local isTPP = player:GetAttribute("IsTPP") ~= false -- Default to true for testing realistic 3D character!
 player:SetAttribute("IsTPP", isTPP)
+topRightWidget.SetPerspective(isTPP)
+
+topRightWidget.SetOnPerspectiveClick(function()
+    isTPP = not isTPP
+    player:SetAttribute("IsTPP", isTPP)
+    topRightWidget.SetPerspective(isTPP)
+    updateMouseBehavior()
+end)
 
 local function enforcePerspective()
     if player:GetAttribute("IsInGameplay") ~= true then return end
@@ -358,15 +366,15 @@ player:GetAttributeChangedSignal("IsSeated"):Connect(function()
     updateMouseBehavior()
 end)
 
--- Connect [V] keybind to toggle between Third-Person (TPP) and First-Person (FPP)
-UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.V then
-        isTPP = not isTPP
-        player:SetAttribute("IsTPP", isTPP)
+player:GetAttributeChangedSignal("IsTPP"):Connect(function()
+    local val = player:GetAttribute("IsTPP") ~= false
+    if isTPP ~= val then
+        isTPP = val
         updateMouseBehavior()
     end
+    topRightWidget.SetPerspective(val)
 end)
+
 
 -- Connect modal state change callbacks so closing via button/key instantly updates mouse
 inventoryModal.SetOnOpen(updateMouseBehavior)
@@ -1211,7 +1219,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     elseif input.KeyCode == Enum.KeyCode.V then
         isTPP = not isTPP
         player:SetAttribute("IsTPP", isTPP)
-        enforcePerspective()
+        topRightWidget.SetPerspective(isTPP)
         updateMouseBehavior()
     elseif input.KeyCode == Enum.KeyCode.M or input.KeyCode == Enum.KeyCode.P then
         toggleSystemMenu()

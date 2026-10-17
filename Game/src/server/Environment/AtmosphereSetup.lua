@@ -15,137 +15,23 @@
 local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local EnvironmentConfig = require(ReplicatedStorage:WaitForChild("FluenosityShared"):WaitForChild("EnvironmentConfig"))
+local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
+local EnvironmentConfig = require(sharedFolder:WaitForChild("EnvironmentConfig"))
+local EnvironmentManager = require(sharedFolder:WaitForChild("Environment"):WaitForChild("EnvironmentManager"))
+local TimeVisuals = require(sharedFolder:WaitForChild("TimeVisuals"))
 
 local AtmosphereSetup = {}
 
 function AtmosphereSetup.Apply()
-    local cfg = (EnvironmentConfig and EnvironmentConfig.POST_PROCESSING) or {}
-    local lightCfg = (cfg and cfg.Lighting) or (EnvironmentConfig and EnvironmentConfig.Lighting) or {}
-    local atmoCfg = (cfg and cfg.Atmosphere) or (EnvironmentConfig and EnvironmentConfig.Atmosphere) or {}
-    local ccCfg = (cfg and cfg.ColorCorrection) or (EnvironmentConfig and EnvironmentConfig.ColorCorrection) or {}
-    local bloomCfg = (cfg and cfg.Bloom) or (EnvironmentConfig and EnvironmentConfig.Bloom) or {}
-    local raysCfg = (cfg and cfg.SunRays) or (EnvironmentConfig and EnvironmentConfig.SunRays) or {}
-    local dofCfg = (cfg and cfg.DepthOfField) or (EnvironmentConfig and EnvironmentConfig.DepthOfField) or {}
-    
-    -- 1. Lighting Technology & Core Ambient Illumination
     pcall(function()
         Lighting.Technology = Enum.Technology.Future
     end)
-    
-    Lighting.Brightness = lightCfg.Brightness or 2.8
-    Lighting.Ambient = lightCfg.Ambient or Color3.fromRGB(75, 90, 110)
-    Lighting.OutdoorAmbient = lightCfg.OutdoorAmbient or Color3.fromRGB(115, 132, 150)
-    Lighting.ShadowSoftness = lightCfg.ShadowSoftness or 0.15
-    Lighting.ClockTime = lightCfg.ClockTime or 14.5
-    Lighting.GeographicLatitude = lightCfg.GeographicLatitude or 48.0
-    Lighting.ExposureCompensation = lightCfg.ExposureCompensation or 0.02
-    Lighting.EnvironmentDiffuseScale = lightCfg.EnvironmentDiffuseScale or 1.0
-    Lighting.EnvironmentSpecularScale = lightCfg.EnvironmentSpecularScale or 0.85
-    Lighting.FogEnd = lightCfg.FogEnd or 2400.0 -- High FogEnd so terrain is never washed out
-    
-    -- 2. Volumetric Atmosphere (Preserve authored studio atmosphere)
-    local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-    if not atmosphere then
-        atmosphere = Instance.new("Atmosphere")
-        atmosphere.Name = "ForestAtmosphere"
-        atmosphere.Density = atmoCfg.Density or 0.41
-        atmosphere.Offset = atmoCfg.Offset or 0.857
-        atmosphere.Color = atmoCfg.Color or Color3.fromRGB(97, 99, 97)
-        atmosphere.Decay = atmoCfg.Decay or Color3.fromRGB(106, 112, 125)
-        atmosphere.Glare = atmoCfg.Glare or 2.86
-        atmosphere.Haze = atmoCfg.Haze or 0.0
-        atmosphere.Parent = Lighting
-    end
-    
-    -- 3. ColorCorrectionEffect (Rich alpine depth, lush conifer greens, warm amber firelight)
-    local cc = Lighting:FindFirstChild("ForestColorCorrection") :: ColorCorrectionEffect?
-    if not cc then
-        cc = Instance.new("ColorCorrectionEffect")
-        cc.Name = "ForestColorCorrection"
-        cc.Parent = Lighting
-    end
-    cc.Brightness = ccCfg.Brightness or 0.02
-    cc.Contrast = ccCfg.Contrast or 0.06
-    cc.Saturation = ccCfg.Saturation or 0.15
-    cc.TintColor = ccCfg.TintColor or Color3.fromRGB(255, 252, 246)
-    cc.Enabled = true
 
-    -- 3B. Production High-Res Celestial Skybox & Stars
-    local skyCfg = (EnvironmentConfig and EnvironmentConfig.SKY and EnvironmentConfig.SKY.Day) or {}
-    local sky = Lighting:FindFirstChildOfClass("Sky")
-    if not sky then
-        sky = Instance.new("Sky")
-        sky.Name = "Sky"
-        sky.Parent = Lighting
-        sky.SkyboxBk = skyCfg.SkyboxBk or "http://www.roblox.com/asset/?id=144933338"
-        sky.SkyboxDn = skyCfg.SkyboxDn or "http://www.roblox.com/asset/?id=144931530"
-        sky.SkyboxFt = skyCfg.SkyboxFt or "http://www.roblox.com/asset/?id=144933262"
-        sky.SkyboxLf = skyCfg.SkyboxLf or "http://www.roblox.com/asset/?id=144933244"
-        sky.SkyboxRt = skyCfg.SkyboxRt or "http://www.roblox.com/asset/?id=144933299"
-        sky.SkyboxUp = skyCfg.SkyboxUp or "http://www.roblox.com/asset/?id=144931564"
-        sky.SunTextureId = skyCfg.SunTextureId or "rbxasset://sky/sun.jpg"
-        sky.MoonTextureId = skyCfg.MoonTextureId or "rbxasset://sky/moon.jpg"
-        sky.SunAngularSize = skyCfg.SunAngularSize or 5
-        sky.MoonAngularSize = skyCfg.MoonAngularSize or 11
-        sky.CelestialBodiesShown = true
-    end
-    
-    -- 3C. Animated Volumetric Clouds (Parented under Workspace.Terrain for engine visibility!)
-    -- Purge any duplicate clouds under Lighting
-    for _, ch in ipairs(Lighting:GetChildren()) do
-        if ch:IsA("Clouds") then
-            ch:Destroy()
-        end
-    end
-    local terrain = workspace.Terrain
-    local clouds = terrain:FindFirstChildOfClass("Clouds")
-    if not clouds then
-        clouds = Instance.new("Clouds")
-        clouds.Name = "VolumetricClouds"
-        clouds.Parent = terrain
-    end
-    clouds.Cover = 0.32
-    clouds.Density = 0.55
-    clouds.Color = Color3.fromRGB(245, 248, 255)
-    -- GlobalWind physically animates realistic continuous cloud drift across the sky!
-    workspace.GlobalWind = Vector3.new(16, 0, 10)
-    
-    -- 4. BloomEffect (Soft gentle highlight bleed, high threshold so props don't shine like neon)
-    local bloom = Lighting:FindFirstChild("ForestBloom") :: BloomEffect?
-    if not bloom then
-        bloom = Instance.new("BloomEffect")
-        bloom.Name = "ForestBloom"
-        bloom.Parent = Lighting
-    end
-    bloom.Intensity = bloomCfg.Intensity or 0.22
-    bloom.Size = bloomCfg.Size or 12
-    bloom.Threshold = bloomCfg.Threshold or 1.40
-    bloom.Enabled = true
-    
-    -- 5. SunRaysEffect (Godbeams filtering through tall pines)
-    local sunRays = Lighting:FindFirstChild("ForestSunRays") :: SunRaysEffect?
-    if not sunRays then
-        sunRays = Instance.new("SunRaysEffect")
-        sunRays.Name = "ForestSunRays"
-        sunRays.Parent = Lighting
-    end
-    sunRays.Intensity = raysCfg.Intensity or 0.15
-    sunRays.Spread = raysCfg.Spread or 0.70
-    sunRays.Enabled = true
-    
-    -- 6. DepthOfFieldEffect (Pin-sharp valley interior, softly blends distant jagged mountains)
-    local dof = Lighting:FindFirstChild("ForestDepthOfField") :: DepthOfFieldEffect?
-    if not dof then
-        dof = Instance.new("DepthOfFieldEffect")
-        dof.Name = "ForestDepthOfField"
-        dof.Parent = Lighting
-    end
-    dof.FarIntensity = dofCfg.FarIntensity or 0.20 -- Softens distant low-poly mountain polygon silhouette
-    dof.FocusDistance = dofCfg.FocusDistance or 280.0 -- Full interior basin in crisp focus
-    dof.InFocusRadius = dofCfg.InFocusRadius or 240.0 -- 0 to 520 studs is crystal clear
-    dof.NearIntensity = dofCfg.NearIntensity or 0.0
-    dof.Enabled = true
+    -- 1. Initialize Master Environment Suite (Clouds, Volumetrics, Atmosphere, Celestial Sky)
+    EnvironmentManager.Init()
+
+    -- 2. Apply baseline visual truth (Day 0, Hour 14:00 - crystal clear matching Studio Editor)
+    TimeVisuals.Apply(14.0, 0)
     
     -- 7. Controlled Campfire Warmth (Prevents multiple stacked lights and blinding over-illumination)
     pcall(function()
