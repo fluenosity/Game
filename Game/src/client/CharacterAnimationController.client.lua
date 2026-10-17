@@ -1148,22 +1148,18 @@ RunService.PreSimulation:Connect(function(dt: number)
     local profileId = (activeCharacter:GetAttribute("SurvivorProfileId") or activeCharacter.Name) :: string
     local profile = SurvivorRigConfig.GetProfile(profileId, activeCharacter)
 
-    -- In-Place Pelvic Root Stabilizer:
-    -- Mixamo animations without 'In Place' checked (FemaleWalk, MaleWalk, RunningJumpMain)
-    -- translate -5.1 to -14.1 studs forward along Z on mixamorig:Hips.
-    -- Locking Z = 0 keeps the pelvis anchored to HumanoidRootPart, producing clean,
-    -- perfect in-place locomotion without forward-and-back rubberbanding or forward jump throw.
-    local isSeatedLocally = activeHumanoid.Sit or (activeHumanoid:GetState() == Enum.HumanoidStateType.Seated)
-    if not isSeatedLocally then
-        if not joints.HipsBone and activeCharacter then
-            joints.HipsBone = activeCharacter:FindFirstChild("mixamorig:Hips", true)
-        end
-        if joints.HipsBone and joints.HipsBone:IsA("Bone") then
-            local hipsBone = joints.HipsBone :: Bone
-            local t = hipsBone.Transform
-            if math.abs(t.Position.Z) > 0.001 then
-                hipsBone.Transform = CFrame.new(t.Position.X, t.Position.Y, 0) * t.Rotation
-            end
+    -- In-Place Pelvic Root Stabilizer (Locomotion, Idle, Sitting, and Standing Transitions):
+    -- Mixamo animations without 'In Place' checked translate forward/backward and sideways on mixamorig:Hips.
+    -- Locking X = 0 and Z = 0 keeps the pelvis anchored to HumanoidRootPart across ALL phases:
+    -- StandToSit, SittingIdle, and SitToStand all occur at the exact same in-place spot with zero jumping or popping!
+    if not joints.HipsBone and activeCharacter then
+        joints.HipsBone = activeCharacter:FindFirstChild("mixamorig:Hips", true)
+    end
+    if joints.HipsBone and joints.HipsBone:IsA("Bone") then
+        local hipsBone = joints.HipsBone :: Bone
+        local t = hipsBone.Transform
+        if math.abs(t.Position.X) > 0.001 or math.abs(t.Position.Z) > 0.001 then
+            hipsBone.Transform = CFrame.new(0, t.Position.Y, 0) * t.Rotation
         end
     end
 
@@ -1226,10 +1222,10 @@ RunService.PreSimulation:Connect(function(dt: number)
     currentAirborneAlpha = currentAirborneAlpha + (targetAirborne - currentAirborneAlpha) * math.clamp(dt * 10, 0, 1)
 
     -- Main Idle Detection (StaticIDLEMAIND only):
-    -- Head posture correction is ONLY applied in the main idle animation.
-    -- During walk and running, posture remains 100% normal (0 deg offset).
+    -- Head posture correction is applied in the main standing idle animation.
+    -- During walk, running, and sitting, posture remains natural.
     local isMainIdle = false
-    if not isMoving and state.IsGrounded and activeAnimator then
+    if activeAnimator then
         for _, track in ipairs(activeAnimator:GetPlayingAnimationTracks()) do
             if track.IsPlaying and track.Animation and track.Animation.AnimationId then
                 if string.find(track.Animation.AnimationId, "103828063959982") then
@@ -1243,7 +1239,7 @@ RunService.PreSimulation:Connect(function(dt: number)
     local targetHeadAlpha = (isMainIdle and 1 or 0)
     currentHeadPostureAlpha = currentHeadPostureAlpha + (targetHeadAlpha - currentHeadPostureAlpha) * math.clamp(dt * 12, 0, 1)
 
-    -- Upright Head & Neck Posture Alignment (Active ONLY in Main Idle):
+    -- Upright Head & Neck Posture Alignment (Active in Main Idle):
     if not joints.NeckBone and activeCharacter then
         joints.NeckBone = activeCharacter:FindFirstChild("mixamorig:Neck", true)
     end
@@ -1582,7 +1578,10 @@ RunService.RenderStepped:Connect(function(dt: number)
     -- When Seated: Character body rotation is strictly locked to the seat facing vector; freecam look is decoupled
     if player:GetAttribute("IsInGameplay") == true and not ModalManager.IsAnyModalOpen() then
         if activeHRP and activeHumanoid and activeHumanoid.Health > 0 and state.SpecialAction == "None" then
-            local isSeated = activeHumanoid.Sit or (activeHumanoid:GetState() == Enum.HumanoidStateType.Seated)
+            local isSeated = activeHumanoid.Sit
+                or (activeHumanoid:GetState() == Enum.HumanoidStateType.Seated)
+                or (player:GetAttribute("IsSeated") == true)
+                or (activeHumanoid.SeatPart ~= nil)
             if not isSeated then
                 activeHumanoid.AutoRotate = false
                 local isSwimming = (activeHumanoid:GetState() == Enum.HumanoidStateType.Swimming)

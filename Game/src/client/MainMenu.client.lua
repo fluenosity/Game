@@ -25,6 +25,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local ProximityPromptService = game:GetService("ProximityPromptService")
+local SoundService = game:GetService("SoundService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
@@ -525,26 +526,24 @@ leftArea.Visible = false
 leftArea.ZIndex = 6
 leftArea.Parent = safeArea
 
--- 1. Top Branding Group (Campfire Emblem + 2-Line Condensed Title + Burnt Ember Subtitle)
+-- 1. Top Branding Group (2-Line Condensed Title only; emblem & subtitle removed per request)
 local brandingHeader = Instance.new("Frame")
 brandingHeader.Name = "BrandingHeader"
-brandingHeader.Size = UDim2.new(1, 0, 0, 220)
+brandingHeader.Size = UDim2.new(1, 0, 0, 130)
 brandingHeader.Position = UDim2.new(0, 0, 0, 0)
 brandingHeader.BackgroundTransparency = 1
 brandingHeader.ZIndex = 7
 brandingHeader.Parent = leftArea
 
--- Campfire Emblem Centered Above Title
+-- Campfire Emblem (Hidden per user request)
 local emblem = CampfireEmblem.new(UDim2.fromOffset(76, 76))
-emblem.Root.Position = UDim2.new(0, 0, 0, 0)
-emblem.Root.AnchorPoint = Vector2.new(0, 0)
-emblem.Root.Parent = brandingHeader
+emblem.Root.Visible = false
 
--- Title & Subtitle Stacked Directly Below Emblem
+-- Title Stacked at Top
 local titleContainer = Instance.new("Frame")
 titleContainer.Name = "TitleContainer"
-titleContainer.Size = UDim2.new(1, 0, 0, 140)
-titleContainer.Position = UDim2.new(0, 0, 0, 78)
+titleContainer.Size = UDim2.new(1, 0, 0, 120)
+titleContainer.Position = UDim2.new(0, 0, 0, 0)
 titleContainer.AnchorPoint = Vector2.new(0, 0)
 titleContainer.BackgroundTransparency = 1
 titleContainer.ZIndex = 7
@@ -573,26 +572,19 @@ mainTitle.TextStrokeTransparency = 0.35
 mainTitle.ZIndex = 8
 mainTitle.Parent = titleContainer
 
--- Glowing Burnt Ember Subtitle ("THE NIGHT WILL CLAIM YOU")
+-- Subtitle ("THE NIGHT WILL CLAIM YOU" - Hidden per user request)
 local subTitle = Instance.new("TextLabel")
 subTitle.Name = "SubTitle"
-subTitle.Size = UDim2.new(1, 0, 0, 22)
+subTitle.Size = UDim2.new(1, 0, 0, 0)
 subTitle.BackgroundTransparency = 1
-subTitle.Font = Enum.Font.Oswald
-subTitle.Text = "THE NIGHT WILL CLAIM YOU"
-subTitle.TextColor3 = Color3.fromRGB(245, 130, 48) -- Vibrant amber/ember orange
-subTitle.TextSize = 15
-subTitle.TextXAlignment = Enum.TextXAlignment.Left
-subTitle.TextStrokeColor3 = Color3.fromRGB(15, 6, 4)
-subTitle.TextStrokeTransparency = 0.4
-subTitle.ZIndex = 8
+subTitle.Visible = false
 subTitle.Parent = titleContainer
 
 -- 2. Navigation Actions Container (PLAY, SETTINGS, CREDITS)
 local navContainer = Instance.new("Frame")
 navContainer.Name = "NavContainer"
 navContainer.Size = UDim2.new(1, 0, 0, 180)
-navContainer.Position = UDim2.new(0, 0, 0, 250)
+navContainer.Position = UDim2.new(0, 0, 0, 140)
 navContainer.AnchorPoint = Vector2.new(0, 0)
 navContainer.BackgroundTransparency = 1
 navContainer.ZIndex = 9
@@ -643,23 +635,19 @@ local function updateLayoutResponsiveness()
 
     -- Dynamic vertical adapting for short screens (laptops / mobile landscape)
     if viewport.Y < 600 then
-        leftArea.Size = UDim2.new(0, 320, 0, 420)
-        brandingHeader.Size = UDim2.new(1, 0, 0, 180)
-        emblem.Root.Size = UDim2.fromOffset(60, 60)
-        titleContainer.Position = UDim2.new(0, 0, 0, 62)
-        mainTitle.TextSize = 34
-        subTitle.TextSize = 13
-        navContainer.Size = UDim2.new(1, 0, 0, 164)
-        navContainer.Position = UDim2.new(0, 0, 0, 194)
+        leftArea.Size = UDim2.new(0, 320, 0, 360)
+        brandingHeader.Size = UDim2.new(1, 0, 0, 90)
+        titleContainer.Position = UDim2.new(0, 0, 0, 0)
+        mainTitle.TextSize = 36
+        navContainer.Size = UDim2.new(1, 0, 0, 150)
+        navContainer.Position = UDim2.new(0, 0, 0, 100)
     else
-        leftArea.Size = UDim2.new(0, 400, 0, 490)
-        brandingHeader.Size = UDim2.new(1, 0, 0, 220)
-        emblem.Root.Size = UDim2.fromOffset(76, 76)
-        titleContainer.Position = UDim2.new(0, 0, 0, 78)
+        leftArea.Size = UDim2.new(0, 400, 0, 440)
+        brandingHeader.Size = UDim2.new(1, 0, 0, 130)
+        titleContainer.Position = UDim2.new(0, 0, 0, 0)
         mainTitle.TextSize = 64
-        subTitle.TextSize = 15
         navContainer.Size = UDim2.new(1, 0, 0, 180)
-        navContainer.Position = UDim2.new(0, 0, 0, 250)
+        navContainer.Position = UDim2.new(0, 0, 0, 140)
     end
 
     if viewport.X < 850 then
@@ -1341,16 +1329,20 @@ navPlay = createMenuLink("NavPlay", "PLAY", 1, true, function()
     if isBusy or menuFlowState ~= "MainMenu" then return end
     -- PLAY only opens survivor selection. The actual gameplay transition belongs
     -- to the picker's final confirmation button.
-    player:SetAttribute("IsInGameplay", false)
-    holdMenuCharacter(player.Character)
+
+    -- Update UI state FIRST before any yielding calls (holdMenuCharacter yields
+    -- internally via WaitForChild, so text feedback must come before it).
     isBusy = true
     menuFlowState = "Preparing"
-    pickerTransitionGeneration += 1
-    local transitionId = pickerTransitionGeneration
     navPlay.Text = "PREPARING CAMP..."
     navPlay.TextTransparency = 0
     navPlay.Active = false
     navPlay.Selectable = false
+
+    player:SetAttribute("IsInGameplay", false)
+    holdMenuCharacter(player.Character)
+    pickerTransitionGeneration += 1
+    local transitionId = pickerTransitionGeneration
     -- Keep the main menu and its wide forest shot on screen while the lobby
     -- snapshot finishes. The label changes synchronously, so the click always
     -- has feedback even when matchmaking or the server takes a moment.
@@ -1411,7 +1403,14 @@ navPlay = createMenuLink("NavPlay", "PLAY", 1, true, function()
                 pickerTransitionGeneration += 1
                 local returnTransitionId = pickerTransitionGeneration
                 player:SetAttribute("IsInGameplay", false)
-                holdMenuCharacter(player.Character)
+
+                -- holdMenuCharacter → setCharacterControlsEnabled → WaitForChild("PlayerScripts", 3)
+                -- can yield for up to 3 seconds. Fire it async so it never blocks the
+                -- camera tween or wardrobe fade from starting immediately on click.
+                task.spawn(function()
+                    holdMenuCharacter(player.Character)
+                end)
+
                 camera = Workspace.CurrentCamera or camera
                 if menuCameraTween then
                     menuCameraTween:Cancel()
@@ -1422,9 +1421,22 @@ navPlay = createMenuLink("NavPlay", "PLAY", 1, true, function()
                 menuCameraResumeToken += 1
                 local resumeToken = menuCameraResumeToken
                 isBusy = true
-                navPlay.Text = "RETURNING..."
+                navPlay.Text = "LEAVING CAMP..."
                 navPlay.Active = false
                 navPlay.Selectable = false
+
+                -- Delay the wardrobe fade so it begins near the END of the camera
+                -- return flight, not at the start. Camera tween = 0.75s, scrim = 0.30s,
+                -- so t=0.45s start means the dissolve finishes exactly as camera arrives.
+                local hideToken = pickerTransitionGeneration
+                task.delay(0.45, function()
+                    if pickerTransitionGeneration == hideToken
+                        and menuFlowState == "Returning"
+                        and wardrobeScreen.HideForReturn then
+                        wardrobeScreen.HideForReturn()
+                    end
+                end)
+
 
                 local function finishReturn()
                     if returnTransitionId ~= pickerTransitionGeneration or menuFlowState ~= "Returning" then
@@ -1445,7 +1457,7 @@ navPlay = createMenuLink("NavPlay", "PLAY", 1, true, function()
 
                 if camera then
                     camera.CameraType = Enum.CameraType.Scriptable
-                    menuCameraTween = TweenService:Create(camera, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+                    menuCameraTween = TweenService:Create(camera, TweenInfo.new(0.75, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
                         CFrame = returnCFrame,
                         FieldOfView = menuReturnFov,
                     })
@@ -1505,13 +1517,110 @@ local function runCinematicIntro()
     isBusy = true
 
     ----------------------------------------------------------------------------
-    -- PHASE 1: Clean studio splash before showing the live campsite menu.
+    -- PHASE 1: Clean photosensitivity notice + studio splash before live campsite menu.
     ----------------------------------------------------------------------------
     if not GameConfig.ShouldSkipSplashScreen() then
+        -- Step 1A: Photosensitivity / Epilepsy Health Warning Screen (Black bg)
+        local warningScreen = Instance.new("Frame")
+        warningScreen.Name = "PhotosensitivityWarning"
+        warningScreen.Size = UDim2.fromScale(1, 1)
+        warningScreen.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        warningScreen.BorderSizePixel = 0
+        warningScreen.ZIndex = 90
+        warningScreen.Parent = screenGui
+
+        local warningContainer = Instance.new("Frame")
+        warningContainer.Name = "WarningContainer"
+        warningContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+        warningContainer.Position = UDim2.fromScale(0.5, 0.5)
+        warningContainer.Size = UDim2.new(0.82, 0, 0.85, 0)
+        warningContainer.BackgroundTransparency = 1
+        warningContainer.ZIndex = 91
+        warningContainer.Parent = warningScreen
+
+        local warningLayout = Instance.new("UIListLayout")
+        warningLayout.FillDirection = Enum.FillDirection.Vertical
+        warningLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        warningLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        warningLayout.Padding = UDim.new(0, 16)
+        warningLayout.Parent = warningContainer
+
+        -- BIG BOLD WARNING TITLE
+        local warningBigTitle = Instance.new("TextLabel")
+        warningBigTitle.Name = "WarningBigTitle"
+        warningBigTitle.Size = UDim2.new(1, 0, 0, 36)
+        warningBigTitle.BackgroundTransparency = 1
+        warningBigTitle.Font = Enum.Font.GothamBold
+        warningBigTitle.Text = "WARNING: PHOTOSENSITIVITY/EPILEPSY SEIZURES"
+        warningBigTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+        warningBigTitle.TextSize = 22
+        warningBigTitle.TextWrapped = true
+        warningBigTitle.TextTransparency = 1
+        warningBigTitle.ZIndex = 92
+        warningBigTitle.Parent = warningContainer
+
+        local warningSubTitle = Instance.new("TextLabel")
+        warningSubTitle.Name = "WarningSubTitle"
+        warningSubTitle.Size = UDim2.new(1, 0, 0, 26)
+        warningSubTitle.BackgroundTransparency = 1
+        warningSubTitle.Font = Enum.Font.GothamBold
+        warningSubTitle.Text = "READ THIS NOTICE BEFORE PLAYING"
+        warningSubTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+        warningSubTitle.TextSize = 17
+        warningSubTitle.TextWrapped = true
+        warningSubTitle.TextTransparency = 1
+        warningSubTitle.ZIndex = 92
+        warningSubTitle.Parent = warningContainer
+
+        local warningBody = Instance.new("TextLabel")
+        warningBody.Name = "WarningBody"
+        warningBody.Size = UDim2.new(1, 0, 0, 250)
+        warningBody.BackgroundTransparency = 1
+        warningBody.Font = Enum.Font.Gotham
+        warningBody.Text = "A very small percentage of people may experience epileptic seizures or blackouts when exposed to certain kinds of flashing lights or light patterns. These persons, or even people who have no history of seizures or epilepsy, may experience epileptic symptoms or seizures while playing video games.\n\nIf you or any of your relatives has an epileptic condition or has had seizures of any kind, consult your physician before playing any video game.\n\nIMMEDIATELY DISCONTINUE use and consult a physician if you or your child experience any of the following symptoms: dizziness, altered vision, eye or muscle twitching, involuntary movements, loss of awareness, disorientation, or convulsions. Parents should watch for or ask their children about the above symptoms.\n\nYou may reduce risk of photosensitive epileptic seizures by taking the following precautions: sit farther from the screen, use a smaller screen, play in a well-lit room, do not play when you are drowsy or fatigued."
+        warningBody.TextColor3 = Color3.fromRGB(205, 205, 205)
+        warningBody.TextSize = 12
+        warningBody.TextWrapped = true
+        warningBody.TextTransparency = 1
+        warningBody.ZIndex = 92
+        warningBody.Parent = warningContainer
+
+        local fadeInWarning1 = TweenService:Create(warningBigTitle, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            TextTransparency = 0,
+        })
+        local fadeInWarning2 = TweenService:Create(warningSubTitle, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            TextTransparency = 0,
+        })
+        local fadeInWarning3 = TweenService:Create(warningBody, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            TextTransparency = 0,
+        })
+        fadeInWarning1:Play()
+        fadeInWarning2:Play()
+        fadeInWarning3:Play()
+        fadeInWarning1.Completed:Wait()
+
+        task.wait(2.2)
+
+        local fadeOutWarning1 = TweenService:Create(warningBigTitle, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            TextTransparency = 1,
+        })
+        local fadeOutWarning2 = TweenService:Create(warningSubTitle, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            TextTransparency = 1,
+        })
+        local fadeOutWarning3 = TweenService:Create(warningBody, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            TextTransparency = 1,
+        })
+        fadeOutWarning1:Play()
+        fadeOutWarning2:Play()
+        fadeOutWarning3:Play()
+        fadeOutWarning1.Completed:Wait()
+        warningScreen:Destroy()
+
+        -- Step 1B: Studio Splash Screen (Pure white, centered text only, no flame icon)
         local splashScreen = Instance.new("Frame")
         splashScreen.Name = "StudioSplash"
         splashScreen.Size = UDim2.fromScale(1, 1)
-        splashScreen.BackgroundColor3 = Color3.fromRGB(248, 246, 238)
+        splashScreen.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         splashScreen.BorderSizePixel = 0
         splashScreen.ZIndex = 60
         splashScreen.Parent = screenGui
@@ -1519,32 +1628,24 @@ local function runCinematicIntro()
         local studioTitle = Instance.new("TextLabel")
         studioTitle.Name = "StudioTitle"
         studioTitle.Size = UDim2.new(0.9, 0, 0, 36)
-        studioTitle.Position = UDim2.fromScale(0.5, 0.53)
+        studioTitle.Position = UDim2.fromScale(0.5, 0.5)
         studioTitle.AnchorPoint = Vector2.new(0.5, 0.5)
         studioTitle.BackgroundTransparency = 1
         studioTitle.Font = (UITheme.Fonts and UITheme.Fonts.Studio) or Enum.Font.GothamMedium
         studioTitle.Text = "A FLUENOSITY STUDIO GAME"
-        studioTitle.TextColor3 = Color3.fromRGB(52, 56, 58)
-        studioTitle.TextScaled = true
-        studioTitle.TextWrapped = true
-        studioTitle.TextSize = 18
+        studioTitle.TextColor3 = Color3.fromRGB(36, 36, 36)
+        studioTitle.TextScaled = false
+        studioTitle.TextSize = 20
         studioTitle.TextTransparency = 1
         studioTitle.ZIndex = 61
         studioTitle.Parent = splashScreen
 
-        local splashMark = IconPack.CreateIcon("flame", 38, Color3.fromRGB(211, 113, 46), 0)
-        splashMark.Name = "SplashCampfireMark"
-        splashMark.AnchorPoint = Vector2.new(0.5, 0.5)
-        splashMark.Position = UDim2.fromScale(0.5, 0.43)
-        splashMark.ZIndex = 61
-        splashMark.Parent = splashScreen
-
         local studioConstraint = Instance.new("UITextSizeConstraint")
-        studioConstraint.MaxTextSize = 20
+        studioConstraint.MaxTextSize = 22
         studioConstraint.MinTextSize = 12
         studioConstraint.Parent = studioTitle
 
-        local fadeInText = TweenService:Create(studioTitle, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        local fadeInText = TweenService:Create(studioTitle, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             TextTransparency = 0,
         })
         fadeInText:Play()
@@ -1552,13 +1653,13 @@ local function runCinematicIntro()
 
         task.wait(1.0)
 
-        local fadeOutText = TweenService:Create(studioTitle, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        local fadeOutText = TweenService:Create(studioTitle, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
             TextTransparency = 1,
         })
         fadeOutText:Play()
         fadeOutText.Completed:Wait()
 
-        local splashTransition = TweenService:Create(splashScreen, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+        local splashTransition = TweenService:Create(splashScreen, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
             BackgroundTransparency = 1,
         })
         splashTransition:Play()
@@ -1566,37 +1667,8 @@ local function runCinematicIntro()
         splashScreen:Destroy()
     end
 
-
-    local sparkIgnition = Instance.new("Frame")
-    sparkIgnition.Name = "SparkIgnition"
-    sparkIgnition.Size = UDim2.fromOffset(4, 4)
-    sparkIgnition.Position = UDim2.fromScale(0.5, 0.5)
-    sparkIgnition.AnchorPoint = Vector2.new(0.5, 0.5)
-    sparkIgnition.BackgroundColor3 = UITheme.Colors.EmberHot
-    sparkIgnition.BorderSizePixel = 0
-    sparkIgnition.ZIndex = 30
-    sparkIgnition.Parent = background
-
-    local sparkCorner = Instance.new("UICorner")
-    sparkCorner.CornerRadius = UDim.new(1, 0)
-    sparkCorner.Parent = sparkIgnition
-
-    local sparkGlow = TweenService:Create(sparkIgnition, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        Size = UDim2.fromOffset(16, 16),
-        BackgroundTransparency = 0.3,
-    })
-    sparkGlow:Play()
-    sparkGlow.Completed:Wait()
-
+    -- Start gentle ambient embers (orange center spark dot removed per request)
     emberSystem:Start()
-
-    local sparkFade = TweenService:Create(sparkIgnition, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        Size = UDim2.fromOffset(2, 2),
-        BackgroundTransparency = 1,
-    })
-    sparkFade:Play()
-    sparkFade.Completed:Wait()
-    sparkIgnition:Destroy()
 
     ----------------------------------------------------------------------------
     -- PHASE 3: STAGGERED ENTRANCE FROM THE LEFT AND RIGHT
@@ -1612,8 +1684,6 @@ local function runCinematicIntro()
 
     brandingHeader.Position = UDim2.new(0, -40, 0, 0)
     mainTitle.TextTransparency = 1
-    subTitle.TextTransparency = 1
-    emblem:SetTransparency(1)
     studioStamp.TextTransparency = 1
 
     local areaTween = TweenService:Create(leftArea, TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -1625,9 +1695,7 @@ local function runCinematicIntro()
         Position = UDim2.new(0, 0, 0, 0),
     })
     headerTween:Play()
-    emblem:AnimateFade(0, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out))
     TweenService:Create(mainTitle, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
-    TweenService:Create(subTitle, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
     TweenService:Create(studioStamp, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
 
     task.wait(0.12)
@@ -1657,11 +1725,48 @@ local function runCinematicIntro()
     isBusy = false
 end
 
+--------------------------------------------------------------------------------
+-- MAIN MENU MUSIC (Fades in when early curtain finishes, fades out at game entry)
+--------------------------------------------------------------------------------
+local function startMainMenuMusic()
+    local existing = SoundService:FindFirstChild("MainMenuBGM") :: Sound?
+    if existing then
+        if not existing.IsPlaying then
+            existing:Play()
+        end
+        return existing
+    end
+
+    local bgm = Instance.new("Sound")
+    bgm.Name = "MainMenuBGM"
+    bgm.SoundId = "rbxasset://sounds/MainMenuAudio.mp3"
+    bgm.SoundGroup = UITheme.GetMusicSoundGroup()
+    bgm.Looped = true
+    bgm.Volume = 0
+    bgm.Parent = SoundService
+
+    bgm:Play()
+    -- Gentle atmospheric fade in over 3.2s so players aren't startled
+    local fadeInTween = TweenService:Create(bgm, TweenInfo.new(3.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Volume = 0.55,
+    })
+    fadeInTween:Play()
+    return bgm
+end
+
 task.spawn(function()
     local readyDeadline = os.clock() + 50
     while (player:GetAttribute("InitialMenuAssetsReady") ~= true or player:GetAttribute("MenuSceneReady") ~= true)
         and os.clock() < readyDeadline do
         task.wait(0.05)
     end
+
+    -- Wait until the early curtain finishes fading out and destroys itself
+    local curtainDeadline = os.clock() + 10
+    while player:GetAttribute("EarlyCurtainFinished") ~= true and os.clock() < curtainDeadline do
+        task.wait(0.05)
+    end
+
+    startMainMenuMusic()
     runCinematicIntro()
 end)

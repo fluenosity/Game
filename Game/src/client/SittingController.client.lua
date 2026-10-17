@@ -26,15 +26,16 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 
 local localPlayer = Players.LocalPlayer
 
 -- -----------------------------------------------------------------------------
--- 1. ANIMATION ASSET CONSTANTS
+-- 1. ANIMATION ASSET CONSTANTS & CALIBRATION
 -- -----------------------------------------------------------------------------
 local STAND_TO_SIT_ID = "rbxassetid://84740804971115"
-local SITTING_IDLE_ID = "rbxassetid://111666571897686"
 local SIT_TO_STAND_ID = "rbxassetid://94330775048617"
+local SEATED_HRP_OFFSET_Y = 1.415 -- Calibrated to align avatar hips directly with log surface bark
 
 -- -----------------------------------------------------------------------------
 -- 2. STATE & TRACK INSTANCES
@@ -45,7 +46,6 @@ local activeRootPart: BasePart? = nil
 local activeAnimator: Animator? = nil
 
 local standToSitTrack: AnimationTrack? = nil
-local sittingIdleTrack: AnimationTrack? = nil
 local sitToStandTrack: AnimationTrack? = nil
 
 local isCurrentlySeated = false
@@ -53,6 +53,8 @@ local isStandingUp = false
 local currentOccupiedSeat: (Seat | VehicleSeat)? = nil
 local savedWalkSpeed = 6
 local transitionToken = 0
+
+local requestStandUp: (() -> ())? = nil
 
 -- UI Reference
 local promptGui: ScreenGui? = nil
@@ -158,10 +160,8 @@ local function createStandPromptUI()
 
     -- Forward declaration of stand up trigger
     clickBtn.MouseButton1Click:Connect(function()
-        if isCurrentlySeated and not isStandingUp then
-            -- Trigger stand up
-            local reqStand = _G.RequestStandUp
-            if reqStand then reqStand() end
+        if isCurrentlySeated and not isStandingUp and requestStandUp then
+            requestStandUp()
         end
     end)
 end
@@ -185,23 +185,8 @@ local function showStandPrompt()
 end
 
 local function hideStandPrompt()
-    if not promptFrame or not promptFrame.Visible then return end
-    local stroke = promptFrame:FindFirstChild("PromptStroke") :: UIStroke?
-    local tweenInfo = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-
-    local tween = TweenService:Create(promptFrame, tweenInfo, {
-        BackgroundTransparency = 1.0,
-        Position = UDim2.new(0.5, -85, 0.87, 0)
-    })
-    if stroke then
-        TweenService:Create(stroke, tweenInfo, { Transparency = 1.0 }):Play()
-    end
-    tween:Play()
-    task.delay(0.2, function()
-        if not isCurrentlySeated and promptFrame then
-            promptFrame.Visible = false
-        end
-    end)
+    if not promptFrame then return end
+    promptFrame.Visible = false
 end
 
 -- -----------------------------------------------------------------------------
@@ -262,22 +247,13 @@ local function hasActiveMoveIntent(): boolean
         or UserInputService:IsKeyDown(Enum.KeyCode.Right)
 end
 
-local function requestStandUp()
+requestStandUp = function()
     if not isCurrentlySeated or isStandingUp then return end
     isStandingUp = true
     transitionToken = transitionToken + 1
     local currentToken = transitionToken
 
     hideStandPrompt()
-
-    -- Stop sitting animations
-    stopTrack(standToSitTrack, 0.1)
-    stopTrack(sittingIdleTrack, 0.15)
-
-    -- Unseat character immediately
-    if activeHumanoid then
-        activeHumanoid.Sit = false
-    end
 
     if not activeAnimator and activeHumanoid then
         activeAnimator = activeHumanoid:FindFirstChildOfClass("Animator")
@@ -295,16 +271,29 @@ local function requestStandUp()
         if keyConn then keyConn:Disconnect() keyConn = nil end
         if currentToken ~= transitionToken then return end
 
+        -- Stop any lingering animations
+        stopTrack(sitToStandTrack, 0.15)
+        stopTrack(standToSitTrack, 0.10)
+
+        -- NOW unseat character once the stand-up animation has completed!
+        -- Character stays safely seated during the rising motion so Roblox physics NEVER snaps into standing!
+        if activeHumanoid then
+            activeHumanoid.Sit = false
+            activeHumanoid.WalkSpeed = (savedWalkSpeed and savedWalkSpeed > 0) and savedWalkSpeed or 6
+            activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+            activeHumanoid.AutoRotate = true
+        end
+
+        -- Restore strict First-Person camera lock on stand up
+        localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+
         isStandingUp = false
         isCurrentlySeated = false
         currentOccupiedSeat = nil
         localPlayer:SetAttribute("IsSeated", false)
 
-        if activeHumanoid then
-            activeHumanoid.WalkSpeed = (savedWalkSpeed and savedWalkSpeed > 0) and savedWalkSpeed or 6
-            activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-            activeHumanoid.AutoRotate = true
-        end
+        -- Re-enable sit prompts once fully stood up
+        setSitPromptsVisible(true)
     end
 
     local function cancelForMovement()
@@ -320,10 +309,13 @@ local function requestStandUp()
         return
     end
 
+    -- Play SitToStand rising directly from the held sitting pose:
     if sitToStandTrack then
         sitToStandTrack:Play(0.12)
         sitToStandTrack:AdjustSpeed(1.20) -- ~1.85s natural rise
     end
+    -- Fade out the held StandToSit pose smoothly as SitToStand begins
+    stopTrack(standToSitTrack, 0.15)
 
     -- Movement-cancel listener during standing up
     keyConn = UserInputService.InputBegan:Connect(function(input, gpe)
@@ -342,8 +334,8 @@ local function requestStandUp()
         end)
     end
 
-    -- Natural animation completion
-    task.delay(1.80, function()
+    -- Natural stand-up completion timing
+    task.delay(1.70, function()
         if isStandingUp and currentToken == transitionToken then
             finishStandUp()
         end
@@ -351,6 +343,33 @@ local function requestStandUp()
 end
 
 _G.RequestStandUp = requestStandUp
+shared.RequestStandUp = requestStandUp
+
+localPlayer:GetAttributeChangedSignal("RequestStandUp"):Connect(function()
+    if localPlayer:GetAttribute("RequestStandUp") == true then
+        localPlayer:SetAttribute("RequestStandUp", false)
+        if requestStandUp then
+            requestStandUp()
+        end
+    end
+end)
+
+local function setSitPromptsVisible(visible: boolean)
+    local cs = workspace:FindFirstChild("CampfireSeats")
+    if cs then
+        for _, desc in ipairs(cs:GetDescendants()) do
+            if desc:IsA("ProximityPrompt") and (desc.Name == "SitPrompt" or desc:HasTag("CampfireSitPrompt")) then
+                desc.Enabled = visible
+            end
+        end
+    end
+end
+
+ProximityPromptService.PromptShown:Connect(function(prompt)
+    if isCurrentlySeated and (prompt.Name == "SitPrompt" or prompt:HasTag("CampfireSitPrompt")) then
+        prompt.Enabled = false
+    end
+end)
 
 local function onEnterSeat(seat: Seat | VehicleSeat)
     if isCurrentlySeated then return end
@@ -363,6 +382,9 @@ local function onEnterSeat(seat: Seat | VehicleSeat)
     -- Stop any lingering stand-up animation
     stopTrack(sitToStandTrack, 0.1)
 
+    -- Hide all other sit prompts so player cannot see them or auto-teleport into them
+    setSitPromptsVisible(false)
+
     -- Save WalkSpeed and lock movement, jumping, and auto-rotation
     if activeHumanoid then
         if activeHumanoid.WalkSpeed > 0 then
@@ -373,44 +395,39 @@ local function onEnterSeat(seat: Seat | VehicleSeat)
         activeHumanoid.AutoRotate = false
     end
 
-    -- Align HumanoidRootPart rotation strictly to seat facing vector
-    if activeRootPart and seat then
-        activeRootPart.CFrame = CFrame.new(activeRootPart.Position) * seat.CFrame.Rotation
-    end
+    -- Switch to Classic camera mode while seated for smooth freecam without body rotation
+    localPlayer.CameraMode = Enum.CameraMode.Classic
 
     -- Signal HUD and camera controllers for decoupled freecam and reticle suppression
     localPlayer:SetAttribute("IsSeated", true)
 
     if not activeAnimator then return end
 
-    -- Load custom tracks
+    -- Load StandToSit track
     if not standToSitTrack then
         standToSitTrack = getOrCreateTrack(activeAnimator, STAND_TO_SIT_ID, "CustomStandToSit", false)
-    end
-    if not sittingIdleTrack then
-        sittingIdleTrack = getOrCreateTrack(activeAnimator, SITTING_IDLE_ID, "CustomSittingIdle", true)
     end
 
     -- Suppress default Roblox sit animation
     suppressDefaultRobloxSit()
 
-    -- Phase 1: Play StandToSit transition
+    -- Play StandToSit transition
     if standToSitTrack then
         standToSitTrack:Play(0.12)
-        standToSitTrack:AdjustSpeed(1.15) -- Responsive sit timing (~1.9s)
+        standToSitTrack:AdjustSpeed(1.20) -- Natural ~1.85s descent
     end
 
     -- Show luxury on-screen Stand Up prompt
     showStandPrompt()
 
-    -- Phase 2: Smooth crossfade into SittingIdle loop
+    -- Hold the final sitting pose when StandToSit completes:
+    -- Keeps character resting naturally on the log with perfectly straight back and hands on thighs!
     task.delay(1.75, function()
-        if currentToken == transitionToken and isCurrentlySeated then
-            if sittingIdleTrack and not sittingIdleTrack.IsPlaying then
-                sittingIdleTrack:Play(0.3)
-                sittingIdleTrack:AdjustSpeed(1.0)
+        if currentToken == transitionToken and isCurrentlySeated and not isStandingUp then
+            if standToSitTrack and standToSitTrack.IsPlaying then
+                standToSitTrack:AdjustSpeed(0)
+                standToSitTrack.TimePosition = math.max(0, standToSitTrack.Length - 0.05)
             end
-            stopTrack(standToSitTrack, 0.25)
         end
     end)
 end
@@ -428,15 +445,15 @@ end
 local function cleanupTracks()
     hideStandPrompt()
     stopTrack(standToSitTrack, 0.1)
-    stopTrack(sittingIdleTrack, 0.1)
     stopTrack(sitToStandTrack, 0.1)
     standToSitTrack = nil
-    sittingIdleTrack = nil
     sitToStandTrack = nil
     isCurrentlySeated = false
     isStandingUp = false
     currentOccupiedSeat = nil
     localPlayer:SetAttribute("IsSeated", false)
+    localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+    setSitPromptsVisible(true)
 end
 
 local function setupCharacter(char: Model)
@@ -494,16 +511,16 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 end)
 
 -- -----------------------------------------------------------------------------
--- 8. CONTINUOUS SEATED ENFORCEMENT & DIRECTION LOCK (Heartbeat)
+-- 8. CONTINUOUS SEATED ENFORCEMENT & DIRECTION LOCK (RenderStepped & Heartbeat)
 -- -----------------------------------------------------------------------------
 -- Enforces:
--- 1. HumanoidRootPart rotation is strictly locked to seat facing orientation (NO turning with camera)
+-- 1. HumanoidRootPart rotation & position is strictly locked to seat facing orientation (NO turning with camera)
 -- 2. Humanoid.WalkSpeed = 0 (NO walking while seated)
 -- 3. Humanoid.AutoRotate = false (NO auto-spin)
 -- 4. Jumping is disabled (Spacebar DOES NOT jump or break sit)
 -- 5. Default Roblox sit track is suppressed
 RunService.Heartbeat:Connect(function()
-    if isCurrentlySeated then
+    if isCurrentlySeated or isStandingUp then
         if activeHumanoid then
             if activeHumanoid.WalkSpeed ~= 0 then
                 activeHumanoid.WalkSpeed = 0
@@ -516,14 +533,20 @@ RunService.Heartbeat:Connect(function()
             end)
         end
 
-        if activeRootPart and currentOccupiedSeat then
-            local seatRot = currentOccupiedSeat.CFrame.Rotation
-            local currentPos = activeRootPart.Position
-            activeRootPart.CFrame = CFrame.new(currentPos) * seatRot
-        end
-
         suppressDefaultRobloxSit()
     end
 end)
 
-return {}
+local SittingController = {
+    RequestStandUp = function()
+        if requestStandUp then
+            requestStandUp()
+        end
+    end,
+    IsSeated = function(): boolean
+        return isCurrentlySeated
+    end,
+}
+_G.RequestStandUp = requestStandUp
+
+return SittingController

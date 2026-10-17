@@ -359,8 +359,8 @@ function CampfireSystem.BuildCampfire(): Model
     prompt.Name = "CampfireTogglePrompt"
     prompt.ActionText = "Extinguish Fire"
     prompt.ObjectText = "CAMPFIRE"
-    prompt.KeyboardKeyCode = Enum.KeyCode.E
-    prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+    prompt.KeyboardKeyCode = Enum.KeyCode.F
+    prompt.GamepadKeyCode = Enum.KeyCode.ButtonY
     prompt.HoldDuration = 0.35
     prompt.MaxActivationDistance = 8.5
     prompt.RequiresLineOfSight = false
@@ -382,9 +382,87 @@ end
 -- 2. BUILD 4 ORGANIC FALLEN TIMBER BENCHES (8 SEATS) & DEDICATED PEDESTAL
 -- ---------------------------------------------------------------------------
 function CampfireSystem.BuildSittingTrunks(): Folder
-    -- Check if permanent CampfireSeats already exists in Workspace
+    local firePos = Vector3.new(3.0, 10.50, -430.0)
+    local trunkSpecs = {
+        {
+            Name = "NorthTrunk",
+            Center = Vector3.new(3.0, 11.55, -440.0),
+            AngleY = 0,
+            SeatAxis = "X",
+            SeatOffsets = { -1.8, 1.8 },
+            Size = Vector3.new(10.0, 2.3, 2.5),
+        },
+        {
+            Name = "SouthTrunk",
+            Center = Vector3.new(3.0, 11.55, -420.0),
+            AngleY = 180,
+            SeatAxis = "X",
+            SeatOffsets = { -1.8, 1.8 },
+            Size = Vector3.new(10.2, 2.3, 2.5),
+        },
+        {
+            Name = "EastTrunk",
+            Center = Vector3.new(13.0, 11.60, -430.0),
+            AngleY = 90,
+            SeatAxis = "Z",
+            SeatOffsets = { -1.8, 1.8 },
+            Size = Vector3.new(10.0, 2.4, 2.6),
+        },
+        {
+            Name = "WestTrunk",
+            Center = Vector3.new(-7.0, 11.60, -430.0),
+            AngleY = 270,
+            SeatAxis = "Z",
+            SeatOffsets = { -1.8, 1.8 },
+            Size = Vector3.new(10.2, 2.4, 2.6),
+        },
+    }
+
     local existingFolder = Workspace:FindFirstChild("CampfireSeats")
     if existingFolder and existingFolder:IsA("Folder") then
+        for _, spec in ipairs(trunkSpecs) do
+            local trunk = existingFolder:FindFirstChild(spec.Name)
+            if trunk then
+                local log = trunk:FindFirstChild("Log")
+                if log and log:IsA("BasePart") then
+                    log.CFrame = CFrame.new(spec.Center) * CFrame.Angles(0, math.rad(spec.AngleY), 0)
+                    log.Anchored = true
+                end
+
+                local topOfLogY = spec.Center.Y + (spec.Size.Y * 0.50)
+                local seatSurfaceY = topOfLogY + 1.415 -- Elevated so avatar hips in StandToSit rest naturally on top of log bark
+                local fireOffset = 0.15
+                local inwardLook = (spec.SeatAxis == "X")
+                    and ((firePos.Z > spec.Center.Z) and Vector3.new(0, 0, 1) or Vector3.new(0, 0, -1))
+                    or  ((firePos.X > spec.Center.X) and Vector3.new(1, 0, 0) or Vector3.new(-1, 0, 0))
+
+                for sIdx, sOffset in ipairs(spec.SeatOffsets) do
+                    local seat = trunk:FindFirstChild("Seat_" .. sIdx)
+                    if seat and seat:IsA("BasePart") then
+                        local seatPos: Vector3
+                        if spec.SeatAxis == "X" then
+                            local zDir = (firePos.Z > spec.Center.Z) and 1 or -1
+                            seatPos = Vector3.new(spec.Center.X + sOffset, seatSurfaceY, spec.Center.Z + (fireOffset * zDir))
+                        else
+                            local xDir = (firePos.X > spec.Center.X) and 1 or -1
+                            seatPos = Vector3.new(spec.Center.X + (fireOffset * xDir), seatSurfaceY, spec.Center.Z + sOffset)
+                        end
+                        seat.CFrame = CFrame.lookAt(seatPos, seatPos + inwardLook)
+                        seat.Anchored = true
+                        seat.CanCollide = false
+                        seat.Disabled = true
+                        seat.CanTouch = false
+                        CollectionService:AddTag(seat, "CampfireSeat")
+
+                        local prompt = seat:FindFirstChild("SitPrompt")
+                        if prompt and prompt:IsA("ProximityPrompt") then
+                            prompt.KeyboardKeyCode = Enum.KeyCode.E
+                            CollectionService:AddTag(prompt, "CampfireSitPrompt")
+                        end
+                    end
+                end
+            end
+        end
         return existingFolder
     end
 
@@ -432,7 +510,7 @@ function CampfireSystem.BuildSittingTrunks(): Folder
             Name = "NorthTrunk",
             Template = templateClean,
             Size = Vector3.new(10.0, 2.3, 2.5),
-            Center = Vector3.new(3.0, 11.55, -437.4),
+            Center = Vector3.new(3.0, 11.55, -440.0),
             AngleY = 0,
             SeatAxis = "X",
             SeatOffsets = { -1.8, 1.8 },
@@ -441,7 +519,7 @@ function CampfireSystem.BuildSittingTrunks(): Folder
             Name = "SouthTrunk",
             Template = templateClean,
             Size = Vector3.new(10.2, 2.3, 2.5),
-            Center = Vector3.new(3.0, 11.55, -422.6),
+            Center = Vector3.new(3.0, 11.55, -420.0),
             AngleY = 180,
             SeatAxis = "X",
             SeatOffsets = { -1.8, 1.8 },
@@ -450,7 +528,7 @@ function CampfireSystem.BuildSittingTrunks(): Folder
             Name = "EastTrunk",
             Template = templateMossy,
             Size = Vector3.new(10.0, 2.4, 2.6),
-            Center = Vector3.new(10.4, 11.60, -430.0),
+            Center = Vector3.new(13.0, 11.60, -430.0),
             AngleY = 90,
             SeatAxis = "Z",
             SeatOffsets = { -1.8, 1.8 },
@@ -459,7 +537,7 @@ function CampfireSystem.BuildSittingTrunks(): Folder
             Name = "WestTrunk",
             Template = templateMossy,
             Size = Vector3.new(10.2, 2.4, 2.6),
-            Center = Vector3.new(-4.4, 11.60, -430.0),
+            Center = Vector3.new(-7.0, 11.60, -430.0),
             AngleY = 270,
             SeatAxis = "Z",
             SeatOffsets = { -1.8, 1.8 },
@@ -505,10 +583,14 @@ function CampfireSystem.BuildSittingTrunks(): Folder
         end
 
         -- 2 Seats per Trunk (8 seats total)
-        -- Calibrated height: buttocks rest naturally on top of the log surface without sinking into the wood
+        -- Seats placed flush on top of log bark along upper crest
         local topOfLogY = spec.Center.Y + (spec.Size.Y * 0.50)
-        local seatSurfaceY = topOfLogY + 0.65 -- Elevated for mixamorig seated hip height
-        local fireOffset = 0.40 -- Shift slightly towards campfire so thighs drape over front edge
+        local seatSurfaceY = topOfLogY + 1.415 -- Elevated so avatar hips in StandToSit rest naturally on top of log bark
+        local fireOffset = 0.15 -- Centered along upper crest of log
+        local inwardLook = (spec.SeatAxis == "X")
+            and ((firePos.Z > spec.Center.Z) and Vector3.new(0, 0, 1) or Vector3.new(0, 0, -1))
+            or  ((firePos.X > spec.Center.X) and Vector3.new(1, 0, 0) or Vector3.new(-1, 0, 0))
+
         for sIdx, sOffset in ipairs(spec.SeatOffsets) do
             local seatPos: Vector3
             if spec.SeatAxis == "X" then
@@ -519,8 +601,8 @@ function CampfireSystem.BuildSittingTrunks(): Folder
                 seatPos = Vector3.new(spec.Center.X + (fireOffset * xDir), seatSurfaceY, spec.Center.Z + sOffset)
             end
 
-            local lookTarget = Vector3.new(firePos.X, seatPos.Y, firePos.Z)
-            local seatCF = CFrame.lookAt(seatPos, lookTarget)
+            -- Strict inward facing direction (perpendicular to log bench, directly facing campfire)
+            local seatCF = CFrame.lookAt(seatPos, seatPos + inwardLook)
 
             local seat = Instance.new("Seat")
             seat.Name = "Seat_" .. sIdx
@@ -531,6 +613,7 @@ function CampfireSystem.BuildSittingTrunks(): Folder
             seat.Anchored = true
             seat.Disabled = true       -- Suppress native Roblox touch-to-sit!
             seat.CanTouch = false       -- Suppress touch event triggers!
+            CollectionService:AddTag(seat, "CampfireSeat")
 
             local sitPrompt = Instance.new("ProximityPrompt")
             sitPrompt.Name = "SitPrompt"
@@ -543,13 +626,18 @@ function CampfireSystem.BuildSittingTrunks(): Folder
             sitPrompt.RequiresLineOfSight = false
             sitPrompt.ClickablePrompt = false
             sitPrompt.Parent = seat
+            CollectionService:AddTag(sitPrompt, "CampfireSitPrompt")
 
             if RunService:IsRunning() then
                 sitPrompt.Triggered:Connect(function(player: Player)
                     local char = player.Character
                     local hum = char and char:FindFirstChildOfClass("Humanoid")
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
                     if hum and hum.Health > 0 and seat.Occupant == nil then
                         seat.Disabled = false
+                        if hrp then
+                            hrp.CFrame = seat.CFrame * CFrame.new(0, seat.Size.Y / 2, 0)
+                        end
                         seat:Sit(hum)
                         sitPrompt.Enabled = false
                     end
@@ -767,8 +855,8 @@ local function wireExistingModels(): boolean
                 existingPrompt.Name = "CampfireTogglePrompt"
                 existingPrompt.ActionText = existingCampfire:GetAttribute("IsLit") == false and "Light Campfire" or "Extinguish Fire"
                 existingPrompt.ObjectText = "CAMPFIRE"
-                existingPrompt.KeyboardKeyCode = Enum.KeyCode.E
-                existingPrompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+                existingPrompt.KeyboardKeyCode = Enum.KeyCode.F
+                existingPrompt.GamepadKeyCode = Enum.KeyCode.ButtonY
                 existingPrompt.HoldDuration = 0.35
                 existingPrompt.MaxActivationDistance = 8.5
                 existingPrompt.RequiresLineOfSight = false
@@ -782,24 +870,63 @@ local function wireExistingModels(): boolean
     end
 
     if existingSeats then
-        local fireCenter = if campfireState.FirePart then campfireState.FirePart.Position else Vector3.new(3.0, 10.50, -430.0)
-        for _, trunk in ipairs(existingSeats:GetChildren()) do
-            local logPart = trunk:FindFirstChild("Log") :: BasePart?
-            local logDiameter = (logPart and logPart.Size.Y) or 2.4
+        local trunkConfigs = {
+            NorthTrunk = {
+                seatSurfaceY = 13.18,
+                inwardLook = Vector3.new(0, 0, 1),
+                offsets = { -1.8, 1.8 },
+                axis = "X",
+                center = Vector3.new(3.0, 11.55, -437.4),
+                forwardOffset = Vector3.new(0, 0, 0.48),
+            },
+            SouthTrunk = {
+                seatSurfaceY = 13.18,
+                inwardLook = Vector3.new(0, 0, -1),
+                offsets = { -1.8, 1.8 },
+                axis = "X",
+                center = Vector3.new(3.0, 11.55, -422.6),
+                forwardOffset = Vector3.new(0, 0, -0.48),
+            },
+            EastTrunk = {
+                seatSurfaceY = 13.28,
+                inwardLook = Vector3.new(-1, 0, 0),
+                offsets = { -1.8, 1.8 },
+                axis = "Z",
+                center = Vector3.new(10.4, 11.60, -430.0),
+                forwardOffset = Vector3.new(-0.48, 0, 0),
+            },
+            WestTrunk = {
+                seatSurfaceY = 13.28,
+                inwardLook = Vector3.new(1, 0, 0),
+                offsets = { -1.8, 1.8 },
+                axis = "Z",
+                center = Vector3.new(-4.4, 11.60, -430.0),
+                forwardOffset = Vector3.new(0.48, 0, 0),
+            },
+        }
 
+        for trunkName, cfg in pairs(trunkConfigs) do
+            local trunk = existingSeats:FindFirstChild(trunkName)
+            if trunk then
+                for sIdx, sOffset in ipairs(cfg.offsets) do
+                    local child = trunk:FindFirstChild("Seat_" .. sIdx)
+                    if child and child:IsA("Seat") then
+                        child.Size = Vector3.new(1.4, 0.05, 1.4)
+                        local seatPos: Vector3
+                        if cfg.axis == "X" then
+                            seatPos = Vector3.new(cfg.center.X + sOffset, cfg.seatSurfaceY, cfg.center.Z) + cfg.forwardOffset
+                        else
+                            seatPos = Vector3.new(cfg.center.X, cfg.seatSurfaceY, cfg.center.Z + sOffset) + cfg.forwardOffset
+                        end
+                        child.CFrame = CFrame.lookAt(seatPos, seatPos + cfg.inwardLook)
+                    end
+                end
+            end
+        end
+
+        for _, trunk in ipairs(existingSeats:GetChildren()) do
             for _, child in ipairs(trunk:GetChildren()) do
                 if child:IsA("Seat") then
-                    -- Lower seat position and minimize height so avatar sits cleanly on log surface
-                    child.Size = Vector3.new(1.4, 0.05, 1.4)
-                    if logPart then
-                        local sOffsetSign = (child.Name == "Seat_1") and -1 or 1
-                        local seatSpread = (logPart.Size.X * 0.24)
-                        local seatSurfaceY = (logDiameter * 0.50) - 0.22
-                        local seatPos = (logPart.CFrame * CFrame.new(sOffsetSign * seatSpread, seatSurfaceY, 0)).Position
-                        local lookTarget = Vector3.new(fireCenter.X, seatPos.Y, fireCenter.Z)
-                        child.CFrame = CFrame.lookAt(seatPos, lookTarget)
-                    end
-
                     child.Disabled = true
                     child.CanTouch = false
 
@@ -823,8 +950,12 @@ local function wireExistingModels(): boolean
                         prompt.Triggered:Connect(function(player: Player)
                             local char = player.Character
                             local hum = char and char:FindFirstChildOfClass("Humanoid")
+                            local hrp = char and char:FindFirstChild("HumanoidRootPart")
                             if hum and hum.Health > 0 and child.Occupant == nil then
                                 child.Disabled = false
+                                if hrp then
+                                    hrp.CFrame = child.CFrame * CFrame.new(0, child.Size.Y / 2, 0)
+                                end
                                 child:Sit(hum)
                                 prompt.Enabled = false
                             end

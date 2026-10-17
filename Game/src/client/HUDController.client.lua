@@ -978,6 +978,21 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
     -- Check if moving backward relative to camera look
     local movingBackward = isMovingBackward()
 
+    -- While seated or standing up: strictly zero WalkSpeed and disable jumping
+    local isSeated = player:GetAttribute("IsSeated") == true or (activeHumanoid and activeHumanoid.Sit)
+    if isSeated then
+        if activeHumanoid then
+            if activeHumanoid.WalkSpeed ~= 0 then
+                activeHumanoid.WalkSpeed = 0
+            end
+            activeHumanoid.JumpPower = 0
+            pcall(function()
+                activeHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+            end)
+        end
+        return
+    end
+
     -- Continuously enforce: jumping requires forward movement (idle jump & backward jump strictly blocked)
     if activeHumanoid and jumpCooldownThread == nil then
         local isMovingForward = hasMovementInput() and not movingBackward

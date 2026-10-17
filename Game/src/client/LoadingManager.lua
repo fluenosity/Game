@@ -19,6 +19,7 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local SoundService = game:GetService("SoundService")
 
 local player = Players.LocalPlayer
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
@@ -225,6 +226,22 @@ function LoadingManager.LoadGame(loadingScreen: any, onCompleted: (() -> ())?, s
 
         -- 6. Phase 5: 100% Finalized & Reveal
         loadingScreen.SetProgress(1.00, "SURVIVAL ACTIVE", "Welcome to the wilderness. Don't let the fire die.")
+
+        -- Smoothly fade out main menu music right at the final reveal of the loading screen
+        local menuBgm = SoundService:FindFirstChild("MainMenuBGM") :: Sound?
+        if menuBgm then
+            local fadeOutTween = TweenService:Create(menuBgm, TweenInfo.new(1.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Volume = 0,
+            })
+            fadeOutTween:Play()
+            task.delay(1.85, function()
+                if menuBgm and menuBgm.Parent then
+                    menuBgm:Stop()
+                    menuBgm:Destroy()
+                end
+            end)
+        end
+
         task.wait(0.35) -- Brief pause so player sees 100% complete bar
         
         -- Restore character controls

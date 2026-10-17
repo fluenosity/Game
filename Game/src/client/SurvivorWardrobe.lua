@@ -173,8 +173,35 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	overlay.Visible = false
 	overlay.ZIndex = 70
 	overlay.Parent = screenGui
+	-- Fullscreen scrim used to fade the wardrobe out smoothly on back-transition.
+	local returnScrim = Instance.new("Frame")
+	returnScrim.Name = "ReturnScrim"
+	returnScrim.Size = UDim2.fromScale(1, 1)
+	returnScrim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	returnScrim.BackgroundTransparency = 1
+	returnScrim.BorderSizePixel = 0
+	returnScrim.ZIndex = 99
+	returnScrim.Visible = false
+	returnScrim.Parent = overlay
+
 	state.HideOverlayForReturn = function()
-		overlay.Visible = false
+		-- Fade in the dark scrim over the wardrobe, then hide the whole overlay.
+		-- The camera return tween (0.75s) runs concurrently so the wardrobe
+		-- dissolves during flight — no empty-camp flash.
+		returnScrim.BackgroundTransparency = 1
+		returnScrim.Visible = true
+		TweenService:Create(
+			returnScrim,
+			TweenInfo.new(0.30, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ BackgroundTransparency = 0 }
+		):Play()
+		task.delay(0.32, function()
+			if overlay and overlay.Parent then
+				overlay.Visible = false
+				returnScrim.Visible = false
+				returnScrim.BackgroundTransparency = 1
+			end
+		end)
 	end
 
 	-- Main Central Luxury Glass Panel
@@ -1701,6 +1728,14 @@ function Wardrobe.Create(screenGui: ScreenGui, UI: any, theme: any)
 	----------------------------------------------------------------------------
 	Wardrobe.IsLobbyReady = function()
 		return lobbyLoaded
+	end
+
+	-- Called by MainMenu at the start of the back-transition so the overlay
+	-- fades concurrent with the camera returning to the wide menu framing.
+	Wardrobe.HideForReturn = function()
+		if state.HideOverlayForReturn then
+			state.HideOverlayForReturn()
+		end
 	end
 
 	Wardrobe.Open = function(onBack: () -> (), onConfirm: (any) -> ())

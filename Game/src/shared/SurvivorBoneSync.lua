@@ -85,14 +85,12 @@ end
 
 function SurvivorBoneSync.StepCharacter(rig: CharacterRigData)
     -- In-Place Pelvic Root Stabilizer:
-    -- Mixamo animations without 'In Place' (FemaleWalk, MaleWalk, RunningJumpMain)
-    -- translate -5.1 to -14.1 studs forward along Z on mixamorig:Hips.
-    -- Locking Z = 0 keeps the pelvis anchored to HumanoidRootPart, producing clean,
-    -- perfect in-place locomotion without forward-and-back rubberbanding or forward jump throw.
+    -- Mixamo animations without 'In Place' translate forward/backward and sideways on mixamorig:Hips.
+    -- Locking X = 0 and Z = 0 keeps the pelvis anchored to HumanoidRootPart across all states (walk, run, sit, stand).
     if rig.Hips then
         local t = rig.Hips.Transform
-        if math.abs(t.Position.Z) > 0.001 then
-            rig.Hips.Transform = CFrame.new(t.Position.X, t.Position.Y, 0) * t.Rotation
+        if math.abs(t.Position.X) > 0.001 or math.abs(t.Position.Z) > 0.001 then
+            rig.Hips.Transform = CFrame.new(0, t.Position.Y, 0) * t.Rotation
         end
     end
 
