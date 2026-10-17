@@ -7,6 +7,7 @@
 
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local ContentProvider = game:GetService("ContentProvider")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local IconPack = require(ReplicatedStorage:WaitForChild("FluenosityShared"):WaitForChild("IconPack"))
@@ -44,19 +45,22 @@ function HeadphoneAdvisory.Show(parent: Instance, onCompleted: () -> ())
     layout.FillDirection = Enum.FillDirection.Vertical
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout.VerticalAlignment = Enum.VerticalAlignment.Center
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Padding = UDim.new(0, 16)
     layout.Parent = container
 
-    -- Headphone Icon
-    local icon = IconPack.CreateIcon("headphones", 42, Color3.fromRGB(245, 140, 40), 1)
-    icon.Name = "HeadphoneIcon"
+    -- Headphone Icon (Strictly on top of text)
+    local icon = IconPack.CreateIcon("headphones", 46, Color3.fromRGB(245, 140, 40), 1)
+    icon.Name = "A_HeadphoneIcon"
+    icon.LayoutOrder = 1
     icon.AnchorPoint = Vector2.new(0.5, 0.5)
     icon.ZIndex = 82
     icon.Parent = container
 
     -- Advisory Header
     local title = Instance.new("TextLabel")
-    title.Name = "AdvisoryTitle"
+    title.Name = "B_AdvisoryTitle"
+    title.LayoutOrder = 2
     title.Size = UDim2.new(1, 0, 0, 28)
     title.BackgroundTransparency = 1
     title.Font = Enum.Font.GothamBold
@@ -70,7 +74,8 @@ function HeadphoneAdvisory.Show(parent: Instance, onCompleted: () -> ())
 
     -- Advisory Body
     local body = Instance.new("TextLabel")
-    body.Name = "AdvisoryBody"
+    body.Name = "C_AdvisoryBody"
+    body.LayoutOrder = 3
     body.Size = UDim2.new(1, 0, 0, 48)
     body.BackgroundTransparency = 1
     body.Font = Enum.Font.Gotham
@@ -82,7 +87,12 @@ function HeadphoneAdvisory.Show(parent: Instance, onCompleted: () -> ())
     body.ZIndex = 82
     body.Parent = container
 
-    -- Fade In
+    -- Preload the icon texture so it's guaranteed to be in GPU memory before fading in
+    pcall(function()
+        ContentProvider:PreloadAsync({ icon })
+    end)
+
+    -- Fade In simultaneously
     local fadeInInfo = TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
     TweenService:Create(icon, fadeInInfo, { ImageTransparency = 0 }):Play()
     TweenService:Create(title, fadeInInfo, { TextTransparency = 0 }):Play()

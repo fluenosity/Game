@@ -44,19 +44,19 @@ function AtmosphereSetup.Apply()
     Lighting.EnvironmentSpecularScale = lightCfg.EnvironmentSpecularScale or 0.85
     Lighting.FogEnd = lightCfg.FogEnd or 2400.0 -- High FogEnd so terrain is never washed out
     
-    -- 2. Volumetric Atmosphere (Reduced haze: hills & vegetation are vividly clear!)
+    -- 2. Volumetric Atmosphere (Preserve authored studio atmosphere)
     local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
     if not atmosphere then
         atmosphere = Instance.new("Atmosphere")
         atmosphere.Name = "ForestAtmosphere"
+        atmosphere.Density = atmoCfg.Density or 0.41
+        atmosphere.Offset = atmoCfg.Offset or 0.857
+        atmosphere.Color = atmoCfg.Color or Color3.fromRGB(97, 99, 97)
+        atmosphere.Decay = atmoCfg.Decay or Color3.fromRGB(106, 112, 125)
+        atmosphere.Glare = atmoCfg.Glare or 2.86
+        atmosphere.Haze = atmoCfg.Haze or 0.0
         atmosphere.Parent = Lighting
     end
-    atmosphere.Density = atmoCfg.Density or 0.34
-    atmosphere.Offset = atmoCfg.Offset or 0.18
-    atmosphere.Color = atmoCfg.Color or Color3.fromRGB(175, 200, 225)
-    atmosphere.Decay = atmoCfg.Decay or Color3.fromRGB(95, 120, 145)
-    atmosphere.Glare = atmoCfg.Glare or 0.25
-    atmosphere.Haze = atmoCfg.Haze or 1.80 -- Soft mountain horizon mist matching Editor view!
     
     -- 3. ColorCorrectionEffect (Rich alpine depth, lush conifer greens, warm amber firelight)
     local cc = Lighting:FindFirstChild("ForestColorCorrection") :: ColorCorrectionEffect?
@@ -78,18 +78,18 @@ function AtmosphereSetup.Apply()
         sky = Instance.new("Sky")
         sky.Name = "Sky"
         sky.Parent = Lighting
+        sky.SkyboxBk = skyCfg.SkyboxBk or "http://www.roblox.com/asset/?id=144933338"
+        sky.SkyboxDn = skyCfg.SkyboxDn or "http://www.roblox.com/asset/?id=144931530"
+        sky.SkyboxFt = skyCfg.SkyboxFt or "http://www.roblox.com/asset/?id=144933262"
+        sky.SkyboxLf = skyCfg.SkyboxLf or "http://www.roblox.com/asset/?id=144933244"
+        sky.SkyboxRt = skyCfg.SkyboxRt or "http://www.roblox.com/asset/?id=144933299"
+        sky.SkyboxUp = skyCfg.SkyboxUp or "http://www.roblox.com/asset/?id=144931564"
+        sky.SunTextureId = skyCfg.SunTextureId or "rbxasset://sky/sun.jpg"
+        sky.MoonTextureId = skyCfg.MoonTextureId or "rbxasset://sky/moon.jpg"
+        sky.SunAngularSize = skyCfg.SunAngularSize or 5
+        sky.MoonAngularSize = skyCfg.MoonAngularSize or 11
+        sky.CelestialBodiesShown = true
     end
-    sky.SkyboxBk = skyCfg.SkyboxBk or "http://www.roblox.com/asset/?id=91458024"
-    sky.SkyboxDn = skyCfg.SkyboxDn or "http://www.roblox.com/asset/?id=91457980"
-    sky.SkyboxFt = skyCfg.SkyboxFt or "http://www.roblox.com/asset/?id=91458024"
-    sky.SkyboxLf = skyCfg.SkyboxLf or "http://www.roblox.com/asset/?id=91458024"
-    sky.SkyboxRt = skyCfg.SkyboxRt or "http://www.roblox.com/asset/?id=91458024"
-    sky.SkyboxUp = skyCfg.SkyboxUp or "http://www.roblox.com/asset/?id=91458002"
-    sky.SunTextureId = "rbxassetid://6281397916"
-    sky.MoonTextureId = "rbxassetid://2626744426"
-    sky.SunAngularSize = 21
-    sky.MoonAngularSize = 12
-    sky.CelestialBodiesShown = true
     
     -- 3C. Animated Volumetric Clouds (Parented under Workspace.Terrain for engine visibility!)
     -- Purge any duplicate clouds under Lighting

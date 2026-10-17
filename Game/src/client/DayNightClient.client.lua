@@ -58,26 +58,21 @@ local function applyMenuAmbientFill()
 	Lighting.Brightness = math.max(Lighting.Brightness, 2.8)
 	Lighting.Ambient = Color3.fromRGB(82, 93, 111)
 	Lighting.OutdoorAmbient = Color3.fromRGB(126, 142, 160)
-	-- Use a long, pale blue distance haze. It softens the tree line without
-	-- swallowing the clearing or turning the whole menu into a dark fog bank.
+	-- Soft distance fog bounds for clean horizon matching the editor
 	Lighting.FogStart = 420
 	Lighting.FogEnd = 2400
 	Lighting.FogColor = Color3.fromRGB(177, 192, 208)
-	local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-	if atmosphere then
-		atmosphere.Density = math.min(atmosphere.Density, 0.32)
-		atmosphere.Haze = math.max(atmosphere.Haze, 0.9)
-		atmosphere.Color = Color3.fromRGB(185, 204, 224)
-		atmosphere.Decay = Color3.fromRGB(111, 132, 158)
-	end
 end
 
 -- RenderStepped runs every frame right before GPU rendering
 RunService.RenderStepped:Connect(function(deltaTime: number)
+	local studioOverride = Lighting:GetAttribute("StudioTimeOverride") :: number?
 	if player:GetAttribute("IsInGameplay") ~= true then
-		smoothedHour = MENU_HOUR
-		TimeVisuals.Apply(MENU_HOUR, currentDay)
-		applyMenuAmbientFill()
+		smoothedHour = studioOverride or MENU_HOUR
+		TimeVisuals.Apply(smoothedHour, currentDay)
+		if not studioOverride then
+			applyMenuAmbientFill()
+		end
 		return
 	end
 

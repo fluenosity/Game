@@ -1755,7 +1755,7 @@ local function startMainMenuMusic()
 
     local bgm = Instance.new("Sound")
     bgm.Name = "MainMenuBGM"
-    bgm.SoundId = "rbxasset://sounds/MainMenuAudio.mp3"
+    bgm.SoundId = "rbxassetid://83951143649241"
     bgm.SoundGroup = UITheme.GetMusicSoundGroup()
     bgm.Looped = true
     bgm.Volume = 0

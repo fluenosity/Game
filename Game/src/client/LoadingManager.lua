@@ -98,21 +98,21 @@ local function ensureAtmosphericPostProcessing(): { Instance }
     rays.Spread = raysCfg.Spread or 0.65
     rays.Enabled = true
 
-    -- Sky
+    -- Sky (Preserve authored studio skybox)
     local skyCfg = (EnvironmentConfig.SKY and EnvironmentConfig.SKY.Day) or {}
     local sky = Lighting:FindFirstChildOfClass("Sky")
     if not sky then
         sky = Instance.new("Sky")
         sky.Name = "Sky"
+        sky.SkyboxBk = skyCfg.SkyboxBk or "http://www.roblox.com/asset/?id=144933338"
+        sky.SkyboxDn = skyCfg.SkyboxDn or "http://www.roblox.com/asset/?id=144931530"
+        sky.SkyboxFt = skyCfg.SkyboxFt or "http://www.roblox.com/asset/?id=144933262"
+        sky.SkyboxLf = skyCfg.SkyboxLf or "http://www.roblox.com/asset/?id=144933244"
+        sky.SkyboxRt = skyCfg.SkyboxRt or "http://www.roblox.com/asset/?id=144933299"
+        sky.SkyboxUp = skyCfg.SkyboxUp or "http://www.roblox.com/asset/?id=144931564"
+        sky.CelestialBodiesShown = true
         sky.Parent = Lighting
     end
-    sky.SkyboxBk = skyCfg.SkyboxBk or "http://www.roblox.com/asset/?id=91458024"
-    sky.SkyboxDn = skyCfg.SkyboxDn or "http://www.roblox.com/asset/?id=91457980"
-    sky.SkyboxFt = skyCfg.SkyboxFt or "http://www.roblox.com/asset/?id=91458024"
-    sky.SkyboxLf = skyCfg.SkyboxLf or "http://www.roblox.com/asset/?id=91458024"
-    sky.SkyboxRt = skyCfg.SkyboxRt or "http://www.roblox.com/asset/?id=91458024"
-    sky.SkyboxUp = skyCfg.SkyboxUp or "http://www.roblox.com/asset/?id=91458002"
-    sky.CelestialBodiesShown = true
 
     return { atmo, cc, bloom, rays, sky }
 end

@@ -311,12 +311,12 @@ EnvironmentConfig.POST_PROCESSING = {
         FogEnd = 2400, -- High FogEnd so foreground/midground terrain is crisp
     },
     Atmosphere = {
-        Density = 0.34,                           -- Balanced aerial perspective
-        Offset = 0.18,                            -- Keeps valley floor clear while veiling distant mountain base
-        Haze = 1.80,                              -- Soft atmospheric mountain horizon mist matching Editor view!
-        Color = Color3.fromRGB(175, 200, 225),
-        Decay = Color3.fromRGB(95, 120, 145),
-        Glare = 0.25,
+        Density = 0.41,
+        Offset = 0.857,
+        Haze = 0.0,                               -- Zero artificial haze: realistic store skybox is crystal clear!
+        Color = Color3.fromRGB(97, 99, 97),
+        Decay = Color3.fromRGB(106, 112, 125),
+        Glare = 2.86,
     },
     DepthOfField = {
         FarIntensity = 0.20,    -- Subtly softens distant low-poly mountain polygon silhouettes
@@ -345,16 +345,19 @@ EnvironmentConfig.POST_PROCESSING = {
 -- 3C. DYNAMIC SKY & VOLUMETRIC DRIFTING CLOUDS (Day & 4K Milky Way Galaxy Night)
 -- ---------------------------------------------------------------------------
 EnvironmentConfig.SKY = {
-    -- Day: Crisp, realistic alpine daytime skybox
+    -- Day: Authored realistic high-definition alpine daytime skybox
     Day = {
-        SkyboxBk = "http://www.roblox.com/asset/?id=91458024",
-        SkyboxDn = "http://www.roblox.com/asset/?id=91457980",
-        SkyboxFt = "http://www.roblox.com/asset/?id=91458024",
-        SkyboxLf = "http://www.roblox.com/asset/?id=91458024",
-        SkyboxRt = "http://www.roblox.com/asset/?id=91458024",
-        SkyboxUp = "http://www.roblox.com/asset/?id=91458002",
-        SunAngularSize = 21,
-        MoonAngularSize = 12,
+        SkyboxBk = "http://www.roblox.com/asset/?id=144933338",
+        SkyboxDn = "http://www.roblox.com/asset/?id=144931530",
+        SkyboxFt = "http://www.roblox.com/asset/?id=144933262",
+        SkyboxLf = "http://www.roblox.com/asset/?id=144933244",
+        SkyboxRt = "http://www.roblox.com/asset/?id=144933299",
+        SkyboxUp = "http://www.roblox.com/asset/?id=144931564",
+        SunTextureId = "rbxasset://sky/sun.jpg",
+        MoonTextureId = "rbxasset://sky/moon.jpg",
+        SunAngularSize = 5,
+        MoonAngularSize = 11,
+        StarCount = 1500,
         CelestialBodiesShown = true,
     },
     -- Night: NASA 4K Deep Star Map & Luminous Milky Way Galaxy

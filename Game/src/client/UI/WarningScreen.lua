@@ -55,11 +55,13 @@ function WarningScreen.Show(parent: Instance, onCompleted: (() -> ())?)
     layout1.FillDirection = Enum.FillDirection.Vertical
     layout1.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout1.VerticalAlignment = Enum.VerticalAlignment.Center
+    layout1.SortOrder = Enum.SortOrder.LayoutOrder
     layout1.Padding = UDim.new(0, 16)
     layout1.Parent = container1
 
     local photoTitle = Instance.new("TextLabel")
-    photoTitle.Name = "PhotoTitle"
+    photoTitle.Name = "A_PhotoTitle"
+    photoTitle.LayoutOrder = 1
     photoTitle.Size = UDim2.new(1, 0, 0, 0)
     photoTitle.AutomaticSize = Enum.AutomaticSize.Y
     photoTitle.BackgroundTransparency = 1
@@ -73,7 +75,8 @@ function WarningScreen.Show(parent: Instance, onCompleted: (() -> ())?)
     photoTitle.Parent = container1
 
     local photoBody = Instance.new("TextLabel")
-    photoBody.Name = "PhotoBody"
+    photoBody.Name = "B_PhotoBody"
+    photoBody.LayoutOrder = 2
     photoBody.Size = UDim2.new(1, 0, 0, 0)
     photoBody.AutomaticSize = Enum.AutomaticSize.Y
     photoBody.BackgroundTransparency = 1
@@ -151,11 +154,13 @@ function WarningScreen.Show(parent: Instance, onCompleted: (() -> ())?)
     layout2.FillDirection = Enum.FillDirection.Vertical
     layout2.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout2.VerticalAlignment = Enum.VerticalAlignment.Center
+    layout2.SortOrder = Enum.SortOrder.LayoutOrder
     layout2.Padding = UDim.new(0, 16)
     layout2.Parent = container2
 
     local horrorTitle = Instance.new("TextLabel")
-    horrorTitle.Name = "HorrorTitle"
+    horrorTitle.Name = "A_HorrorTitle"
+    horrorTitle.LayoutOrder = 1
     horrorTitle.Size = UDim2.new(1, 0, 0, 0)
     horrorTitle.AutomaticSize = Enum.AutomaticSize.Y
     horrorTitle.BackgroundTransparency = 1
@@ -168,7 +173,8 @@ function WarningScreen.Show(parent: Instance, onCompleted: (() -> ())?)
     horrorTitle.Parent = container2
 
     local horrorBody = Instance.new("TextLabel")
-    horrorBody.Name = "HorrorBody"
+    horrorBody.Name = "B_HorrorBody"
+    horrorBody.LayoutOrder = 2
     horrorBody.Size = UDim2.new(1, 0, 0, 0)
     horrorBody.AutomaticSize = Enum.AutomaticSize.Y
     horrorBody.BackgroundTransparency = 1

@@ -35,7 +35,7 @@ function SplashScreen.Show(parent: Instance, onCompleted: () -> ())
     studioTitle.AnchorPoint = Vector2.new(0.5, 0.5)
     studioTitle.BackgroundTransparency = 1
     studioTitle.Font = Enum.Font.GothamMedium
-    studioTitle.Text = "A FLUENOSITY STUDIO PRODUCTION"
+    studioTitle.Text = "A FLUENOSITY STUDIOS PRODUCTION."
     studioTitle.TextColor3 = Color3.fromRGB(36, 36, 36)
     studioTitle.TextScaled = false
     studioTitle.TextSize = 20

@@ -217,13 +217,13 @@ RunService.RenderStepped:Connect(function(dt: number)
     -- 2. Optical Water Diffraction Blur
     underwaterBlur.Size = 2.5 * submersionProgress
 
-    -- 3. Depth Fog Attenuation
+    -- 3. Depth Fog Attenuation (Only active during water submersion; preserves world atmospheric fog when dry)
     if submersionProgress > 0.02 then
         Lighting.FogStart = 0
-        Lighting.FogEnd = 100000 - (100000 - 85) * submersionProgress
-        Lighting.FogColor = DEFAULT_FOG_COLOR:Lerp(TARGET_FOG_COLOR, submersionProgress)
-    else
-        Lighting.FogEnd = 100000
+        local baseFogEnd = Lighting:GetAttribute("BaseFogEnd") or 2400
+        local baseFogColor = Lighting:GetAttribute("BaseFogColor") or DEFAULT_FOG_COLOR
+        Lighting.FogEnd = baseFogEnd + (85 - baseFogEnd) * submersionProgress
+        Lighting.FogColor = baseFogColor:Lerp(TARGET_FOG_COLOR, submersionProgress)
     end
 
     -- 4. Audio Low-Pass Equalizer

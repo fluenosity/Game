@@ -97,7 +97,8 @@ end
 
 local function advanceTime(deltaTime: number)
 	if TimeConfig.FreezeTime then
-		currentHour = TimeConfig.FreezeHour or 14.0
+		local overrideHour = timeState and (timeState:GetAttribute("FreezeHour") :: number? or timeState:GetAttribute("CurrentHour") :: number?)
+		currentHour = overrideHour or TimeConfig.FreezeHour or 14.0
 		local newPhase = getPhaseFromHour(currentHour)
 		currentPhase = newPhase
 		phaseProgress = 0.5

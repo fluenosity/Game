@@ -19,9 +19,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local sharedFolder = ReplicatedStorage:WaitForChild("FluenosityShared")
 local TimeConfig = require(sharedFolder:WaitForChild("TimeConfig"))
 local EnvironmentConfig = require(sharedFolder:WaitForChild("EnvironmentConfig"))
+local EnvironmentManager = require(sharedFolder:WaitForChild("Environment"):WaitForChild("EnvironmentManager"))
 
 local daySky = (EnvironmentConfig and EnvironmentConfig.SKY and EnvironmentConfig.SKY.Day) or {}
 local nightSky = (EnvironmentConfig and EnvironmentConfig.SKY and EnvironmentConfig.SKY.Night) or {}
+local lastApplyTime = os.clock()
 
 -- ---------------------------------------------------------------------------
 -- Math utilities
@@ -133,42 +135,7 @@ local sunRays = Lighting:FindFirstChildOfClass("SunRaysEffect")
 local sky = Lighting:FindFirstChildOfClass("Sky")
 
 function TimeVisuals.EnsureInstances()
-	if not atmosphere or not atmosphere.Parent then
-		atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-		if not atmosphere then
-			atmosphere = Instance.new("Atmosphere")
-			atmosphere.Name = "ForestAtmosphere"
-			atmosphere.Parent = Lighting
-		end
-	end
-
-	if not clouds or not clouds.Parent then
-		local terrain = workspace.Terrain
-		clouds = terrain:FindFirstChildOfClass("Clouds")
-		if not clouds then
-			clouds = Instance.new("Clouds")
-			clouds.Name = "VolumetricClouds"
-			clouds.Parent = terrain
-		end
-	end
-
-	if not sunRays or not sunRays.Parent then
-		sunRays = Lighting:FindFirstChildOfClass("SunRaysEffect")
-		if not sunRays then
-			sunRays = Instance.new("SunRaysEffect")
-			sunRays.Name = "ForestSunRays"
-			sunRays.Parent = Lighting
-		end
-	end
-
-	if not sky or not sky.Parent then
-		sky = Lighting:FindFirstChildOfClass("Sky")
-		if not sky then
-			sky = Instance.new("Sky")
-			sky.Name = "Sky"
-			sky.Parent = Lighting
-		end
-	end
+	EnvironmentManager.Init()
 end
 
 function TimeVisuals.Apply(hour: number, day: number)
@@ -244,89 +211,38 @@ function TimeVisuals.Apply(hour: number, day: number)
 		envSpecular = math.clamp(0.15 + 0.70 * dip, 0.15, 0.85)
 	end
 
-	-- 4. Apply to Lighting
+	-- 4. Apply core lighting properties
 	Lighting.ClockTime = hour
 	Lighting.Brightness = brightness
 	Lighting.Ambient = ambient
 	Lighting.OutdoorAmbient = outdoorAmbient
 	Lighting.ColorShift_Top = colorShiftTop
 	Lighting.ColorShift_Bottom = colorShiftBottom
-	Lighting.FogEnd = fogEnd
-	Lighting.FogColor = fogColor
 	Lighting.ExposureCompensation = exposure
-	Lighting.EnvironmentDiffuseScale = envDiffuse
-	Lighting.EnvironmentSpecularScale = envSpecular
 	Lighting.ShadowSoftness = 0.15
 
-	-- 5. SunRays (godbeams filtering through conifer needles)
-	if sunRays then
-		local raysInt = sunRaysInt * (1.0 - darknessWeight * 0.95)
-		sunRays.Intensity = raysInt
-		sunRays.Spread = sunRaysSpr
-		sunRays.Enabled = (raysInt > 0.01)
-	end
+	-- 5. Calculate frame delta
+	local now = os.clock()
+	local dt = math.clamp(now - lastApplyTime, 0.001, 0.1)
+	lastApplyTime = now
 
-	-- 6. Animated Volumetric Clouds (Dynamic shape shifting & organic flow)
-	if clouds then
-		local t = os.clock() * 0.05
-		local shapeNoise = math.sin(t) * 0.04 + math.sin(t * 2.3) * 0.02
-		local densityNoise = math.cos(t * 0.7) * 0.03
-		clouds.Cover = math.clamp(cloudCover + shapeNoise, 0.45, 0.85)
-		clouds.Color = cloudColor
-		clouds.Density = math.clamp(cloudDensity + densityNoise, 0.58, 0.88)
-	end
-
-	-- 7. Horizon Mist Atmosphere
-	if atmosphere then
-		atmosphere.Density = atmoDensity
-		atmosphere.Offset = atmoOffset
-		atmosphere.Color = atmoColor
-		atmosphere.Decay = atmoDecay
-		atmosphere.Glare = atmoGlare
-		atmosphere.Haze = atmoHaze
-	end
-
-	-- 8. Celestial Starfield & Dynamic Twilight Cross-Dissolve
-	if sky then
-		-- Smooth Hermite Starfield emergence (gradual fade-in of stars across twilight)
-		local starFactor = 0.0
-		if hour >= 19.5 or hour < 4.5 then
-			starFactor = 1.0
-		elseif hour >= 17.5 and hour < 19.5 then
-			starFactor = smoothstep((hour - 17.5) / 2.0)
-		elseif hour >= 4.5 and hour < 6.5 then
-			starFactor = 1.0 - smoothstep((hour - 4.5) / 2.0)
-		end
-		sky.StarCount = math.floor(starFactor * 3000)
-
-		-- Skybox Transition (Day Alpine <-> 4K Milky Way Galaxy Night)
-		local isNightTime = (hour >= 18.25 or hour < 5.75)
-		if isNightTime then
-			if sky.SkyboxUp ~= nightSky.SkyboxUp then
-				sky.SkyboxBk = nightSky.SkyboxBk or "rbxassetid://15146674442"
-				sky.SkyboxDn = nightSky.SkyboxDn or "rbxassetid://15146673704"
-				sky.SkyboxFt = nightSky.SkyboxFt or "rbxassetid://15146672849"
-				sky.SkyboxLf = nightSky.SkyboxLf or "rbxassetid://15146672013"
-				sky.SkyboxRt = nightSky.SkyboxRt or "rbxassetid://15146671172"
-				sky.SkyboxUp = nightSky.SkyboxUp or "rbxassetid://15146670489"
-				sky.CelestialBodiesShown = true
-			end
-		else
-			if sky.SkyboxUp ~= daySky.SkyboxUp then
-				sky.SkyboxBk = daySky.SkyboxBk or "http://www.roblox.com/asset/?id=91458024"
-				sky.SkyboxDn = daySky.SkyboxDn or "http://www.roblox.com/asset/?id=91457980"
-				sky.SkyboxFt = daySky.SkyboxFt or "http://www.roblox.com/asset/?id=91458024"
-				sky.SkyboxLf = daySky.SkyboxLf or "http://www.roblox.com/asset/?id=91458024"
-				sky.SkyboxRt = daySky.SkyboxRt or "http://www.roblox.com/asset/?id=91458024"
-				sky.SkyboxUp = daySky.SkyboxUp or "http://www.roblox.com/asset/?id=91458002"
-				sky.SunTextureId = "rbxassetid://6281397916"
-				sky.MoonTextureId = "rbxassetid://2626744426"
-				sky.SunAngularSize = 21
-				sky.MoonAngularSize = 12
-				sky.CelestialBodiesShown = true
-			end
-		end
-	end
+	-- 6. Delegate clouds, atmosphere, fog, sky, and volumetric godbeams to EnvironmentManager
+	EnvironmentManager.Update(dt, hour, day, {
+		CloudCover = cloudCover,
+		CloudDensity = cloudDensity,
+		CloudColor = cloudColor,
+		AtmosphereDensity = atmoDensity,
+		AtmosphereOffset = atmoOffset,
+		AtmosphereHaze = atmoHaze,
+		AtmosphereColor = atmoColor,
+		AtmosphereDecay = atmoDecay,
+		AtmosphereGlare = atmoGlare,
+		FogEnd = fogEnd,
+		FogColor = fogColor,
+		SunRaysIntensity = sunRaysInt,
+		SunRaysSpread = sunRaysSpr,
+		DarknessWeight = darknessWeight,
+	})
 end
 
 return TimeVisuals
